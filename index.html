@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800;900&family=Rajdhani:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <title>beatmania</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="stage">
+        <video id="camera-feed" autoplay playsinline muted></video>
+        <canvas id="overlay-canvas"></canvas>
+      </div>
+      <div id="hud-stack">
+        <div id="score-hud">
+          <div id="score-hud-label">SCORE</div>
+          <div id="score-value">0</div>
+        </div>
+        <div id="status-hud"></div>
+      </div>
+      <div id="game-title" class="text-metallic">Beejay's Deejay Jackey</div>
+      <div id="game-subtitle">Produced by Beejay 2026. 07. 05</div>
+      <button id="stop-button" type="button">⏹ 중단</button>
+      <div id="calibration-status"></div>
+      <div id="start-overlay">
+        <div id="leaderboard-panel">
+          <div id="leaderboard-tagline" class="text-metallic">Masta Beejay Beat Breaker</div>
+          <div id="leaderboard-title" class="text-metallic-gold">BEST 10 RECORD</div>
+          <table id="leaderboard-table">
+            <thead>
+              <tr>
+                <th>순위</th>
+                <th>이름</th>
+                <th>메세지</th>
+                <th>점수</th>
+                <th>속도</th>
+                <th>난이도</th>
+                <th>BGM</th>
+                <th>기록일</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
+        </div>
+        <div id="song-select">
+          <label id="song-file-label" for="song-file-input">🎵 나의 음원으로 Beat Mania 진행 (선택사항)</label>
+          <input type="file" id="song-file-input" accept="audio/*" />
+          <span id="song-file-name">선택 안 함 — 기본 테스트 트랙으로 시작</span>
+        </div>
+        <div id="game-settings">
+          <label>속도
+            <select id="speed-select">
+              <option value="slow">느림</option>
+              <option value="normal" selected>보통</option>
+              <option value="fast">빠름</option>
+            </select>
+          </label>
+          <label>난이도
+            <select id="difficulty-select">
+              <option value="easy" selected>쉬움</option>
+              <option value="normal">보통</option>
+              <option value="hard">어려움</option>
+            </select>
+          </label>
+        </div>
+        <label id="calibration-toggle-label">
+          <input type="checkbox" id="calibration-toggle" />
+          시작 전 손가락 위치 보정하기 (권장)
+        </label>
+        <div id="start-actions">
+          <button id="start-button" type="button">Let's Start BDJ</button>
+          <button id="guestbook-open-card" type="button">
+            <span id="guestbook-card-title">Beejay's Guest Board</span>
+            <span id="guestbook-card-sub">방명록 보러가기</span>
+          </button>
+        </div>
+        <p id="visitor-welcome">Welcome to MastaBeejay World : <span id="visitor-count">-</span> Manias.</p>
+      </div>
+      <div id="guestbook-overlay">
+        <div id="guestbook-overlay-panel">
+          <div id="guestbook-title" class="text-metallic-gold">Beejay's Guest Board</div>
+          <div id="guestbook-list"></div>
+          <form id="guestbook-form">
+            <input type="text" id="guestbook-name" placeholder="이름" maxlength="12" required />
+            <input type="text" id="guestbook-message" placeholder="메세지를 남겨주세요" maxlength="80" required />
+            <input type="password" id="guestbook-password" placeholder="비밀번호 (수정/삭제용)" maxlength="20" required />
+            <button type="submit" id="guestbook-submit">등록</button>
+          </form>
+          <button id="guestbook-close-button" type="button">닫기</button>
+        </div>
+      </div>
+      <div id="results-overlay">
+        <div id="results-title" class="text-metallic">RESULT</div>
+        <div id="results-score-label">TOTAL SCORE</div>
+        <div id="results-score">0</div>
+        <div id="results-breakdown"></div>
+        <button id="results-confirm-button" type="button">확인</button>
+      </div>
+      <div id="name-entry-overlay">
+        <div id="name-entry-title" class="text-metallic-gold">TOP 10 진입!</div>
+        <p id="name-entry-desc">이름과 메세지를 남겨주세요</p>
+        <input type="text" id="name-entry-name" maxlength="12" placeholder="이름" />
+        <input type="text" id="name-entry-message" maxlength="40" placeholder="한마디 메세지" />
+        <button id="name-entry-submit" type="button">등록</button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

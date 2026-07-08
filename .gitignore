@@ -1,0 +1,34 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Leaderboard SQLite database (runtime data, not source)
+server/data
+
+# Local env vars (Supabase URL/key) — see .env.example
+.env
+.env.local
+
+# Leftover duplicate — the file actually served is public/audio/Hiphop_Deejaying.mp3
+/Hiphop_Deejaying.mp3
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
