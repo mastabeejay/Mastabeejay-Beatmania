@@ -321,8 +321,13 @@ async function startApp(
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
-  // Perf diagnostics: ?delegate=cpu forces the CPU delegate for A/B comparison against the GPU default.
-  const delegate = new URLSearchParams(location.search).get("delegate")?.toUpperCase() === "CPU" ? "CPU" : "GPU";
+  // Safari's WebGL backend has been unreliable with MediaPipe's GPU delegate — hand tracking would
+  // detect once and then silently stop producing results on later frames. CPU is slower but stable
+  // there. ?delegate=cpu/gpu (used for the perf A/B testing above) always overrides this default.
+  const delegateOverride = new URLSearchParams(location.search).get("delegate")?.toUpperCase();
+  const isSafari = /^((?!chrome|crios|fxios|android).)*safari/i.test(navigator.userAgent);
+  const delegate: "GPU" | "CPU" =
+    delegateOverride === "CPU" || delegateOverride === "GPU" ? delegateOverride : isSafari ? "CPU" : "GPU";
 
   hud.textContent = songFile
     ? `리소스 로딩 중... (음원 분석해서 채보 생성, 손 인식: ${delegate})`

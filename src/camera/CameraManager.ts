@@ -53,8 +53,16 @@ export class CameraManager {
       return;
     }
     this.video.requestVideoFrameCallback((_now, metadata) => {
-      this.frameCallback?.(this.video, metadata);
-      this.pump();
+      // A frame callback that throws (e.g. a MediaPipe GPU-delegate hiccup — observed on iOS
+      // Safari) must not stop the recursive requestVideoFrameCallback chain, or tracking freezes
+      // permanently after that one bad frame. pump() always runs again regardless.
+      try {
+        this.frameCallback?.(this.video, metadata);
+      } catch (err) {
+        console.error("Frame callback failed; continuing to next frame.", err);
+      } finally {
+        this.pump();
+      }
     });
   }
 
