@@ -1,7 +1,9 @@
-export type FrameCallback = (
-  video: HTMLVideoElement,
-  metadata: VideoFrameCallbackMetadata,
-) => void;
+export interface FrameMetadata {
+  mediaTime: number;
+  presentationTime: number;
+}
+
+export type FrameCallback = (video: HTMLVideoElement, metadata: FrameMetadata) => void;
 
 export class CameraManager {
   private video: HTMLVideoElement;
@@ -36,8 +38,8 @@ export class CameraManager {
 
   /** Can be called repeatedly to swap the active callback (e.g. calibration step -> next step ->
    *  real gameplay). Only the FIRST call actually starts the frame pump loop — calling this again
-   *  while already pumping used to spin up an additional concurrent requestVideoFrameCallback chain,
-   *  so every swap piled on another parallel MediaPipe inference per real frame. */
+   *  while already pumping used to spin up an additional concurrent pump chain, so every swap
+   *  piled on another parallel MediaPipe inference per real frame. */
   onFrame(callback: FrameCallback): void {
     this.frameCallback = callback;
     this.running = true;
@@ -47,17 +49,24 @@ export class CameraManager {
     }
   }
 
+  /** Driven by requestAnimationFrame rather than the video element's own requestVideoFrameCallback
+   *  — the latter has proven unreliable for a live getUserMedia stream on iOS Safari specifically
+   *  (fires once at start, then stops firing at all). The timestamp handed to MediaPipe comes from
+   *  rAF's own clock, not video.currentTime: detectForVideo requires a strictly increasing
+   *  timestamp between calls, and video.currentTime has been observed to stall for camera streams
+   *  on some platforms, which would silently fail every detection after the first. */
   private pump(): void {
     if (!this.running) {
       this.pumping = false;
       return;
     }
-    this.video.requestVideoFrameCallback((_now, metadata) => {
-      // A frame callback that throws (e.g. a MediaPipe GPU-delegate hiccup — observed on iOS
-      // Safari) must not stop the recursive requestVideoFrameCallback chain, or tracking freezes
-      // permanently after that one bad frame. pump() always runs again regardless.
+    requestAnimationFrame((now) => {
+      if (this.video.readyState < 2) {
+        this.pump();
+        return;
+      }
       try {
-        this.frameCallback?.(this.video, metadata);
+        this.frameCallback?.(this.video, { mediaTime: now / 1000, presentationTime: now });
       } catch (err) {
         console.error("Frame callback failed; continuing to next frame.", err);
       } finally {

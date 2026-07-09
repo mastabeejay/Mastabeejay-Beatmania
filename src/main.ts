@@ -455,8 +455,22 @@ async function startApp(
   let inferenceMsAvg = 0;
   let pressCount = 0;
 
+  let framesSeen = 0;
+  let lastDetectError = "";
+
   camera.onFrame((videoEl, metadata) => {
-    const result = handTracker.detect(videoEl, metadata.mediaTime * 1000, metadata.presentationTime);
+    framesSeen += 1;
+
+    let result;
+    try {
+      result = handTracker.detect(videoEl, metadata.mediaTime * 1000, metadata.presentationTime);
+    } catch (err) {
+      // Surfaced directly in the HUD (not just console.error) because a phone has no devtools —
+      // this is the only way to see what actually failed on a device we can't remote-debug.
+      lastDetectError = (err as Error).message;
+      hud.textContent = `손 인식 오류 (프레임 ${framesSeen}): ${lastDetectError}`;
+      return;
+    }
     latestHands = result.hands;
 
     const { events, debug } = gestureDetector.process(result.hands, result.frameTimestampMs);
@@ -490,7 +504,7 @@ async function startApp(
     const scratchStatus = scratchDetector.isEngaged()
       ? `engaged (${scratchEvent?.direction ?? "none"}, ${(scratchEvent?.scratchVelocityPerSec ?? 0).toFixed(1)}/s)`
       : "idle";
-    hud.textContent = `Delegate: ${delegate}\nFPS: ${fps}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n감지된 손: ${result.hands.length}\n누름 횟수: ${pressCount}\n스크래치: ${scratchStatus}`;
+    hud.textContent = `Delegate: ${delegate}\nFPS: ${fps}\n프레임 수신: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n감지된 손: ${result.hands.length}\n누름 횟수: ${pressCount}\n스크래치: ${scratchStatus}`;
   });
 
   audioEngine.play();
