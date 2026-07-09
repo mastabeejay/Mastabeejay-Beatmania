@@ -1,3 +1,5 @@
+import { supabase } from "./supabaseClient";
+
 export interface LeaderboardEntry {
   name: string;
   message: string;
@@ -17,20 +19,33 @@ export interface NewLeaderboardEntry {
   bgm: string;
 }
 
-const API_BASE = "/api/leaderboard";
+interface LeaderboardRow {
+  name: string;
+  message: string;
+  score: number;
+  speed: string;
+  difficulty: string;
+  bgm: string;
+  created_at: string;
+}
+
 const MAX_ENTRIES = 10;
 
-/** Backed by a real SQLite database on the server (server/db.js) rather than localStorage, so
- *  records survive browser data clears and are shared across whatever browser/PC hits this server. */
+function toEntry(row: LeaderboardRow): LeaderboardEntry {
+  return { name: row.name, message: row.message, score: row.score, speed: row.speed, difficulty: row.difficulty, bgm: row.bgm, dateIso: row.created_at };
+}
+
+/** Backed by Supabase Postgres (see supabase/schema.sql) rather than a server we host ourselves —
+ *  records survive independently of any particular deploy or browser. */
 export async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
-  try {
-    const res = await fetch(API_BASE);
-    if (!res.ok) return [];
-    const data: unknown = await res.json();
-    return Array.isArray(data) ? (data as LeaderboardEntry[]) : [];
-  } catch {
-    return [];
-  }
+  const { data, error } = await supabase
+    .from("leaderboard")
+    .select("name, message, score, speed, difficulty, bgm, created_at")
+    .order("score", { ascending: false })
+    .order("id", { ascending: true })
+    .limit(MAX_ENTRIES);
+  if (error || !data) return [];
+  return data.map(toEntry);
 }
 
 /** Ties with the current 10th place don't bump it — only a strictly higher score earns a slot. */
@@ -41,12 +56,14 @@ export async function qualifiesForTop10(score: number): Promise<boolean> {
 }
 
 export async function addLeaderboardEntry(entry: NewLeaderboardEntry): Promise<LeaderboardEntry[]> {
-  const res = await fetch(API_BASE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(entry),
+  const { data, error } = await supabase.rpc("submit_score", {
+    p_name: entry.name,
+    p_message: entry.message,
+    p_score: entry.score,
+    p_speed: entry.speed,
+    p_difficulty: entry.difficulty,
+    p_bgm: entry.bgm,
   });
-  if (!res.ok) throw new Error(`Failed to save leaderboard entry (${res.status})`);
-  const data: unknown = await res.json();
-  return Array.isArray(data) ? (data as LeaderboardEntry[]) : [];
+  if (error || !data) throw new Error(error?.message ?? "Failed to save leaderboard entry");
+  return (data as LeaderboardRow[]).map(toEntry);
 }
