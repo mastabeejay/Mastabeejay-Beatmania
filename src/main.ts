@@ -504,7 +504,16 @@ async function startApp(
     const scratchStatus = scratchDetector.isEngaged()
       ? `engaged (${scratchEvent?.direction ?? "none"}, ${(scratchEvent?.scratchVelocityPerSec ?? 0).toFixed(1)}/s)`
       : "idle";
-    hud.textContent = `Delegate: ${delegate}\nFPS: ${fps}\n프레임 수신: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n감지된 손: ${result.hands.length}\n누름 횟수: ${pressCount}\n스크래치: ${scratchStatus}`;
+    hud.textContent = `Delegate: ${delegate}\nFPS: ${fps}\n프레임 수신: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n감지된 손: ${result.hands.length}\n누름 횟수: ${pressCount}\n스크래치: ${scratchStatus}\nAudioCtx: ${audioCtx.state}`;
+  });
+
+  // iOS Safari can leave (or put) the AudioContext in "suspended" during the loading/calibration
+  // wait — sometimes tens of seconds after the click that originally resumed it — silencing every
+  // sound with no visible error. Re-resuming right before playback starts, and again whenever the
+  // tab regains focus, is cheap and catches that without needing a fresh user gesture each time.
+  if (audioCtx.state !== "running") void audioCtx.resume();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && audioCtx.state !== "running") void audioCtx.resume();
   });
 
   audioEngine.play();
