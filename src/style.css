@@ -171,6 +171,11 @@ body::before {
 }
 
 #status-hud {
+  /* Fixed width so a longer per-frame value (e.g. "스크래치: engaged (down, 12.3/s)") doesn't
+     keep growing/shrinking the box every frame — that visibly jittered and covered the falling
+     notes. Overflowing text just spills past the box edge instead, which is fine. */
+  width: 200px;
+  box-sizing: border-box;
   padding: 10px 14px;
   background: rgba(6, 10, 18, 0.72);
   backdrop-filter: blur(6px);
@@ -876,4 +881,102 @@ body::before {
   outline: none;
   border-color: rgba(0, 240, 255, 0.7);
   box-shadow: 0 0 14px rgba(0, 240, 255, 0.3);
+}
+
+/* --- Mobile layout for the pre-game start screen -----------------------------------------------
+   Desktop styles above are untouched. Below only kicks in at narrow viewport widths, where the
+   stacked panels (leaderboard table, BGM toggle, settings, action buttons) were cramped/crude —
+   same design and functionality, just resized/repositioned to fit a small screen. */
+@media (max-width: 640px) {
+  #start-overlay {
+    gap: 12px;
+    padding: 16px 0;
+  }
+
+  #leaderboard-panel,
+  #guestbook-overlay-panel {
+    padding: 10px 12px;
+  }
+
+  #leaderboard-panel {
+    max-height: 28vh;
+    overflow-x: auto;
+  }
+
+  #leaderboard-title,
+  #guestbook-title {
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+
+  /* Squishing 8 columns to fit a phone's width made every cell unreadable — instead the table
+     keeps a real minimum width and the panel scrolls horizontally to reach the rest. */
+  #leaderboard-table {
+    min-width: 480px;
+    font-size: 11px;
+  }
+
+  #leaderboard-table th,
+  #leaderboard-table td {
+    padding: 4px 5px;
+  }
+
+  #song-select {
+    gap: 4px;
+  }
+
+  #bgm-mode-select {
+    gap: 10px;
+    font-size: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  #song-file-label {
+    font-size: 12px;
+    padding: 7px 14px;
+  }
+
+  #song-file-name {
+    font-size: 11px;
+    text-align: center;
+  }
+
+  #game-settings {
+    gap: 14px;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+
+  #game-settings select {
+    font-size: 13px;
+    padding: 5px 8px;
+  }
+
+  #calibration-toggle-label {
+    font-size: 12px;
+    text-align: center;
+  }
+
+  #start-actions {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+
+  #start-button {
+    font-size: 18px;
+    padding: 14px 40px;
+  }
+
+  #guestbook-open-card {
+    padding: 8px 16px;
+  }
+
+  #visitor-welcome {
+    font-size: 12px;
+    text-align: center;
+    padding: 0 12px;
+  }
 }
