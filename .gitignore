@@ -19,8 +19,10 @@ server/data
 .env
 .env.local
 
-# Leftover duplicate — the file actually served is public/audio/Hiphop_Deejaying.mp3
+# Leftover duplicates — the files actually served are the ones under public/audio/
 /Hiphop_Deejaying.mp3
+/Fatherslife.mp3
+/We2026.mp3
 
 # Editor directories and files
 .vscode/*

@@ -4,6 +4,7 @@ import { SfxEngine } from "./audio/SfxEngine";
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
+import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
 import { addGuestbookEntry, deleteGuestbookEntry, editGuestbookEntry, loadGuestbook, WrongPasswordError } from "./game/Guestbook";
 import { addLeaderboardEntry, loadLeaderboard, qualifiesForTop10 } from "./game/Leaderboard";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
@@ -58,6 +59,11 @@ const speedSelect = document.querySelector<HTMLSelectElement>("#speed-select")!;
 const difficultySelect = document.querySelector<HTMLSelectElement>("#difficulty-select")!;
 const songFileInput = document.querySelector<HTMLInputElement>("#song-file-input")!;
 const songFileName = document.querySelector<HTMLSpanElement>("#song-file-name")!;
+const bgmModeTestRadio = document.querySelector<HTMLInputElement>("#bgm-mode-test")!;
+const bgmModeDefaultRadio = document.querySelector<HTMLInputElement>("#bgm-mode-default")!;
+const trackInfoEl = document.querySelector<HTMLDivElement>("#track-info")!;
+const trackInfoTitleEl = document.querySelector<HTMLDivElement>("#track-info-title")!;
+const trackInfoProducerEl = document.querySelector<HTMLDivElement>("#track-info-producer")!;
 const calibrationToggle = document.querySelector<HTMLInputElement>("#calibration-toggle")!;
 const calibrationStatus = document.querySelector<HTMLDivElement>("#calibration-status")!;
 const scoreHud = document.querySelector<HTMLDivElement>("#score-hud")!;
@@ -83,10 +89,23 @@ const guestbookCloseButton = document.querySelector<HTMLButtonElement>("#guestbo
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
+
+function updateSongFileNameDisplay(): void {
+  if (selectedSongFile) {
+    songFileName.textContent = `선택됨: ${selectedSongFile.name}`;
+  } else if (bgmModeDefaultRadio.checked) {
+    songFileName.textContent = "기본 음악 트랙 중 랜덤 선택됨";
+  } else {
+    songFileName.textContent = "선택 안 함 — 기본 테스트 트랙으로 시작";
+  }
+}
+
 songFileInput.addEventListener("change", () => {
   selectedSongFile = songFileInput.files?.[0] ?? null;
-  songFileName.textContent = selectedSongFile ? `선택됨: ${selectedSongFile.name}` : "선택 안 함 — 기본 테스트 트랙으로 시작";
+  updateSongFileNameDisplay();
 });
+bgmModeTestRadio.addEventListener("change", updateSongFileNameDisplay);
+bgmModeDefaultRadio.addEventListener("change", updateSongFileNameDisplay);
 
 async function renderLeaderboard(): Promise<void> {
   const board = await loadLeaderboard();
@@ -301,6 +320,7 @@ async function startApp(
   enableCalibration: boolean,
   speedLabel: string,
   difficultyLabel: string,
+  defaultTrack: DefaultTrack | null,
 ): Promise<void> {
   hud.textContent = "카메라 권한을 요청하는 중...";
 
@@ -342,6 +362,13 @@ async function startApp(
   stopButton.style.display = "block";
   scoreHud.style.display = "block";
   scoreValueEl.textContent = "0";
+  if (defaultTrack) {
+    trackInfoTitleEl.textContent = defaultTrack.title;
+    trackInfoProducerEl.textContent = defaultTrack.producer;
+    trackInfoEl.style.display = "block";
+  } else {
+    trackInfoEl.style.display = "none";
+  }
   stopButton.onclick = () => {
     stopped = true;
     camera.stop();
@@ -350,6 +377,7 @@ async function startApp(
     void audioCtx.close();
     stopButton.style.display = "none";
     scoreHud.style.display = "none";
+    trackInfoEl.style.display = "none";
     calibrationStatus.style.display = "none";
     startOverlay.style.removeProperty("display");
     hud.textContent = "중단됨";
@@ -383,7 +411,7 @@ async function startApp(
 
   // A selected song plays to its natural end; the default test track runs for a fixed 2 minutes.
   const gameDurationMs = songFile ? audioEngine.getDurationMs() : DEFAULT_GAME_DURATION_MS;
-  const bgmLabel = songFile ? "음원" : "기본";
+  const bgmLabel = defaultTrack ? "기본음악" : songFile ? "음원" : "기본";
 
   const skeletonRenderer = new DebugSkeletonRenderer(ctx);
   const gestureDetector = new GestureDetector(calibratedZones);
@@ -410,6 +438,7 @@ async function startApp(
     void audioCtx.close();
     stopButton.style.display = "none";
     scoreHud.style.display = "none";
+    trackInfoEl.style.display = "none";
 
     const finalScore = scoreManager.getScore();
     const counts = scoreManager.getCounts();
@@ -565,5 +594,20 @@ startButton.addEventListener("click", () => {
   const audioCtx = new AudioContext();
   void audioCtx.resume();
   const sfxEngine = new SfxEngine(audioCtx);
-  void startApp(sfxEngine, audioCtx, lookaheadMs, density, selectedSongFile, calibrationToggle.checked, speedLabel, difficultyLabel);
+
+  if (selectedSongFile) {
+    void startApp(sfxEngine, audioCtx, lookaheadMs, density, selectedSongFile, calibrationToggle.checked, speedLabel, difficultyLabel, null);
+  } else if (bgmModeDefaultRadio.checked) {
+    const track = pickRandomDefaultTrack();
+    fetch(track.fileUrl)
+      .then((res) => res.blob())
+      .then((blob) => new File([blob], track.fileName, { type: blob.type }))
+      .then((file) => startApp(sfxEngine, audioCtx, lookaheadMs, density, file, calibrationToggle.checked, speedLabel, difficultyLabel, track))
+      .catch((err) => {
+        hud.textContent = `기본 음악 트랙 로드 실패: ${(err as Error).message}`;
+        startOverlay.style.removeProperty("display");
+      });
+  } else {
+    void startApp(sfxEngine, audioCtx, lookaheadMs, density, null, calibrationToggle.checked, speedLabel, difficultyLabel, null);
+  }
 });

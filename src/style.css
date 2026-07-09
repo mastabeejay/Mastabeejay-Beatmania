@@ -143,6 +143,33 @@ body::before {
   line-height: 1.2;
 }
 
+#track-info {
+  display: none;
+  padding: 8px 16px;
+  background: rgba(6, 10, 18, 0.72);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.1);
+  pointer-events: none;
+}
+
+#track-info-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-cyber-cyan);
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+#track-info-producer {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(201, 211, 222, 0.65);
+}
+
 #status-hud {
   padding: 10px 14px;
   background: rgba(6, 10, 18, 0.72);
@@ -565,6 +592,24 @@ body::before {
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
+}
+
+#bgm-mode-select {
+  display: flex;
+  gap: 18px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: rgba(201, 211, 222, 0.85);
+  margin-bottom: 2px;
+}
+
+#bgm-mode-select label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  accent-color: var(--color-cyber-cyan);
 }
 
 #song-file-label {
