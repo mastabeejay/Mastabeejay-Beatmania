@@ -24,6 +24,10 @@ server/data
 /Fatherslife.mp3
 /We2026.mp3
 
+# Raw source folder for the YBJ 힙합 트랙 pool — the files actually served are the copies under
+# public/audio/ybj/ (renamed to safe ASCII slugs to avoid URL-encoding issues).
+/YBJ_music
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

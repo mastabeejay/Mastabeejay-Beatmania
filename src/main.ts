@@ -28,11 +28,13 @@ const DEFAULT_GAME_DURATION_MS = 120000; // 2 minutes — default test-track gam
 const TEST_BEAT_COUNT = Math.round(DEFAULT_GAME_DURATION_MS / (60000 / TEST_BPM)); // 240 beats at 120 BPM
 
 // Scroll speed (ms from spawn to hit line) is a separate axis from note density/difficulty —
-// conflating the two was why doubling one alone didn't fix "the game feels too fast".
-const SPEED_PRESETS: Record<"slow" | "normal" | "fast", number> = {
+// conflating the two was why doubling one alone didn't fix "the game feels too fast". "extreme"
+// (개빠름) is fast's time divided by 1.5 — 1.5x the on-screen scroll speed.
+const SPEED_PRESETS: Record<"slow" | "normal" | "fast" | "extreme", number> = {
   slow: 3200,
   normal: 2400,
   fast: 1600,
+  extreme: 1067,
 };
 
 // Human-readable labels recorded on the leaderboard alongside the score, so a run can be compared
@@ -41,17 +43,19 @@ const SPEED_LABELS: Record<keyof typeof SPEED_PRESETS, string> = {
   slow: "느림",
   normal: "보통",
   fast: "빠름",
+  extreme: "개빠름",
 };
 const DIFFICULTY_LABELS: Record<keyof typeof DIFFICULTY_PRESETS, string> = {
   easy: "쉬움",
   normal: "보통",
   hard: "어려움",
+  extreme: "개어려움",
 };
 
 // Ordering used to enforce the step-escalation rule: the next step's speed/difficulty must each be
 // >= the just-finished step's, and at least one of the two must be strictly greater.
-const SPEED_ORDER: (keyof typeof SPEED_PRESETS)[] = ["slow", "normal", "fast"];
-const DIFFICULTY_ORDER: (keyof typeof DIFFICULTY_PRESETS)[] = ["easy", "normal", "hard"];
+const SPEED_ORDER: (keyof typeof SPEED_PRESETS)[] = ["slow", "normal", "fast", "extreme"];
+const DIFFICULTY_ORDER: (keyof typeof DIFFICULTY_PRESETS)[] = ["easy", "normal", "hard", "extreme"];
 
 const stage = document.querySelector<HTMLDivElement>("#stage")!;
 const video = document.querySelector<HTMLVideoElement>("#camera-feed")!;

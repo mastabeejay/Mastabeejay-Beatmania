@@ -24,10 +24,15 @@ export interface ChartDensity {
   scratchHoldBeatsRange: [number, number];
 }
 
-// Shared by both the hardcoded test chart and real auto-generated charts, so "easy/normal/hard"
-// feels consistent regardless of which note source is playing.
-export const DIFFICULTY_PRESETS: Record<"easy" | "normal" | "hard", ChartDensity> = {
+// Shared by both the hardcoded test chart and real auto-generated charts, so "easy/normal/hard/
+// extreme" feels consistent regardless of which note source is playing. "extreme" (개어려움) scales
+// every one of hard's density knobs by 1.5x — notes 1.5x more frequent, syncopation/shuffle chance
+// 1.5x more likely, hold lengths compressed by the same factor. The syncopation/lane-shuffle safety
+// margins (see ChartDensity docs above) are proportional to beatsPerKeyNote itself, not a fixed ms
+// value, so they hold automatically at this denser setting too — no separate re-proof needed.
+export const DIFFICULTY_PRESETS: Record<"easy" | "normal" | "hard" | "extreme", ChartDensity> = {
   easy: { beatsPerKeyNote: 4, beatsPerScratchNote: 8, syncopationChance: 0, laneShuffleChance: 0, scratchHoldBeatsRange: [1, 1] },
   normal: { beatsPerKeyNote: 2, beatsPerScratchNote: 6, syncopationChance: 0.2, laneShuffleChance: 0.25, scratchHoldBeatsRange: [0.5, 1.5] },
   hard: { beatsPerKeyNote: 0.75, beatsPerScratchNote: 3, syncopationChance: 0.55, laneShuffleChance: 0.5, scratchHoldBeatsRange: [0.25, 2] },
+  extreme: { beatsPerKeyNote: 0.5, beatsPerScratchNote: 2, syncopationChance: 0.825, laneShuffleChance: 0.75, scratchHoldBeatsRange: [0.17, 1.33] },
 };
