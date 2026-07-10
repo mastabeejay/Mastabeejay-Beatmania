@@ -471,6 +471,12 @@ function playStep(
         camera.stop();
         handTracker.dispose();
         audioEngine.stop();
+        // The scratch sample player fires grains on its own independent timer, keyed off the last
+        // engaged/velocity state it was given — if the player was mid-scratch at this exact instant,
+        // silencing it here (not just letting updateScratch calls stop) prevents that timer from
+        // reading a permanently-frozen "still engaged" state and playing grains forever.
+        sfxEngine.updateScratch(0, false);
+        sfxEngine.dispose();
         void audioCtx.close();
         stopButton.style.display = "none";
         scoreHud.style.display = "none";
@@ -598,6 +604,10 @@ function playStep(
         if (songTimeMs >= gameDurationMs) {
           stopped = true;
           audioEngine.stop();
+          // See stopButton.onclick above — same reasoning: a step can end mid-scratch, and without
+          // this the sample player's independent grain timer would keep reading a frozen "engaged"
+          // state and playing grains forever through the still-open AudioContext.
+          sfxEngine.updateScratch(0, false);
           stopButton.style.display = "none";
           scoreHud.style.display = "none";
           trackInfoEl.style.display = "none";
@@ -841,6 +851,9 @@ async function runSession(
 
     if (choice === "end") {
       handTracker.dispose();
+      // Must happen before audioCtx.close() — otherwise the scratch sample player's independent
+      // grain timer keeps firing against a closed context and throws on every tick indefinitely.
+      sfxEngine.dispose();
       void audioCtx.close();
       await finalizeSession(cumulativeScore, settings, camera, step);
       return;
