@@ -29,5 +29,5 @@ export interface ChartDensity {
 export const DIFFICULTY_PRESETS: Record<"easy" | "normal" | "hard", ChartDensity> = {
   easy: { beatsPerKeyNote: 4, beatsPerScratchNote: 8, syncopationChance: 0, laneShuffleChance: 0, scratchHoldBeatsRange: [1, 1] },
   normal: { beatsPerKeyNote: 2, beatsPerScratchNote: 6, syncopationChance: 0.2, laneShuffleChance: 0.25, scratchHoldBeatsRange: [0.5, 1.5] },
-  hard: { beatsPerKeyNote: 1, beatsPerScratchNote: 4, syncopationChance: 0.4, laneShuffleChance: 0.5, scratchHoldBeatsRange: [0.25, 2] },
+  hard: { beatsPerKeyNote: 0.75, beatsPerScratchNote: 3, syncopationChance: 0.55, laneShuffleChance: 0.5, scratchHoldBeatsRange: [0.25, 2] },
 };

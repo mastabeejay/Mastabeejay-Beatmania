@@ -254,7 +254,7 @@ body::before {
 }
 
 #leaderboard-panel {
-  width: min(640px, 90vw);
+  width: min(760px, 92vw);
   max-height: 34vh;
   overflow-y: auto;
   padding: 14px 20px;
@@ -279,7 +279,7 @@ body::before {
 }
 
 #p2b-badge {
-  width: 62px;
+  width: 128px;
   height: auto;
   flex-shrink: 0;
   filter: drop-shadow(0 0 6px rgba(255, 210, 0, 0.4)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
@@ -308,9 +308,30 @@ body::before {
   text-overflow: ellipsis;
 }
 
-#leaderboard-table td:nth-child(3) {
+#leaderboard-table td:nth-child(4) {
   white-space: normal;
   max-width: 180px;
+}
+
+.leaderboard-photo-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 210, 0, 0.4);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.leaderboard-photo-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 10px rgba(255, 210, 0, 0.5);
+}
+
+.leaderboard-photo-empty {
+  color: rgba(201, 211, 222, 0.35);
+  font-size: 11px;
 }
 
 #leaderboard-table thead th {
@@ -895,6 +916,61 @@ body::before {
   outline: none;
   border-color: rgba(0, 240, 255, 0.7);
   box-shadow: 0 0 14px rgba(0, 240, 255, 0.3);
+}
+
+/* --- Top-10 celebration photo -------------------------------------------------------------------
+   Deliberately no dark backdrop here, unlike the other overlays — the camera feed underneath must
+   stay fully visible so the player can see themselves and pose before the capture fires. */
+#photo-countdown-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 8vh;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 16;
+}
+
+#photo-countdown-desc {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(16px, 3vw, 24px);
+  color: var(--color-cyber-gold);
+  text-shadow: 0 0 12px rgba(255, 210, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.8);
+  text-align: center;
+}
+
+#photo-countdown-number {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(64px, 14vw, 140px);
+  color: var(--color-cyber-cyan);
+  text-shadow: 0 0 24px rgba(0, 240, 255, 0.7), 0 4px 10px rgba(0, 0, 0, 0.8);
+  line-height: 1;
+}
+
+#photo-lightbox-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(4px);
+  cursor: zoom-out;
+  z-index: 20;
+}
+
+#photo-lightbox-image {
+  max-width: min(90vw, 640px);
+  max-height: 85vh;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 210, 0, 0.5);
+  box-shadow: 0 0 40px rgba(255, 210, 0, 0.25);
 }
 
 /* --- Mobile layout for the pre-game start screen -----------------------------------------------

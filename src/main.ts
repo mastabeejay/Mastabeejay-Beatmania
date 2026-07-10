@@ -86,6 +86,10 @@ const guestbookPasswordInput = document.querySelector<HTMLInputElement>("#guestb
 const guestbookOpenCard = document.querySelector<HTMLButtonElement>("#guestbook-open-card")!;
 const guestbookOverlay = document.querySelector<HTMLDivElement>("#guestbook-overlay")!;
 const guestbookCloseButton = document.querySelector<HTMLButtonElement>("#guestbook-close-button")!;
+const photoCountdownOverlay = document.querySelector<HTMLDivElement>("#photo-countdown-overlay")!;
+const photoCountdownNumberEl = document.querySelector<HTMLDivElement>("#photo-countdown-number")!;
+const photoLightboxOverlay = document.querySelector<HTMLDivElement>("#photo-lightbox-overlay")!;
+const photoLightboxImage = document.querySelector<HTMLImageElement>("#photo-lightbox-image")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
@@ -110,7 +114,7 @@ bgmModeDefaultRadio.addEventListener("change", updateSongFileNameDisplay);
 async function renderLeaderboard(): Promise<void> {
   const board = await loadLeaderboard();
   if (board.length === 0) {
-    leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="8">기록이 없습니다 — 첫 기록의 주인공이 되어보세요!</td></tr>`;
+    leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="9">기록이 없습니다 — 첫 기록의 주인공이 되어보세요!</td></tr>`;
     return;
   }
   leaderboardBody.innerHTML = board
@@ -119,6 +123,7 @@ async function renderLeaderboard(): Promise<void> {
         <tr>
           <td>${index + 1}</td>
           <td>${escapeHtml(entry.name)}</td>
+          <td>${entry.photo ? `<img class="leaderboard-photo-thumb" data-photo-index="${index}" alt="${escapeHtml(entry.name)} 사진" />` : `<span class="leaderboard-photo-empty">-</span>`}</td>
           <td>${escapeHtml(entry.message)}</td>
           <td>${entry.score}</td>
           <td>${escapeHtml(entry.speed)}</td>
@@ -128,7 +133,27 @@ async function renderLeaderboard(): Promise<void> {
         </tr>`,
     )
     .join("");
+
+  // Set via the DOM property, not interpolated into the HTML attribute above — consistent with how
+  // guestbook message editing avoids putting arbitrary content inside an attribute value.
+  board.forEach((entry, index) => {
+    if (!entry.photo) return;
+    const img = leaderboardBody.querySelector<HTMLImageElement>(`img[data-photo-index="${index}"]`);
+    if (img) img.src = entry.photo;
+  });
 }
+
+leaderboardBody.addEventListener("click", (event) => {
+  const img = (event.target as HTMLElement).closest<HTMLImageElement>(".leaderboard-photo-thumb");
+  if (!img) return;
+  photoLightboxImage.src = img.src;
+  photoLightboxOverlay.style.display = "flex";
+});
+
+photoLightboxOverlay.addEventListener("click", () => {
+  photoLightboxOverlay.style.display = "none";
+  photoLightboxImage.src = "";
+});
 
 /** Local calendar date, not the ISO string's UTC date — slicing the raw ISO string would show the
  *  wrong day for anyone playing near midnight in a timezone ahead of UTC (e.g. KST). */
@@ -294,6 +319,41 @@ void reportVisit().then((count) => {
   if (count !== null) visitorCountEl.textContent = count.toLocaleString();
 });
 
+/** Grabs the current camera frame as a JPEG data URL. Mirrored horizontally to match what the
+ *  player actually saw on screen while posing — the live <video> is only mirrored via a CSS
+ *  transform, the underlying frame data is not, so an unmirrored capture would look flipped. */
+function capturePhoto(videoEl: HTMLVideoElement): string {
+  const captureCanvas = document.createElement("canvas");
+  captureCanvas.width = videoEl.videoWidth;
+  captureCanvas.height = videoEl.videoHeight;
+  const captureCtx = captureCanvas.getContext("2d")!;
+  captureCtx.translate(captureCanvas.width, 0);
+  captureCtx.scale(-1, 1);
+  captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+  return captureCanvas.toDataURL("image/jpeg", 0.85);
+}
+
+/** Counts down over the still-live camera feed (see endGame — camera.stop() is deliberately
+ *  deferred until after this resolves) and captures a photo the moment it hits zero. */
+function runPhotoCountdown(videoEl: HTMLVideoElement): Promise<string> {
+  return new Promise((resolve) => {
+    let count = 5;
+    photoCountdownNumberEl.textContent = String(count);
+    photoCountdownOverlay.style.display = "flex";
+    const interval = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        photoCountdownNumberEl.textContent = String(count);
+        return;
+      }
+      clearInterval(interval);
+      const photo = capturePhoto(videoEl);
+      photoCountdownOverlay.style.display = "none";
+      resolve(photo);
+    }, 1000);
+  });
+}
+
 /** Sizes #stage in exact pixels to fit the viewport while preserving the video's native aspect ratio. */
 function fitStageToViewport(videoWidth: number, videoHeight: number): void {
   const viewportAspect = window.innerWidth / window.innerHeight;
@@ -429,10 +489,11 @@ async function startApp(
   }
 
   /** Called once the run reaches its natural end (song finished, or 2-minute default track elapsed) —
-   *  distinct from stopButton's abort path, which bails out without showing a score. */
+   *  distinct from stopButton's abort path, which bails out without showing a score. Note that
+   *  camera.stop() is deliberately NOT called here — a top-10 score needs the live feed for the
+   *  photo countdown, so it's deferred until each branch below knows whether that's needed. */
   function endGame(): void {
     stopped = true;
-    camera.stop();
     handTracker.dispose();
     audioEngine.stop();
     void audioCtx.close();
@@ -446,11 +507,16 @@ async function startApp(
     resultsBreakdownEl.textContent = `Great ${counts.Great}   Good ${counts.Good}   Bad ${counts.Bad}`;
     resultsOverlay.style.display = "flex";
 
+    let capturedPhoto: string | null = null;
+
     resultsConfirmButton.onclick = async () => {
       resultsOverlay.style.display = "none";
       if (await qualifiesForTop10(finalScore)) {
+        capturedPhoto = await runPhotoCountdown(video);
+        camera.stop();
         nameEntryOverlay.style.display = "flex";
       } else {
+        camera.stop();
         startOverlay.style.removeProperty("display");
       }
     };
@@ -459,7 +525,15 @@ async function startApp(
       const name = nameEntryNameInput.value.trim() || "익명";
       const message = nameEntryMessageInput.value.trim();
       try {
-        await addLeaderboardEntry({ name, message, score: finalScore, speed: speedLabel, difficulty: difficultyLabel, bgm: bgmLabel });
+        await addLeaderboardEntry({
+          name,
+          message,
+          score: finalScore,
+          speed: speedLabel,
+          difficulty: difficultyLabel,
+          bgm: bgmLabel,
+          photo: capturedPhoto,
+        });
       } catch (err) {
         console.error("리더보드 저장 실패:", err);
       }

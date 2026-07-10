@@ -54,7 +54,7 @@
               </defs>
               <polygon points="18,8 92,8 100,3 26,3" fill="url(#p2bTopFace)" stroke="#9a6a00" stroke-width="0.5" />
               <polygon points="18,8 92,8 100,34 10,34" fill="url(#p2bFrontFace)" stroke="#7a5200" stroke-width="1" />
-              <text x="55" y="26" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="13" fill="#4a2f00">P2B 2.0</text>
+              <text x="55" y="27" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="16" fill="#4a2f00">P2B 2.0</text>
             </svg>
           </div>
           <div id="leaderboard-title" class="text-metallic-gold">BEST 10 RECORD</div>
@@ -63,6 +63,7 @@
               <tr>
                 <th>순위</th>
                 <th>이름</th>
+                <th>사진</th>
                 <th>메세지</th>
                 <th>점수</th>
                 <th>속도</th>
@@ -144,6 +145,13 @@
         <input type="text" id="name-entry-name" maxlength="12" placeholder="이름" />
         <input type="text" id="name-entry-message" maxlength="40" placeholder="한마디 메세지" />
         <button id="name-entry-submit" type="button">등록</button>
+      </div>
+      <div id="photo-countdown-overlay">
+        <div id="photo-countdown-desc">Top 10 진입! 기념 사진을 찍습니다</div>
+        <div id="photo-countdown-number">5</div>
+      </div>
+      <div id="photo-lightbox-overlay">
+        <img id="photo-lightbox-image" src="" alt="Best 10 기념 사진" />
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

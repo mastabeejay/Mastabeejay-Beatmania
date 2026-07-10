@@ -7,6 +7,9 @@ export interface LeaderboardEntry {
   speed: string;
   difficulty: string;
   bgm: string;
+  /** Base64 data URL of the top-10 celebration photo — null for older rows migrated before this
+   *  existed, or if the player's camera wasn't available at capture time. */
+  photo: string | null;
   dateIso: string;
 }
 
@@ -17,6 +20,7 @@ export interface NewLeaderboardEntry {
   speed: string;
   difficulty: string;
   bgm: string;
+  photo: string | null;
 }
 
 interface LeaderboardRow {
@@ -26,13 +30,23 @@ interface LeaderboardRow {
   speed: string;
   difficulty: string;
   bgm: string;
+  photo: string | null;
   created_at: string;
 }
 
 const MAX_ENTRIES = 10;
 
 function toEntry(row: LeaderboardRow): LeaderboardEntry {
-  return { name: row.name, message: row.message, score: row.score, speed: row.speed, difficulty: row.difficulty, bgm: row.bgm, dateIso: row.created_at };
+  return {
+    name: row.name,
+    message: row.message,
+    score: row.score,
+    speed: row.speed,
+    difficulty: row.difficulty,
+    bgm: row.bgm,
+    photo: row.photo,
+    dateIso: row.created_at,
+  };
 }
 
 /** Backed by Supabase Postgres (see supabase/schema.sql) rather than a server we host ourselves —
@@ -40,7 +54,7 @@ function toEntry(row: LeaderboardRow): LeaderboardEntry {
 export async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
   const { data, error } = await supabase
     .from("leaderboard")
-    .select("name, message, score, speed, difficulty, bgm, created_at")
+    .select("name, message, score, speed, difficulty, bgm, photo, created_at")
     .order("score", { ascending: false })
     .order("id", { ascending: true })
     .limit(MAX_ENTRIES);
@@ -63,6 +77,7 @@ export async function addLeaderboardEntry(entry: NewLeaderboardEntry): Promise<L
     p_speed: entry.speed,
     p_difficulty: entry.difficulty,
     p_bgm: entry.bgm,
+    p_photo: entry.photo,
   });
   if (error || !data) throw new Error(error?.message ?? "Failed to save leaderboard entry");
   return (data as LeaderboardRow[]).map(toEntry);
