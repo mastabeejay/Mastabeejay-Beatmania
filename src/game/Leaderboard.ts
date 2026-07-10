@@ -72,8 +72,10 @@ export async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
   return data.map(toEntry);
 }
 
-/** Ties with the current 20th place don't bump it — only a strictly higher score earns a slot. */
+/** Ties with the current 20th place don't bump it — only a strictly higher score earns a slot.
+ *  A score of 0 never qualifies, even on an empty board — there's nothing to celebrate. */
 export async function qualifiesForTop20(score: number): Promise<boolean> {
+  if (score <= 0) return false;
   const board = await loadLeaderboard();
   if (board.length < MAX_ENTRIES) return true;
   return score > board[board.length - 1].score;
