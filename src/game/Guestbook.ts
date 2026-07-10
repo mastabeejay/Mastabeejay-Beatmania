@@ -24,6 +24,14 @@ export class WrongPasswordError extends Error {
   }
 }
 
+/** Thrown by edit/delete when the entry was posted with no password at all (see the schema's
+ *  password_hash comment) — distinct from a wrong guess, since no password could ever match here. */
+export class NoPasswordSetError extends Error {
+  constructor() {
+    super("This entry has no password set");
+  }
+}
+
 function toEntry(row: GuestbookRow): GuestbookEntry {
   return { id: row.id, name: row.name, message: row.message, parentId: row.parent_id, dateIso: row.created_at };
 }
@@ -61,6 +69,7 @@ export async function editGuestbookEntry(id: number, message: string, password: 
   const { data, error } = await supabase.rpc("edit_guestbook_entry", { p_id: id, p_message: message, p_password: password });
   if (error) {
     if (error.message === "wrong_password") throw new WrongPasswordError();
+    if (error.message === "no_password") throw new NoPasswordSetError();
     throw new Error(error.message);
   }
   return ((data as GuestbookRow[] | null) ?? []).map(toEntry);
@@ -70,6 +79,7 @@ export async function deleteGuestbookEntry(id: number, password: string): Promis
   const { data, error } = await supabase.rpc("delete_guestbook_entry", { p_id: id, p_password: password });
   if (error) {
     if (error.message === "wrong_password") throw new WrongPasswordError();
+    if (error.message === "no_password") throw new NoPasswordSetError();
     throw new Error(error.message);
   }
   return ((data as GuestbookRow[] | null) ?? []).map(toEntry);

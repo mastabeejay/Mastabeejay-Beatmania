@@ -12,13 +12,17 @@ import {
   deleteGuestbookEntry,
   editGuestbookEntry,
   loadGuestbook,
+  NoPasswordSetError,
   WrongPasswordError,
   type GuestbookEntry,
 } from "./game/Guestbook";
 import { addLeaderboardEntry, adminDeleteLeaderboardEntries, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
+import { adminSetNotice, loadNotice } from "./game/Notice";
 import { NoteScheduler } from "./game/NoteScheduler";
+import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
 import { ScoreManager } from "./game/ScoreManager";
+import { adminAddSocialLink, adminDeleteSocialLink, adminUpdateSocialLink, loadSocialLinks } from "./game/SocialLinks";
 import { buildTestChart, DIFFICULTY_PRESETS, type ChartDensity } from "./game/testChart";
 import { SCRATCH_LANE } from "./game/types";
 import { reportVisit } from "./game/Visits";
@@ -131,6 +135,18 @@ const adminLoginSubmitButton = document.querySelector<HTMLButtonElement>("#admin
 const adminLoginCancelButton = document.querySelector<HTMLButtonElement>("#admin-login-cancel")!;
 const leaderboardAdminDeleteButton = document.querySelector<HTMLButtonElement>("#leaderboard-admin-delete-button")!;
 const guestbookAdminDeleteButton = document.querySelector<HTMLButtonElement>("#guestbook-admin-delete-button")!;
+const adminPanelOpenButton = document.querySelector<HTMLButtonElement>("#admin-panel-open-button")!;
+const adminPanelOverlay = document.querySelector<HTMLDivElement>("#admin-panel-overlay")!;
+const adminPanelCloseButton = document.querySelector<HTMLButtonElement>("#admin-panel-close-button")!;
+const adminNoticeInput = document.querySelector<HTMLTextAreaElement>("#admin-notice-input")!;
+const adminNoticeSaveButton = document.querySelector<HTMLButtonElement>("#admin-notice-save-button")!;
+const adminSocialLinksList = document.querySelector<HTMLDivElement>("#admin-social-links-list")!;
+const adminSocialLinkPlatformSelect = document.querySelector<HTMLSelectElement>("#admin-social-link-platform")!;
+const adminSocialLinkUrlInput = document.querySelector<HTMLInputElement>("#admin-social-link-url")!;
+const adminSocialLinkAddButton = document.querySelector<HTMLButtonElement>("#admin-social-link-add-button")!;
+const socialLinksContainer = document.querySelector<HTMLDivElement>("#social-links-container")!;
+const noticeBoard = document.querySelector<HTMLDivElement>("#notice-board")!;
+const noticeBoardText = document.querySelector<HTMLDivElement>("#notice-board-text")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
@@ -389,6 +405,10 @@ guestbookList.addEventListener("click", (event) => {
       .then(() => renderGuestbook())
       .catch((err) => {
         if (err instanceof WrongPasswordError) {
+          errorEl.textContent = "비밀번호가 일치하지 않습니다";
+          errorEl.hidden = false;
+        } else if (err instanceof NoPasswordSetError) {
+          errorEl.textContent = "비밀번호 없이 등록된 글은 수정할 수 없습니다";
           errorEl.hidden = false;
         } else {
           console.error("방명록 수정 실패:", err);
@@ -406,6 +426,10 @@ guestbookList.addEventListener("click", (event) => {
       .then(() => renderGuestbook())
       .catch((err) => {
         if (err instanceof WrongPasswordError) {
+          errorEl.textContent = "비밀번호가 일치하지 않습니다";
+          errorEl.hidden = false;
+        } else if (err instanceof NoPasswordSetError) {
+          errorEl.textContent = "비밀번호 없이 등록된 글은 삭제할 수 없습니다";
           errorEl.hidden = false;
         } else {
           console.error("방명록 삭제 실패:", err);
@@ -419,7 +443,7 @@ guestbookList.addEventListener("click", (event) => {
     const name = form.querySelector<HTMLInputElement>(".guestbook-reply-name")!.value.trim();
     const message = form.querySelector<HTMLInputElement>(".guestbook-reply-message")!.value.trim();
     const password = form.querySelector<HTMLInputElement>(".guestbook-reply-password")!.value;
-    if (!name || !message || !password) return;
+    if (!name || !message) return;
     void addGuestbookEntry({ name, message, password, parentId: id })
       .then(() => renderGuestbook())
       .catch((err) => console.error("답글 등록 실패:", err));
@@ -431,7 +455,7 @@ guestbookForm.addEventListener("submit", (event) => {
   const name = guestbookNameInput.value.trim();
   const message = guestbookMessageInput.value.trim();
   const password = guestbookPasswordInput.value;
-  if (!name || !message || !password) return;
+  if (!name || !message) return;
   void addGuestbookEntry({ name, message, password })
     .then(() => {
       guestbookNameInput.value = "";
@@ -511,6 +535,57 @@ installGuideCloseButton.addEventListener("click", () => {
 function setAdminModeUI(active: boolean): void {
   adminLoginLink.hidden = active;
   adminLogoutButton.hidden = !active;
+  adminPanelOpenButton.hidden = !active;
+}
+
+/** Public top-right icon buttons — same for every visitor regardless of admin state. URLs are set
+ *  via the `.href` DOM property, never interpolated into the HTML string, since a URL containing a
+ *  `"` could otherwise break out of an `href="..."` attribute. */
+async function renderSocialLinks(): Promise<void> {
+  const links = await loadSocialLinks();
+  socialLinksContainer.innerHTML = links
+    .map((link) => {
+      const icon = getPlatformIcon(link.platform);
+      return `<a class="social-link-button" target="_blank" rel="noopener noreferrer" title="${escapeHtml(icon.label)}" data-link-id="${link.id}">${icon.svg}</a>`;
+    })
+    .join("");
+  links.forEach((link) => {
+    const a = socialLinksContainer.querySelector<HTMLAnchorElement>(`a[data-link-id="${link.id}"]`);
+    if (a) a.href = link.url;
+  });
+}
+
+/** Editable rows in the admin panel — same DOM-property pattern as renderSocialLinks for the URL. */
+async function renderAdminSocialLinksList(): Promise<void> {
+  const links = await loadSocialLinks();
+  const platformOptions = Object.entries(PLATFORM_ICONS)
+    .map(([key, def]) => `<option value="${key}">${escapeHtml(def.label)}</option>`)
+    .join("");
+  adminSocialLinksList.innerHTML = links
+    .map((link) => {
+      const icon = getPlatformIcon(link.platform);
+      return `
+        <div class="admin-social-link-row" data-id="${link.id}">
+          <span class="admin-social-link-icon">${icon.svg}</span>
+          <select class="admin-social-link-edit-platform">${platformOptions}</select>
+          <input type="url" class="admin-social-link-edit-url" />
+          <button type="button" data-action="save-link" data-id="${link.id}">저장</button>
+          <button type="button" data-action="delete-link" data-id="${link.id}">삭제</button>
+        </div>`;
+    })
+    .join("");
+  links.forEach((link) => {
+    const row = adminSocialLinksList.querySelector<HTMLDivElement>(`.admin-social-link-row[data-id="${link.id}"]`);
+    if (!row) return;
+    row.querySelector<HTMLSelectElement>(".admin-social-link-edit-platform")!.value = link.platform;
+    row.querySelector<HTMLInputElement>(".admin-social-link-edit-url")!.value = link.url;
+  });
+}
+
+async function renderNotice(): Promise<void> {
+  const message = await loadNotice();
+  noticeBoardText.textContent = message ?? "";
+  noticeBoard.hidden = !message;
 }
 
 /** Clears admin state everywhere (memory + sessionStorage) and drops back to the logged-out view.
@@ -559,6 +634,75 @@ adminLoginSubmitButton.addEventListener("click", () => {
 
 adminLogoutButton.addEventListener("click", () => forceAdminLogout());
 
+/** Shared by every admin-panel action below — a rejected password means the stored one no longer
+ *  matches (e.g. the owner rotated it directly in Supabase), so drop out of admin mode entirely
+ *  rather than leaving the panel open in a now-unauthenticated state. */
+function handleAdminPanelError(err: unknown, context: string): void {
+  if (err instanceof WrongAdminPasswordError) {
+    adminPanelOverlay.style.display = "none";
+    forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
+  } else {
+    console.error(context, err);
+  }
+}
+
+adminPanelOpenButton.addEventListener("click", () => {
+  void loadNotice().then((message) => {
+    adminNoticeInput.value = message ?? "";
+  });
+  void renderAdminSocialLinksList();
+  adminPanelOverlay.style.display = "flex";
+});
+
+adminPanelCloseButton.addEventListener("click", () => {
+  adminPanelOverlay.style.display = "none";
+});
+
+adminNoticeSaveButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  void adminSetNotice(adminNoticeInput.value, adminPassword)
+    .then(() => renderNotice())
+    .catch((err) => handleAdminPanelError(err, "공지 저장 실패:"));
+});
+
+adminSocialLinkAddButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const platform = adminSocialLinkPlatformSelect.value;
+  const url = adminSocialLinkUrlInput.value.trim();
+  if (!url) return;
+  void adminAddSocialLink(platform, url, adminPassword)
+    .then(() => {
+      adminSocialLinkUrlInput.value = "";
+      return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
+    })
+    .catch((err) => handleAdminPanelError(err, "링크 추가 실패:"));
+});
+
+adminSocialLinksList.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
+  if (!button || !adminPassword) return;
+  const id = Number(button.dataset.id);
+  const row = button.closest<HTMLDivElement>(".admin-social-link-row")!;
+  const action = button.dataset.action;
+
+  if (action === "save-link") {
+    const platform = row.querySelector<HTMLSelectElement>(".admin-social-link-edit-platform")!.value;
+    const url = row.querySelector<HTMLInputElement>(".admin-social-link-edit-url")!.value.trim();
+    if (!url) return;
+    void adminUpdateSocialLink(id, platform, url, adminPassword)
+      .then(() => Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]))
+      .catch((err) => handleAdminPanelError(err, "링크 수정 실패:"));
+    return;
+  }
+
+  if (action === "delete-link") {
+    if (!window.confirm("이 링크 버튼을 삭제하시겠습니까?")) return;
+    void adminDeleteSocialLink(id, adminPassword)
+      .then(() => Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]))
+      .catch((err) => handleAdminPanelError(err, "링크 삭제 실패:"));
+  }
+});
+
 /** A password carried over from a previous tab session (sessionStorage) is re-verified before
  *  trusting it — the owner may have rotated it in Supabase directly since then. */
 async function initAdminSession(): Promise<void> {
@@ -575,6 +719,8 @@ async function initAdminSession(): Promise<void> {
 void initAdminSession().then(() => {
   void renderLeaderboard();
   void renderGuestbook();
+  void renderSocialLinks();
+  void renderNotice();
 });
 
 void reportVisit().then((count) => {

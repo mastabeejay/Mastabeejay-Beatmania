@@ -45,19 +45,7 @@
       <div id="calibration-status"></div>
       <div id="start-overlay">
         <button id="pwa-refresh-button" type="button" title="새로고침">🔄 새로고침</button>
-        <a id="youtube-link-button" href="https://www.youtube.com/@mastabeejay" target="_blank" rel="noopener noreferrer" title="YouTube">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <rect x="1" y="5" width="22" height="14" rx="4" fill="#FF0000" />
-            <path d="M10 8.5L16 12L10 15.5V8.5Z" fill="#FFFFFF" />
-          </svg>
-        </a>
-        <a id="tiktok-link-button" href="https://www.tiktok.com/@mastadrzunm" target="_blank" rel="noopener noreferrer" title="TikTok">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path transform="translate(-0.6,0)" fill="#25F4EE" d="M16 3c.5 2.3 2 3.9 4 4.2v2.9a7 7 0 0 1-4-1.3v6.4a5.7 5.7 0 1 1-5.7-5.7c.3 0 .6 0 .9.1v3a2.7 2.7 0 1 0 1.8 2.6V3h3z" />
-            <path transform="translate(0.6,0)" fill="#FE2C55" d="M16 3c.5 2.3 2 3.9 4 4.2v2.9a7 7 0 0 1-4-1.3v6.4a5.7 5.7 0 1 1-5.7-5.7c.3 0 .6 0 .9.1v3a2.7 2.7 0 1 0 1.8 2.6V3h3z" />
-            <path fill="#000000" d="M16 3c.5 2.3 2 3.9 4 4.2v2.9a7 7 0 0 1-4-1.3v6.4a5.7 5.7 0 1 1-5.7-5.7c.3 0 .6 0 .9.1v3a2.7 2.7 0 1 0 1.8 2.6V3h3z" />
-          </svg>
-        </a>
+        <div id="social-links-container"></div>
         <div id="leaderboard-header">
           <div id="leaderboard-tagline-row">
             <div id="leaderboard-tagline" class="text-metallic">Masta Beejay Beat Breaker</div>
@@ -105,50 +93,74 @@
             </table>
           </div>
         </div>
-        <div id="song-select">
-          <div id="settings-row">
-            <div id="bgm-mode-select" class="bgm-mode-select">
-              <label>
-                <input type="radio" name="bgm-mode" id="bgm-mode-test" value="test" />
-                무반주 연습 트랙
+        <div id="main-controls-row">
+          <div class="control-group" id="track-group">
+            <div class="control-group-title">[Track]</div>
+            <div class="control-group-body">
+              <div id="bgm-mode-select" class="bgm-mode-select">
+                <label>
+                  <input type="radio" name="bgm-mode" id="bgm-mode-test" value="test" />
+                  무반주 연습
+                </label>
+                <label>
+                  <input type="radio" name="bgm-mode" id="bgm-mode-default" value="default" checked />
+                  YBJ 힙합
+                </label>
+              </div>
+              <label id="song-file-label" class="song-file-label" for="song-file-input">🎵 자유 음원</label>
+              <input type="file" id="song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
+            </div>
+          </div>
+          <div class="control-group" id="level-group">
+            <div class="control-group-title">[Level]</div>
+            <div class="control-group-body">
+              <label class="settings-select-label">속도
+                <select id="speed-select">
+                  <option value="slow">느림</option>
+                  <option value="normal" selected>보통</option>
+                  <option value="fast">빠름</option>
+                  <option value="extreme">개빠름</option>
+                </select>
               </label>
-              <label>
-                <input type="radio" name="bgm-mode" id="bgm-mode-default" value="default" checked />
-                YBJ 힙합 트랙
+              <label class="settings-select-label">난이도
+                <select id="difficulty-select">
+                  <option value="easy" selected>쉬움</option>
+                  <option value="normal">보통</option>
+                  <option value="hard">어려움</option>
+                  <option value="extreme">개어려움</option>
+                </select>
               </label>
             </div>
-            <label id="song-file-label" class="song-file-label" for="song-file-input">🎵 자유 음원 트랙</label>
-            <input type="file" id="song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
-            <label class="settings-select-label">속도
-              <select id="speed-select">
-                <option value="slow">느림</option>
-                <option value="normal" selected>보통</option>
-                <option value="fast">빠름</option>
-                <option value="extreme">개빠름</option>
-              </select>
-            </label>
-            <label class="settings-select-label">난이도
-              <select id="difficulty-select">
-                <option value="easy" selected>쉬움</option>
-                <option value="normal">보통</option>
-                <option value="hard">어려움</option>
-                <option value="extreme">개어려움</option>
-              </select>
-            </label>
+          </div>
+          <div class="control-group" id="option-group">
+            <div class="control-group-title">[Option]</div>
+            <div class="control-group-body">
+              <label id="calibration-toggle-label">
+                <input type="checkbox" id="calibration-toggle" />
+                <span id="calibration-toggle-text">My key-pitch<br />Learning</span>
+              </label>
+            </div>
           </div>
         </div>
-        <div id="start-actions">
-          <label id="calibration-toggle-label">
-            <input type="checkbox" id="calibration-toggle" />
-            <span id="calibration-toggle-text">My key-pitch<br />Learning</span>
-          </label>
+        <div id="start-button-row">
+          <span class="start-button-deco start-button-deco-left"></span>
           <button id="start-button" type="button">Let's Start BDJ</button>
+          <span class="start-button-deco start-button-deco-right"></span>
+        </div>
+        <div id="welcome-guestbook-row">
+          <p id="visitor-welcome">Welcome to MastaBeejay World : <span id="visitor-count">-</span> Manias.</p>
           <button id="guestbook-open-card" type="button">
             <span id="guestbook-card-title">Beejay's Guest Board</span>
             <span id="guestbook-card-sub">방명록 보러가기</span>
           </button>
         </div>
-        <p id="visitor-welcome">Welcome to MastaBeejay World : <span id="visitor-count">-</span> Manias.</p>
+        <div id="notice-board" hidden>
+          <div id="notice-board-label">📢 NOTICE</div>
+          <div id="notice-board-text"></div>
+        </div>
+        <button id="admin-login-link" type="button">🔐 관리자</button>
+        <button id="admin-logout-button" type="button" hidden>🔓 관리자 모드 (로그아웃)</button>
+        <button id="admin-panel-open-button" type="button" hidden>⚙️ 관리자 패널</button>
         <div id="install-guide-section">
           <div id="install-guide-cards">
             <button type="button" class="install-guide-card" data-platform="windows">
@@ -173,8 +185,6 @@
             </button>
           </div>
         </div>
-        <button id="admin-login-link" type="button">🔐 관리자</button>
-        <button id="admin-logout-button" type="button" hidden>🔓 관리자 모드 (로그아웃)</button>
       </div>
       <div id="admin-login-overlay">
         <div id="admin-login-panel">
@@ -185,6 +195,39 @@
             <button type="button" id="admin-login-submit">로그인</button>
             <button type="button" id="admin-login-cancel">취소</button>
           </div>
+        </div>
+      </div>
+      <div id="admin-panel-overlay">
+        <div id="admin-panel-panel">
+          <div id="admin-panel-title" class="text-metallic-gold">관리자 패널</div>
+
+          <div class="admin-panel-section">
+            <div class="admin-panel-section-title">공지사항</div>
+            <textarea id="admin-notice-input" maxlength="500" placeholder="공지 내용을 입력하세요 (비우고 저장하면 공지가 사라집니다)"></textarea>
+            <button id="admin-notice-save-button" type="button">저장</button>
+          </div>
+
+          <div class="admin-panel-section">
+            <div class="admin-panel-section-title">링크 버튼 관리</div>
+            <div id="admin-social-links-list"></div>
+            <div id="admin-social-link-form">
+              <select id="admin-social-link-platform">
+                <option value="youtube">YouTube</option>
+                <option value="tiktok">TikTok</option>
+                <option value="instagram">Instagram</option>
+                <option value="facebook">Facebook</option>
+                <option value="x">X</option>
+                <option value="threads">Threads</option>
+                <option value="naver">Naver</option>
+                <option value="kakaotalk">KakaoTalk</option>
+                <option value="custom">자유(등록)</option>
+              </select>
+              <input type="url" id="admin-social-link-url" placeholder="https://..." />
+              <button id="admin-social-link-add-button" type="button">추가</button>
+            </div>
+          </div>
+
+          <button id="admin-panel-close-button" type="button">닫기</button>
         </div>
       </div>
       <div id="install-guide-overlay">
@@ -205,7 +248,7 @@
           <form id="guestbook-form">
             <input type="text" id="guestbook-name" placeholder="이름" maxlength="12" required />
             <input type="text" id="guestbook-message" placeholder="메세지를 남겨주세요" maxlength="80" required />
-            <input type="password" id="guestbook-password" placeholder="비밀번호 (수정/삭제용)" maxlength="20" required />
+            <input type="password" id="guestbook-password" placeholder="비밀번호 (선택 — 수정/삭제하려면 필요)" maxlength="20" />
             <button type="submit" id="guestbook-submit">등록</button>
           </form>
           <button id="guestbook-close-button" type="button">닫기</button>

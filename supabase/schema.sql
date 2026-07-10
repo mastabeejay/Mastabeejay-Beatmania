@@ -34,7 +34,10 @@ create table if not exists guestbook (
   id bigint generated always as identity primary key,
   name text not null,
   message text not null,
-  password_hash text not null,
+  -- Null means the entry was posted with no password — anyone can post that way, but the entry can
+  -- then never be edited/deleted except by an admin (see edit/delete_guestbook_entry below, which
+  -- treat a null hash as "no password was ever set", distinct from a wrong-password attempt).
+  password_hash text,
   -- Null for a top-level entry; set for a reply. Only one level deep — replies-to-replies aren't
   -- supported, so the client never lets this point at a row that is itself a reply. Cascading
   -- delete means removing a top-level entry (e.g. via admin moderation) cleans up its replies too.
@@ -44,6 +47,8 @@ create table if not exists guestbook (
 
 -- Migrate a database created before this column existed.
 alter table guestbook add column if not exists parent_id bigint references guestbook(id) on delete cascade;
+-- Migrate a database where this was still NOT NULL — lets posting without a password insert NULL.
+alter table guestbook alter column password_hash drop not null;
 
 create table if not exists visits (
   id integer primary key default 1,
@@ -62,6 +67,26 @@ create table if not exists admin_settings (
   constraint admin_settings_single_row check (id = 1)
 );
 
+-- Admin-configurable link buttons shown on the start screen (replaces what used to be hardcoded
+-- YouTube/TikTok links). `platform` is one of the keys the client's icon set knows about
+-- (youtube/tiktok/instagram/facebook/x/threads/naver/kakaotalk/custom) — purely a lookup key for
+-- which icon to render, not validated against an enum here since the client owns that mapping.
+create table if not exists social_links (
+  id bigint generated always as identity primary key,
+  platform text not null,
+  url text not null,
+  created_at timestamptz not null default now()
+);
+
+-- Singleton notice banner shown on the start screen, editable only by the admin.
+create table if not exists site_notice (
+  id integer primary key default 1,
+  message text,
+  updated_at timestamptz not null default now(),
+  constraint site_notice_single_row check (id = 1)
+);
+insert into site_notice (id, message) values (1, null) on conflict (id) do nothing;
+
 -- --- Row Level Security -------------------------------------------------------------------------
 -- Enabling RLS with no policy = deny-all by default. Only the policies below (plus the
 -- `security definer` functions further down, which bypass RLS) can touch these tables.
@@ -70,10 +95,20 @@ alter table leaderboard enable row level security;
 alter table guestbook enable row level security;
 alter table visits enable row level security;
 alter table admin_settings enable row level security;
+alter table social_links enable row level security;
+alter table site_notice enable row level security;
 -- `admin_settings` has no policies at all — not even select. Only admin_login() below can read it.
 
 drop policy if exists "public read leaderboard" on leaderboard;
 create policy "public read leaderboard" on leaderboard for select using (true);
+
+drop policy if exists "public read social_links" on social_links;
+create policy "public read social_links" on social_links for select using (true);
+grant select on social_links to anon, authenticated;
+
+drop policy if exists "public read site_notice" on site_notice;
+create policy "public read site_notice" on site_notice for select using (true);
+grant select on site_notice to anon, authenticated;
 
 -- No select policy on `guestbook` itself — password_hash must never reach the client. Anon reads
 -- go through the view below instead, which is defined without `security_invoker`, so it queries
@@ -123,8 +158,16 @@ create or replace function add_guestbook_entry(p_name text, p_message text, p_pa
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
 begin
+  -- A blank/absent password stores a null hash (see the column's comment) rather than hashing an
+  -- empty string — otherwise anyone leaving the password field blank on a later edit/delete attempt
+  -- would match every other password-less entry too.
   insert into guestbook (name, message, password_hash, parent_id)
-  values (left(p_name, 20), left(p_message, 200), crypt(p_password, gen_salt('bf')), p_parent_id);
+  values (
+    left(p_name, 20),
+    left(p_message, 200),
+    case when p_password is null or p_password = '' then null else crypt(p_password, gen_salt('bf')) end,
+    p_parent_id
+  );
 
   -- Keep the guestbook bounded by top-level entry count, same as the old server's GUESTBOOK_LIMIT —
   -- counting replies too would let one busy thread crowd out every other conversation. Trimming a
@@ -144,8 +187,13 @@ declare
   v_hash text;
 begin
   select password_hash into v_hash from guestbook where id = p_id;
-  if v_hash is null then
+  if not found then
     raise exception 'not_found';
+  end if;
+  -- Distinct from wrong_password: this entry was posted with no password at all, so no password
+  -- (blank or otherwise) can ever match it — only admin moderation can touch it from here on.
+  if v_hash is null then
+    raise exception 'no_password';
   end if;
   if v_hash <> crypt(p_password, v_hash) then
     raise exception 'wrong_password';
@@ -163,8 +211,11 @@ declare
   v_hash text;
 begin
   select password_hash into v_hash from guestbook where id = p_id;
-  if v_hash is null then
+  if not found then
     raise exception 'not_found';
+  end if;
+  if v_hash is null then
+    raise exception 'no_password';
   end if;
   if v_hash <> crypt(p_password, v_hash) then
     raise exception 'wrong_password';
@@ -228,6 +279,57 @@ begin
 end;
 $$;
 
+create or replace function admin_add_social_link(p_platform text, p_url text, p_admin_password text)
+returns setof social_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  insert into social_links (platform, url) values (left(p_platform, 20), left(p_url, 500));
+  return query select * from social_links order by id;
+end;
+$$;
+
+create or replace function admin_update_social_link(p_id bigint, p_platform text, p_url text, p_admin_password text)
+returns setof social_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  update social_links set platform = left(p_platform, 20), url = left(p_url, 500) where id = p_id;
+  return query select * from social_links order by id;
+end;
+$$;
+
+create or replace function admin_delete_social_link(p_id bigint, p_admin_password text)
+returns setof social_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  delete from social_links where id = p_id;
+  return query select * from social_links order by id;
+end;
+$$;
+
+create or replace function admin_set_notice(p_message text, p_admin_password text)
+returns text
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_message text;
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  v_message := nullif(trim(left(p_message, 500)), '');
+  update site_notice set message = v_message, updated_at = now() where id = 1;
+  return v_message;
+end;
+$$;
+
 grant execute on function submit_score(text, text, integer, text, text, text, text, integer) to anon, authenticated;
 grant execute on function add_guestbook_entry(text, text, text, bigint) to anon, authenticated;
 grant execute on function edit_guestbook_entry(bigint, text, text) to anon, authenticated;
@@ -236,3 +338,7 @@ grant execute on function increment_visits() to anon, authenticated;
 grant execute on function admin_login(text) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_delete_leaderboard_entries(bigint[], text) to anon, authenticated;
+grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;
+grant execute on function admin_update_social_link(bigint, text, text, text) to anon, authenticated;
+grant execute on function admin_delete_social_link(bigint, text) to anon, authenticated;
+grant execute on function admin_set_notice(text, text) to anon, authenticated;
