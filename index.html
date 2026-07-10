@@ -34,7 +34,7 @@
       <button id="stop-button" type="button">⏹ 중단</button>
       <div id="calibration-status"></div>
       <div id="start-overlay">
-        <div id="leaderboard-panel">
+        <div id="leaderboard-header">
           <div id="leaderboard-tagline-row">
             <div id="leaderboard-tagline" class="text-metallic">Masta Beejay Beat Breaker</div>
             <svg id="p2b-badge" viewBox="0 0 110 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="P2B 2.0">
@@ -58,6 +58,8 @@
             </svg>
           </div>
           <div id="leaderboard-title" class="text-metallic-gold">BEST 10 RECORD</div>
+        </div>
+        <div id="leaderboard-panel">
           <table id="leaderboard-table">
             <thead>
               <tr>
@@ -76,35 +78,35 @@
           </table>
         </div>
         <div id="song-select">
-          <div id="bgm-mode-select">
-            <label>
-              <input type="radio" name="bgm-mode" id="bgm-mode-test" value="test" />
-              기본 테스트 트랙 (무음악)
+          <div id="settings-row">
+            <div id="bgm-mode-select">
+              <label>
+                <input type="radio" name="bgm-mode" id="bgm-mode-test" value="test" />
+                기본 테스트 트랙 (무음악)
+              </label>
+              <label>
+                <input type="radio" name="bgm-mode" id="bgm-mode-default" value="default" checked />
+                기본 음악 트랙
+              </label>
+            </div>
+            <label id="song-file-label" for="song-file-input">🎵 나의 음원으로 Beat Mania 진행 (선택사항)</label>
+            <input type="file" id="song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
+            <label class="settings-select-label">속도
+              <select id="speed-select">
+                <option value="slow">느림</option>
+                <option value="normal" selected>보통</option>
+                <option value="fast">빠름</option>
+              </select>
             </label>
-            <label>
-              <input type="radio" name="bgm-mode" id="bgm-mode-default" value="default" checked />
-              기본 음악 트랙
+            <label class="settings-select-label">난이도
+              <select id="difficulty-select">
+                <option value="easy" selected>쉬움</option>
+                <option value="normal">보통</option>
+                <option value="hard">어려움</option>
+              </select>
             </label>
           </div>
-          <label id="song-file-label" for="song-file-input">🎵 나의 음원으로 Beat Mania 진행 (선택사항)</label>
-          <input type="file" id="song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
           <span id="song-file-name">기본 음악 트랙 중 랜덤 선택됨</span>
-        </div>
-        <div id="game-settings">
-          <label>속도
-            <select id="speed-select">
-              <option value="slow">느림</option>
-              <option value="normal" selected>보통</option>
-              <option value="fast">빠름</option>
-            </select>
-          </label>
-          <label>난이도
-            <select id="difficulty-select">
-              <option value="easy" selected>쉬움</option>
-              <option value="normal">보통</option>
-              <option value="hard">어려움</option>
-            </select>
-          </label>
         </div>
         <label id="calibration-toggle-label">
           <input type="checkbox" id="calibration-toggle" />
