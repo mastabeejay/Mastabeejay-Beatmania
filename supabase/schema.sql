@@ -79,7 +79,12 @@ create policy "public read leaderboard" on leaderboard for select using (true);
 -- go through the view below instead, which is defined without `security_invoker`, so it queries
 -- the underlying table with the view owner's privileges and bypasses the deny-all RLS on the base
 -- table while still only exposing the columns listed here.
-drop view if exists guestbook_public;
+--
+-- CASCADE because add/edit/delete_guestbook_entry all declare `returns setof guestbook_public`,
+-- which makes them depend on the view's row type — plain DROP fails once those functions exist
+-- (as they will on any re-run after the first). Every function this cascades away is redefined
+-- later in this same script, so re-running the whole file stays safe.
+drop view if exists guestbook_public cascade;
 create view guestbook_public as
   select id, name, message, parent_id, created_at from guestbook order by id desc;
 grant select on guestbook_public to anon, authenticated;
