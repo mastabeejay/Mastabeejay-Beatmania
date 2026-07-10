@@ -48,6 +48,11 @@ const DIFFICULTY_LABELS: Record<keyof typeof DIFFICULTY_PRESETS, string> = {
   hard: "어려움",
 };
 
+// Ordering used to enforce the step-escalation rule: the next step's speed/difficulty must each be
+// >= the just-finished step's, and at least one of the two must be strictly greater.
+const SPEED_ORDER: (keyof typeof SPEED_PRESETS)[] = ["slow", "normal", "fast"];
+const DIFFICULTY_ORDER: (keyof typeof DIFFICULTY_PRESETS)[] = ["easy", "normal", "hard"];
+
 const stage = document.querySelector<HTMLDivElement>("#stage")!;
 const video = document.querySelector<HTMLVideoElement>("#camera-feed")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#overlay-canvas")!;
@@ -67,9 +72,19 @@ const calibrationStatus = document.querySelector<HTMLDivElement>("#calibration-s
 const scoreHud = document.querySelector<HTMLDivElement>("#score-hud")!;
 const scoreValueEl = document.querySelector<HTMLDivElement>("#score-value")!;
 const resultsOverlay = document.querySelector<HTMLDivElement>("#results-overlay")!;
+const resultsStepLabelEl = document.querySelector<HTMLDivElement>("#results-step-label")!;
 const resultsScoreEl = document.querySelector<HTMLDivElement>("#results-score")!;
 const resultsBreakdownEl = document.querySelector<HTMLDivElement>("#results-breakdown")!;
+const resultsNextStepButton = document.querySelector<HTMLButtonElement>("#results-next-step-button")!;
 const resultsConfirmButton = document.querySelector<HTMLButtonElement>("#results-confirm-button")!;
+const stepSetupOverlay = document.querySelector<HTMLDivElement>("#step-setup-overlay")!;
+const stepSetupNumberEl = document.querySelector<HTMLSpanElement>("#step-setup-number")!;
+const stepBgmModeDefaultRadio = document.querySelector<HTMLInputElement>("#step-bgm-mode-default")!;
+const stepSongFileInput = document.querySelector<HTMLInputElement>("#step-song-file-input")!;
+const stepSpeedSelect = document.querySelector<HTMLSelectElement>("#step-speed-select")!;
+const stepDifficultySelect = document.querySelector<HTMLSelectElement>("#step-difficulty-select")!;
+const stepSetupWarning = document.querySelector<HTMLParagraphElement>("#step-setup-warning")!;
+const stepStartButton = document.querySelector<HTMLButtonElement>("#step-start-button")!;
 const nameEntryOverlay = document.querySelector<HTMLDivElement>("#name-entry-overlay")!;
 const nameEntryNameInput = document.querySelector<HTMLInputElement>("#name-entry-name")!;
 const nameEntryMessageInput = document.querySelector<HTMLInputElement>("#name-entry-message")!;
@@ -92,9 +107,13 @@ const photoLightboxImage = document.querySelector<HTMLImageElement>("#photo-ligh
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
+let stepSelectedSongFile: File | null = null;
 
 songFileInput.addEventListener("change", () => {
   selectedSongFile = songFileInput.files?.[0] ?? null;
+});
+stepSongFileInput.addEventListener("change", () => {
+  stepSelectedSongFile = stepSongFileInput.files?.[0] ?? null;
 });
 
 async function renderLeaderboard(): Promise<void> {
@@ -319,7 +338,7 @@ function capturePhoto(videoEl: HTMLVideoElement): string {
   return captureCanvas.toDataURL("image/jpeg", 0.85);
 }
 
-/** Counts down over the still-live camera feed (see endGame — camera.stop() is deliberately
+/** Counts down over the still-live camera feed (see finalizeSession — camera.stop() is deliberately
  *  deferred until after this resolves) and captures a photo the moment it hits zero. Two phases:
  *  first the rank announcement sits alone for a couple seconds so it actually gets read, then the
  *  5-4-3-2-1 number starts — showing both at once from the start meant most players never noticed
@@ -365,16 +384,386 @@ function fitStageToViewport(videoWidth: number, videoHeight: number): void {
   stage.style.height = `${height}px`;
 }
 
-async function startApp(
+interface StepSettings {
+  songFile: File | null;
+  density: ChartDensity;
+  lookaheadMs: number;
+  speedKey: keyof typeof SPEED_PRESETS;
+  difficultyKey: keyof typeof DIFFICULTY_PRESETS;
+  speedLabel: string;
+  difficultyLabel: string;
+  defaultTrack: DefaultTrack | null;
+  bgmLabel: string;
+}
+
+function buildStepSettings(
+  speedKey: keyof typeof SPEED_PRESETS,
+  difficultyKey: keyof typeof DIFFICULTY_PRESETS,
+  songFile: File | null,
+  defaultTrack: DefaultTrack | null,
+): StepSettings {
+  return {
+    songFile,
+    density: DIFFICULTY_PRESETS[difficultyKey] ?? DIFFICULTY_PRESETS.easy,
+    lookaheadMs: SPEED_PRESETS[speedKey] ?? SPEED_PRESETS.normal,
+    speedKey,
+    difficultyKey,
+    speedLabel: SPEED_LABELS[speedKey] ?? SPEED_LABELS.normal,
+    difficultyLabel: DIFFICULTY_LABELS[difficultyKey] ?? DIFFICULTY_LABELS.easy,
+    defaultTrack,
+    bgmLabel: defaultTrack ? "YBJ" : songFile ? "자유" : "무반주",
+  };
+}
+
+/** A selected file always wins; otherwise the default-track radio fetches and wraps one of the
+ *  bundled YBJ tracks as a File so it flows through the same source-agnostic chart pipeline. */
+async function resolveBgmSelection(
+  songFile: File | null,
+  useDefaultTrack: boolean,
+): Promise<{ songFile: File | null; defaultTrack: DefaultTrack | null }> {
+  if (songFile) return { songFile, defaultTrack: null };
+  if (!useDefaultTrack) return { songFile: null, defaultTrack: null };
+  const track = pickRandomDefaultTrack();
+  const blob = await fetch(track.fileUrl).then((res) => res.blob());
+  return { songFile: new File([blob], track.fileName, { type: blob.type }), defaultTrack: track };
+}
+
+type StepOutcome =
+  | { aborted: true }
+  | { aborted: false; finalScore: number; counts: { Great: number; Good: number; Bad: number } };
+
+/** Runs exactly one step's worth of gameplay (one song/track, load through natural end) on an
+ *  already-initialized camera/hand-tracker, resolving once the step ends. Resolves aborted:true
+ *  immediately on the stop button — the caller must not proceed to any leaderboard/continuation
+ *  flow in that case, since a mid-run abort forfeits the whole run's eligibility. */
+function playStep(
+  camera: CameraManager,
+  handTracker: HandLandmarkerService,
   sfxEngine: SfxEngine,
   audioCtx: AudioContext,
-  lookaheadMs: number,
-  density: ChartDensity,
-  songFile: File | null,
+  calibratedZones: KeyZone[] | undefined,
+  delegate: "GPU" | "CPU",
+  settings: StepSettings,
+  stepNumber: number,
+): Promise<StepOutcome> {
+  return new Promise((resolve) => {
+    void (async () => {
+      const { songFile, density, lookaheadMs, defaultTrack } = settings;
+
+      const audioEngine = new AudioEngine(audioCtx);
+      const scoreManager = new ScoreManager();
+
+      let stopped = false;
+      stopButton.style.display = "block";
+      scoreHud.style.display = "block";
+      scoreValueEl.textContent = "0";
+      if (defaultTrack) {
+        trackInfoTitleEl.textContent = defaultTrack.title;
+        trackInfoProducerEl.textContent = defaultTrack.producer;
+        trackInfoEl.style.display = "block";
+      } else {
+        trackInfoEl.style.display = "none";
+      }
+
+      stopButton.onclick = () => {
+        stopped = true;
+        camera.stop();
+        handTracker.dispose();
+        audioEngine.stop();
+        void audioCtx.close();
+        stopButton.style.display = "none";
+        scoreHud.style.display = "none";
+        trackInfoEl.style.display = "none";
+        calibrationStatus.style.display = "none";
+        startOverlay.style.removeProperty("display");
+        hud.textContent = "중단됨";
+        resolve({ aborted: true });
+      };
+
+      hud.textContent = songFile ? `STEP ${stepNumber} 로딩 중... (음원 분석해서 채보 생성)` : `STEP ${stepNumber} 로딩 중...`;
+
+      const loadChart = songFile
+        ? buildChartFromFile(audioCtx, songFile, density).then((built) => {
+            audioEngine.loadBuffer(built.audioBuffer);
+            return built.chart.notes;
+          })
+        : audioEngine.loadClickTrack(TEST_BPM, TEST_BEAT_COUNT).then(() => buildTestChart(TEST_BPM, TEST_BEAT_COUNT, density));
+
+      const chart = await loadChart;
+      if (stopped) return; // stop button hit while the chart was still loading
+
+      const noteScheduler = new NoteScheduler(chart);
+      const judgmentEngine = new JudgmentEngine(chart);
+
+      // A selected song plays to its natural end; the default test track runs for a fixed 2 minutes.
+      const gameDurationMs = songFile ? audioEngine.getDurationMs() : DEFAULT_GAME_DURATION_MS;
+
+      const skeletonRenderer = new DebugSkeletonRenderer(ctx);
+      const gestureDetector = new GestureDetector(calibratedZones);
+      const scratchDetector = new ScratchDetector();
+      const zoneDebugRenderer = new ZoneDebugRenderer(ctx);
+      const noteRenderer = new NoteRenderer(ctx);
+      const judgmentRenderer = new JudgmentRenderer(ctx);
+      const zones = gestureDetector.getZones();
+      const scratchZone = computeScratchZone();
+
+      function registerJudgment(result: JudgmentResult): void {
+        judgmentRenderer.register(result);
+        scoreManager.addJudgment(result.tier);
+        scoreValueEl.textContent = String(scoreManager.getScore());
+      }
+
+      // Hand-tracking runs at camera/inference FPS (often well under 60); rendering runs on its own
+      // rAF loop at display refresh rate so note scrolling stays smooth and audio-synced regardless.
+      // The render loop always reads whatever hand-tracking state was most recently produced.
+      let latestHands: HandFrame[] = [];
+      let latestDebug: FingertipDebugSample[] = [];
+
+      let lastFpsSampleTime = performance.now();
+      let frameCount = 0;
+      let fps = 0;
+      let inferenceMsSum = 0;
+      let inferenceMsAvg = 0;
+      let pressCount = 0;
+
+      let framesSeen = 0;
+      let lastDetectError = "";
+
+      // Swaps CameraManager's active callback (see its onFrame docstring) instead of piling on a
+      // second pump loop. Once `stopped` flips true this becomes a no-op, so a step that just ended
+      // doesn't keep burning inference cycles while the results/step-setup overlay is up.
+      camera.onFrame((videoEl, metadata) => {
+        if (stopped) return;
+        framesSeen += 1;
+
+        let result;
+        try {
+          result = handTracker.detect(videoEl, metadata.mediaTime * 1000, metadata.presentationTime);
+        } catch (err) {
+          // Surfaced directly in the HUD (not just console.error) because a phone has no devtools —
+          // this is the only way to see what actually failed on a device we can't remote-debug.
+          lastDetectError = (err as Error).message;
+          hud.textContent = `손 인식 오류 (프레임 ${framesSeen}): ${lastDetectError}`;
+          return;
+        }
+        latestHands = result.hands;
+
+        const { events, debug } = gestureDetector.process(result.hands, result.frameTimestampMs);
+        latestDebug = debug;
+        zoneDebugRenderer.registerPresses(events);
+        for (const event of events) {
+          pressCount += 1;
+          sfxEngine.playKeyTone(event.lane);
+          const judgment = judgmentEngine.judgeAttempt(event.lane, audioEngine.getSongTimeMs());
+          if (judgment) registerJudgment(judgment);
+        }
+
+        const scratchEvent = scratchDetector.process(result.hands, result.frameTimestampMs, scratchZone, canvas.width, canvas.height);
+        sfxEngine.updateScratch(scratchDetector.getScratchVelocityPerSec(), scratchDetector.isEngaged());
+
+        // A single qualifying slide anywhere inside a scratch note's hold window is enough to count it —
+        // no timing precision required, just "did you slide at least once while the tube was passing through".
+        const isScratchActionActive = scratchDetector.isEngaged() && Math.abs(scratchDetector.getScratchVelocityPerSec()) > 0.5;
+        judgmentEngine.markHoldActive(SCRATCH_LANE, audioEngine.getSongTimeMs(), isScratchActionActive);
+
+        frameCount += 1;
+        inferenceMsSum += result.inferenceMs;
+        const now = performance.now();
+        if (now - lastFpsSampleTime >= 500) {
+          fps = Math.round((frameCount * 1000) / (now - lastFpsSampleTime));
+          inferenceMsAvg = inferenceMsSum / frameCount;
+          frameCount = 0;
+          inferenceMsSum = 0;
+          lastFpsSampleTime = now;
+        }
+        const scratchStatus = scratchDetector.isEngaged()
+          ? `engaged (${scratchEvent?.direction ?? "none"}, ${(scratchEvent?.scratchVelocityPerSec ?? 0).toFixed(1)}/s)`
+          : "idle";
+        hud.textContent = `STEP: ${stepNumber}\nDelegate: ${delegate}\nFPS: ${fps}\n프레임 수신: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n감지된 손: ${result.hands.length}\n누름 횟수: ${pressCount}\n스크래치: ${scratchStatus}\nAudioCtx: ${audioCtx.state}`;
+      });
+
+      // iOS Safari can leave the AudioContext "suspended" right before a step starts — re-resuming
+      // here (in addition to the session-level visibilitychange handler) catches that per-step.
+      if (audioCtx.state !== "running") await audioCtx.resume();
+      audioEngine.play();
+
+      function renderFrame(): void {
+        if (stopped) return;
+
+        // Note scroll position is recomputed from the audio clock every frame — never accumulated
+        // from render deltas — so it can't drift even if a frame is dropped or delayed.
+        const songTimeMs = audioEngine.getSongTimeMs();
+
+        if (songTimeMs >= gameDurationMs) {
+          stopped = true;
+          audioEngine.stop();
+          stopButton.style.display = "none";
+          scoreHud.style.display = "none";
+          trackInfoEl.style.display = "none";
+          resolve({ aborted: false, finalScore: scoreManager.getScore(), counts: scoreManager.getCounts() });
+          return;
+        }
+
+        for (const miss of judgmentEngine.sweepMisses(songTimeMs)) {
+          registerJudgment(miss);
+        }
+        for (const holdResult of judgmentEngine.sweepHoldNotes(SCRATCH_LANE, songTimeMs)) {
+          registerJudgment(holdResult);
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        zoneDebugRenderer.draw(zones, latestDebug, canvas.width, canvas.height);
+        zoneDebugRenderer.drawScratchDisk(scratchZone, scratchDetector.getRotationRad(), scratchDetector.isEngaged(), canvas.width, canvas.height);
+        const visibleNotes = noteScheduler.getVisibleNotes(songTimeMs, lookaheadMs, 200);
+        noteRenderer.draw(visibleNotes, zones, scratchZone, songTimeMs, lookaheadMs, canvas.width, canvas.height);
+        skeletonRenderer.draw(latestHands, canvas.width, canvas.height);
+        judgmentRenderer.draw(zones, scratchZone, canvas.width, canvas.height);
+
+        requestAnimationFrame(renderFrame);
+      }
+      requestAnimationFrame(renderFrame);
+    })();
+  });
+}
+
+/** Shows the just-finished step's score plus the run's cumulative total, and asks whether to
+ *  continue to another (harder) step or stop here and lock in eligibility for the leaderboard. */
+function showStepResults(
+  stepNumber: number,
+  stepScore: number,
+  counts: { Great: number; Good: number; Bad: number },
+  cumulativeScore: number,
+  canContinue: boolean,
+): Promise<"continue" | "end"> {
+  return new Promise((resolve) => {
+    resultsStepLabelEl.textContent = `STEP ${stepNumber} 완료`;
+    resultsScoreEl.textContent = String(cumulativeScore);
+    resultsBreakdownEl.textContent = `이번 STEP 점수 ${stepScore}  ·  Great ${counts.Great}   Good ${counts.Good}   Bad ${counts.Bad}`;
+    resultsNextStepButton.style.display = canContinue ? "inline-block" : "none";
+    resultsConfirmButton.textContent = canContinue ? "종료하고 순위 확인" : "확인";
+    resultsOverlay.style.display = "flex";
+
+    resultsNextStepButton.onclick = () => {
+      resultsOverlay.style.display = "none";
+      resolve("continue");
+    };
+    resultsConfirmButton.onclick = () => {
+      resultsOverlay.style.display = "none";
+      resolve("end");
+    };
+  });
+}
+
+/** Lets the player reselect BGM/speed/difficulty for the next step. Speed and difficulty can only
+ *  be set to the previous step's level or higher, and at least one of the two must strictly
+ *  increase — enforced live via disabled <option>s and a validity check gating the start button. */
+function showStepSetup(stepNumber: number, prevSettings: StepSettings): Promise<StepSettings> {
+  return new Promise((resolve) => {
+    stepSetupNumberEl.textContent = String(stepNumber);
+    stepSelectedSongFile = null;
+    stepSongFileInput.value = "";
+    stepBgmModeDefaultRadio.checked = true;
+
+    const prevSpeedIdx = SPEED_ORDER.indexOf(prevSettings.speedKey);
+    const prevDifficultyIdx = DIFFICULTY_ORDER.indexOf(prevSettings.difficultyKey);
+
+    stepSpeedSelect.querySelectorAll("option").forEach((option) => {
+      const opt = option as HTMLOptionElement;
+      opt.disabled = SPEED_ORDER.indexOf(opt.value as keyof typeof SPEED_PRESETS) < prevSpeedIdx;
+    });
+    stepDifficultySelect.querySelectorAll("option").forEach((option) => {
+      const opt = option as HTMLOptionElement;
+      opt.disabled = DIFFICULTY_ORDER.indexOf(opt.value as keyof typeof DIFFICULTY_PRESETS) < prevDifficultyIdx;
+    });
+    stepSpeedSelect.value = prevSettings.speedKey;
+    stepDifficultySelect.value = prevSettings.difficultyKey;
+
+    function validate(): boolean {
+      const newSpeedIdx = SPEED_ORDER.indexOf(stepSpeedSelect.value as keyof typeof SPEED_PRESETS);
+      const newDifficultyIdx = DIFFICULTY_ORDER.indexOf(stepDifficultySelect.value as keyof typeof DIFFICULTY_PRESETS);
+      const valid = newSpeedIdx > prevSpeedIdx || newDifficultyIdx > prevDifficultyIdx;
+      stepStartButton.disabled = !valid;
+      stepSetupWarning.hidden = valid;
+      return valid;
+    }
+    validate();
+    stepSpeedSelect.onchange = validate;
+    stepDifficultySelect.onchange = validate;
+
+    stepSetupOverlay.style.display = "flex";
+
+    stepStartButton.onclick = () => {
+      if (!validate()) return;
+      const speedKey = stepSpeedSelect.value as keyof typeof SPEED_PRESETS;
+      const difficultyKey = stepDifficultySelect.value as keyof typeof DIFFICULTY_PRESETS;
+      const useDefault = stepBgmModeDefaultRadio.checked;
+
+      stepStartButton.disabled = true;
+      void resolveBgmSelection(stepSelectedSongFile, useDefault)
+        .then((resolved) => {
+          stepSetupOverlay.style.display = "none";
+          resolve(buildStepSettings(speedKey, difficultyKey, resolved.songFile, resolved.defaultTrack));
+        })
+        .catch((err) => {
+          stepStartButton.disabled = false;
+          hud.textContent = `음원 로드 실패: ${(err as Error).message}`;
+        });
+    };
+  });
+}
+
+/** The true end of a run (player chose to stop, or ran out of room to escalate further) — checks
+ *  the cumulative score against the leaderboard and runs the photo/name-entry flow if it qualifies.
+ *  Note that camera.stop() is deliberately deferred until after the photo countdown (or skipped
+ *  straight to if not qualifying) — the countdown needs the live feed. */
+async function finalizeSession(cumulativeScore: number, finalSettings: StepSettings, camera: CameraManager): Promise<void> {
+  if (!(await qualifiesForTop20(cumulativeScore))) {
+    camera.stop();
+    startOverlay.style.removeProperty("display");
+    return;
+  }
+
+  const rank = await computeProjectedRank(cumulativeScore);
+  const capturedPhoto = await runPhotoCountdown(video, rank);
+  camera.stop();
+  nameEntryOverlay.style.display = "flex";
+
+  await new Promise<void>((resolve) => {
+    nameEntrySubmitButton.onclick = async () => {
+      const name = nameEntryNameInput.value.trim() || "익명";
+      const message = nameEntryMessageInput.value.trim();
+      try {
+        await addLeaderboardEntry({
+          name,
+          message,
+          score: cumulativeScore,
+          speed: finalSettings.speedLabel,
+          difficulty: finalSettings.difficultyLabel,
+          bgm: finalSettings.bgmLabel,
+          photo: capturedPhoto,
+        });
+      } catch (err) {
+        console.error("리더보드 저장 실패:", err);
+      }
+      nameEntryNameInput.value = "";
+      nameEntryMessageInput.value = "";
+      nameEntryOverlay.style.display = "none";
+      await renderLeaderboard();
+      startOverlay.style.removeProperty("display");
+      resolve();
+    };
+  });
+}
+
+/** One "session" = camera + hand-tracker set up once, then one or more escalating steps chained
+ *  together with the player's consent after each. The leaderboard only ever sees the final
+ *  cumulative score, submitted once the player stops (or can no longer escalate speed/difficulty
+ *  any further). Calibration also only runs once here, not per step. */
+async function runSession(
+  sfxEngine: SfxEngine,
+  audioCtx: AudioContext,
+  initialSettings: StepSettings,
   enableCalibration: boolean,
-  speedLabel: string,
-  difficultyLabel: string,
-  defaultTrack: DefaultTrack | null,
 ): Promise<void> {
   hud.textContent = "카메라 권한을 요청하는 중...";
 
@@ -387,9 +776,9 @@ async function startApp(
     return;
   }
 
-  // Size the stage to the camera's native aspect ratio and the canvas's
-  // drawing buffer to its native resolution, so normalized landmark
-  // coordinates map 1:1 onto displayed pixels with no crop/letterbox math.
+  // Size the stage to the camera's native aspect ratio and the canvas's drawing buffer to its
+  // native resolution, so normalized landmark coordinates map 1:1 onto displayed pixels with no
+  // crop/letterbox math. Done once — the camera/stage don't change between steps.
   fitStageToViewport(video.videoWidth, video.videoHeight);
   window.addEventListener("resize", () => fitStageToViewport(video.videoWidth, video.videoHeight));
   canvas.width = video.videoWidth;
@@ -397,58 +786,18 @@ async function startApp(
 
   // Safari's WebGL backend has been unreliable with MediaPipe's GPU delegate — hand tracking would
   // detect once and then silently stop producing results on later frames. CPU is slower but stable
-  // there. ?delegate=cpu/gpu (used for the perf A/B testing above) always overrides this default.
+  // there. ?delegate=cpu/gpu (used for perf A/B testing) always overrides this default.
   const delegateOverride = new URLSearchParams(location.search).get("delegate")?.toUpperCase();
   const isSafari = /^((?!chrome|crios|fxios|android).)*safari/i.test(navigator.userAgent);
   const delegate: "GPU" | "CPU" =
     delegateOverride === "CPU" || delegateOverride === "GPU" ? delegateOverride : isSafari ? "CPU" : "GPU";
 
-  hud.textContent = songFile
-    ? `리소스 로딩 중... (음원 분석해서 채보 생성, 손 인식: ${delegate})`
-    : `리소스 로딩 중... (손 인식: ${delegate})`;
+  hud.textContent = `리소스 로딩 중... (손 인식: ${delegate})`;
   const handTracker = new HandLandmarkerService();
-  const audioEngine = new AudioEngine(audioCtx);
-  const scoreManager = new ScoreManager();
-
-  // Wired up early (before calibration) so the player can bail out during the loading/calibration
-  // wait, not just once gameplay has actually started.
-  let stopped = false;
-  stopButton.style.display = "block";
-  scoreHud.style.display = "block";
-  scoreValueEl.textContent = "0";
-  if (defaultTrack) {
-    trackInfoTitleEl.textContent = defaultTrack.title;
-    trackInfoProducerEl.textContent = defaultTrack.producer;
-    trackInfoEl.style.display = "block";
-  } else {
-    trackInfoEl.style.display = "none";
-  }
-  stopButton.onclick = () => {
-    stopped = true;
-    camera.stop();
-    handTracker.dispose();
-    audioEngine.stop();
-    void audioCtx.close();
-    stopButton.style.display = "none";
-    scoreHud.style.display = "none";
-    trackInfoEl.style.display = "none";
-    calibrationStatus.style.display = "none";
-    startOverlay.style.removeProperty("display");
-    hud.textContent = "중단됨";
-  };
-
-  // Chart/audio loading (up to ~16s for onset detection on a real song) runs in the background
-  // while finger calibration (~15-20s) happens in the foreground — they don't share any resource,
-  // so overlapping them keeps the total wait closer to max(chart, calibration) than their sum.
-  const loadChart = songFile
-    ? buildChartFromFile(audioCtx, songFile, density).then((built) => {
-        audioEngine.loadBuffer(built.audioBuffer);
-        return built.chart.notes;
-      })
-    : audioEngine.loadClickTrack(TEST_BPM, TEST_BEAT_COUNT).then(() => buildTestChart(TEST_BPM, TEST_BEAT_COUNT, density));
-
   await Promise.all([handTracker.initialize({ delegate }), sfxEngine.loadScratchSample("/audio/Hiphop_Deejaying.mp3")]);
 
+  // Calibration only happens once, up front — re-running it before every step would add another
+  // 15-20s wait to a run that may span several steps.
   let calibratedZones: KeyZone[] | undefined;
   if (enableCalibration) {
     calibrationStatus.style.display = "block";
@@ -458,205 +807,49 @@ async function startApp(
     calibrationStatus.style.display = "none";
   }
 
-  hud.textContent = "채보 준비 중...";
-  const chart = await loadChart;
-  const noteScheduler = new NoteScheduler(chart);
-  const judgmentEngine = new JudgmentEngine(chart);
-
-  // A selected song plays to its natural end; the default test track runs for a fixed 2 minutes.
-  const gameDurationMs = songFile ? audioEngine.getDurationMs() : DEFAULT_GAME_DURATION_MS;
-  const bgmLabel = defaultTrack ? "YBJ" : songFile ? "자유" : "무반주";
-
-  const skeletonRenderer = new DebugSkeletonRenderer(ctx);
-  const gestureDetector = new GestureDetector(calibratedZones);
-  const scratchDetector = new ScratchDetector();
-  const zoneDebugRenderer = new ZoneDebugRenderer(ctx);
-  const noteRenderer = new NoteRenderer(ctx);
-  const judgmentRenderer = new JudgmentRenderer(ctx);
-  const zones = gestureDetector.getZones();
-  const scratchZone = computeScratchZone();
-
-  function registerJudgment(result: JudgmentResult): void {
-    judgmentRenderer.register(result);
-    scoreManager.addJudgment(result.tier);
-    scoreValueEl.textContent = String(scoreManager.getScore());
-  }
-
-  /** Called once the run reaches its natural end (song finished, or 2-minute default track elapsed) —
-   *  distinct from stopButton's abort path, which bails out without showing a score. Note that
-   *  camera.stop() is deliberately NOT called here — a top-10 score needs the live feed for the
-   *  photo countdown, so it's deferred until each branch below knows whether that's needed. */
-  function endGame(): void {
-    stopped = true;
-    handTracker.dispose();
-    audioEngine.stop();
-    void audioCtx.close();
-    stopButton.style.display = "none";
-    scoreHud.style.display = "none";
-    trackInfoEl.style.display = "none";
-
-    const finalScore = scoreManager.getScore();
-    const counts = scoreManager.getCounts();
-    resultsScoreEl.textContent = String(finalScore);
-    resultsBreakdownEl.textContent = `Great ${counts.Great}   Good ${counts.Good}   Bad ${counts.Bad}`;
-    resultsOverlay.style.display = "flex";
-
-    let capturedPhoto: string | null = null;
-
-    resultsConfirmButton.onclick = async () => {
-      resultsOverlay.style.display = "none";
-      if (await qualifiesForTop20(finalScore)) {
-        const rank = await computeProjectedRank(finalScore);
-        capturedPhoto = await runPhotoCountdown(video, rank);
-        camera.stop();
-        nameEntryOverlay.style.display = "flex";
-      } else {
-        camera.stop();
-        startOverlay.style.removeProperty("display");
-      }
-    };
-
-    nameEntrySubmitButton.onclick = async () => {
-      const name = nameEntryNameInput.value.trim() || "익명";
-      const message = nameEntryMessageInput.value.trim();
-      try {
-        await addLeaderboardEntry({
-          name,
-          message,
-          score: finalScore,
-          speed: speedLabel,
-          difficulty: difficultyLabel,
-          bgm: bgmLabel,
-          photo: capturedPhoto,
-        });
-      } catch (err) {
-        console.error("리더보드 저장 실패:", err);
-      }
-      nameEntryNameInput.value = "";
-      nameEntryMessageInput.value = "";
-      nameEntryOverlay.style.display = "none";
-      await renderLeaderboard();
-      startOverlay.style.removeProperty("display");
-    };
-  }
-
-  // Hand-tracking runs at camera/inference FPS (often well under 60); rendering runs on its own
-  // rAF loop at display refresh rate so note scrolling stays smooth and audio-synced regardless.
-  // The render loop always reads whatever hand-tracking state was most recently produced.
-  let latestHands: HandFrame[] = [];
-  let latestDebug: FingertipDebugSample[] = [];
-
-  let lastFpsSampleTime = performance.now();
-  let frameCount = 0;
-  let fps = 0;
-  let inferenceMsSum = 0;
-  let inferenceMsAvg = 0;
-  let pressCount = 0;
-
-  let framesSeen = 0;
-  let lastDetectError = "";
-
-  camera.onFrame((videoEl, metadata) => {
-    framesSeen += 1;
-
-    let result;
-    try {
-      result = handTracker.detect(videoEl, metadata.mediaTime * 1000, metadata.presentationTime);
-    } catch (err) {
-      // Surfaced directly in the HUD (not just console.error) because a phone has no devtools —
-      // this is the only way to see what actually failed on a device we can't remote-debug.
-      lastDetectError = (err as Error).message;
-      hud.textContent = `손 인식 오류 (프레임 ${framesSeen}): ${lastDetectError}`;
-      return;
-    }
-    latestHands = result.hands;
-
-    const { events, debug } = gestureDetector.process(result.hands, result.frameTimestampMs);
-    latestDebug = debug;
-    zoneDebugRenderer.registerPresses(events);
-    for (const event of events) {
-      pressCount += 1;
-      sfxEngine.playKeyTone(event.lane);
-      const judgment = judgmentEngine.judgeAttempt(event.lane, audioEngine.getSongTimeMs());
-      if (judgment) registerJudgment(judgment);
-    }
-
-    const scratchEvent = scratchDetector.process(result.hands, result.frameTimestampMs, scratchZone, canvas.width, canvas.height);
-    sfxEngine.updateScratch(scratchDetector.getScratchVelocityPerSec(), scratchDetector.isEngaged());
-
-    // A single qualifying slide anywhere inside a scratch note's hold window is enough to count it —
-    // no timing precision required, just "did you slide at least once while the tube was passing through".
-    const isScratchActionActive = scratchDetector.isEngaged() && Math.abs(scratchDetector.getScratchVelocityPerSec()) > 0.5;
-    judgmentEngine.markHoldActive(SCRATCH_LANE, audioEngine.getSongTimeMs(), isScratchActionActive);
-
-    frameCount += 1;
-    inferenceMsSum += result.inferenceMs;
-    const now = performance.now();
-    if (now - lastFpsSampleTime >= 500) {
-      fps = Math.round((frameCount * 1000) / (now - lastFpsSampleTime));
-      inferenceMsAvg = inferenceMsSum / frameCount;
-      frameCount = 0;
-      inferenceMsSum = 0;
-      lastFpsSampleTime = now;
-    }
-    const scratchStatus = scratchDetector.isEngaged()
-      ? `engaged (${scratchEvent?.direction ?? "none"}, ${(scratchEvent?.scratchVelocityPerSec ?? 0).toFixed(1)}/s)`
-      : "idle";
-    hud.textContent = `Delegate: ${delegate}\nFPS: ${fps}\n프레임 수신: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n감지된 손: ${result.hands.length}\n누름 횟수: ${pressCount}\n스크래치: ${scratchStatus}\nAudioCtx: ${audioCtx.state}`;
-  });
-
   // iOS Safari can leave (or put) the AudioContext in "suspended" during the loading/calibration
   // wait — sometimes tens of seconds after the click that originally resumed it — silencing every
-  // sound with no visible error. Re-resuming right before playback starts, and again whenever the
-  // tab regains focus, is cheap and catches that without needing a fresh user gesture each time.
+  // sound with no visible error. Re-resuming whenever the tab regains focus is cheap and catches
+  // that without needing a fresh user gesture each time.
   if (audioCtx.state !== "running") void audioCtx.resume();
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && audioCtx.state !== "running") void audioCtx.resume();
   });
 
-  audioEngine.play();
+  let cumulativeScore = 0;
+  let step = 1;
+  let settings = initialSettings;
 
-  function renderFrame(): void {
-    if (stopped) return;
+  for (;;) {
+    const outcome = await playStep(camera, handTracker, sfxEngine, audioCtx, calibratedZones, delegate, settings, step);
+    if (outcome.aborted) return;
 
-    // Note scroll position is recomputed from the audio clock every frame — never accumulated
-    // from render deltas — so it can't drift even if a frame is dropped or delayed.
-    const songTimeMs = audioEngine.getSongTimeMs();
+    cumulativeScore += outcome.finalScore;
 
-    if (songTimeMs >= gameDurationMs) {
-      endGame();
+    const speedIdx = SPEED_ORDER.indexOf(settings.speedKey);
+    const difficultyIdx = DIFFICULTY_ORDER.indexOf(settings.difficultyKey);
+    const canContinue = speedIdx < SPEED_ORDER.length - 1 || difficultyIdx < DIFFICULTY_ORDER.length - 1;
+
+    const choice = await showStepResults(step, outcome.finalScore, outcome.counts, cumulativeScore, canContinue);
+
+    if (choice === "end") {
+      handTracker.dispose();
+      void audioCtx.close();
+      await finalizeSession(cumulativeScore, settings, camera);
       return;
     }
 
-    for (const miss of judgmentEngine.sweepMisses(songTimeMs)) {
-      registerJudgment(miss);
-    }
-    for (const holdResult of judgmentEngine.sweepHoldNotes(SCRATCH_LANE, songTimeMs)) {
-      registerJudgment(holdResult);
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    zoneDebugRenderer.draw(zones, latestDebug, canvas.width, canvas.height);
-    zoneDebugRenderer.drawScratchDisk(scratchZone, scratchDetector.getRotationRad(), scratchDetector.isEngaged(), canvas.width, canvas.height);
-    const visibleNotes = noteScheduler.getVisibleNotes(songTimeMs, lookaheadMs, 200);
-    noteRenderer.draw(visibleNotes, zones, scratchZone, songTimeMs, lookaheadMs, canvas.width, canvas.height);
-    skeletonRenderer.draw(latestHands, canvas.width, canvas.height);
-    judgmentRenderer.draw(zones, scratchZone, canvas.width, canvas.height);
-
-    requestAnimationFrame(renderFrame);
+    settings = await showStepSetup(step + 1, settings);
+    step += 1;
   }
-  requestAnimationFrame(renderFrame);
 }
 
 startButton.addEventListener("click", () => {
   startOverlay.style.display = "none";
 
-  const speedKey = speedSelect.value as keyof typeof SPEED_PRESETS;
-  const difficultyKey = difficultySelect.value as keyof typeof DIFFICULTY_PRESETS;
-  const lookaheadMs = SPEED_PRESETS[speedKey] ?? SPEED_PRESETS.normal;
-  const density = DIFFICULTY_PRESETS[difficultyKey] ?? DIFFICULTY_PRESETS.easy;
-  const speedLabel = SPEED_LABELS[speedKey] ?? SPEED_LABELS.normal;
-  const difficultyLabel = DIFFICULTY_LABELS[difficultyKey] ?? DIFFICULTY_LABELS.easy;
+  const speedKey = (speedSelect.value as keyof typeof SPEED_PRESETS) || "normal";
+  const difficultyKey = (difficultySelect.value as keyof typeof DIFFICULTY_PRESETS) || "easy";
+  const enableCalibration = calibrationToggle.checked;
 
   // AudioContext must be created/resumed synchronously inside a real click handler
   // for the browser's autoplay policy to treat it as user-initiated.
@@ -664,19 +857,12 @@ startButton.addEventListener("click", () => {
   void audioCtx.resume();
   const sfxEngine = new SfxEngine(audioCtx);
 
-  if (selectedSongFile) {
-    void startApp(sfxEngine, audioCtx, lookaheadMs, density, selectedSongFile, calibrationToggle.checked, speedLabel, difficultyLabel, null);
-  } else if (bgmModeDefaultRadio.checked) {
-    const track = pickRandomDefaultTrack();
-    fetch(track.fileUrl)
-      .then((res) => res.blob())
-      .then((blob) => new File([blob], track.fileName, { type: blob.type }))
-      .then((file) => startApp(sfxEngine, audioCtx, lookaheadMs, density, file, calibrationToggle.checked, speedLabel, difficultyLabel, track))
-      .catch((err) => {
-        hud.textContent = `YBJ 힙합 트랙 로드 실패: ${(err as Error).message}`;
-        startOverlay.style.removeProperty("display");
-      });
-  } else {
-    void startApp(sfxEngine, audioCtx, lookaheadMs, density, null, calibrationToggle.checked, speedLabel, difficultyLabel, null);
-  }
+  void resolveBgmSelection(selectedSongFile, bgmModeDefaultRadio.checked)
+    .then((resolved) =>
+      runSession(sfxEngine, audioCtx, buildStepSettings(speedKey, difficultyKey, resolved.songFile, resolved.defaultTrack), enableCalibration),
+    )
+    .catch((err) => {
+      hud.textContent = `음원 로드 실패: ${(err as Error).message}`;
+      startOverlay.style.removeProperty("display");
+    });
 });

@@ -81,7 +81,7 @@
         </div>
         <div id="song-select">
           <div id="settings-row">
-            <div id="bgm-mode-select">
+            <div id="bgm-mode-select" class="bgm-mode-select">
               <label>
                 <input type="radio" name="bgm-mode" id="bgm-mode-test" value="test" />
                 무반주 연습 트랙
@@ -91,7 +91,7 @@
                 YBJ 힙합 트랙
               </label>
             </div>
-            <label id="song-file-label" for="song-file-input">🎵 자유 음원 트랙</label>
+            <label id="song-file-label" class="song-file-label" for="song-file-input">🎵 자유 음원 트랙</label>
             <input type="file" id="song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
             <label class="settings-select-label">속도
               <select id="speed-select">
@@ -137,10 +137,48 @@
       </div>
       <div id="results-overlay">
         <div id="results-title" class="text-metallic">RESULT</div>
+        <div id="results-step-label"></div>
         <div id="results-score-label">TOTAL SCORE</div>
         <div id="results-score">0</div>
         <div id="results-breakdown"></div>
-        <button id="results-confirm-button" type="button">확인</button>
+        <div id="results-actions">
+          <button id="results-next-step-button" type="button">다음 Step 진행</button>
+          <button id="results-confirm-button" type="button">확인</button>
+        </div>
+      </div>
+      <div id="step-setup-overlay">
+        <div id="step-setup-title" class="text-metallic-gold">STEP <span id="step-setup-number"></span> 준비</div>
+        <p id="step-setup-hint">속도 또는 난이도 중 하나는 반드시 이전 단계보다 높아야 진행할 수 있습니다.</p>
+        <div id="step-setup-row">
+          <div id="step-bgm-mode-select" class="bgm-mode-select">
+            <label>
+              <input type="radio" name="step-bgm-mode" id="step-bgm-mode-test" value="test" />
+              무반주 연습 트랙
+            </label>
+            <label>
+              <input type="radio" name="step-bgm-mode" id="step-bgm-mode-default" value="default" checked />
+              YBJ 힙합 트랙
+            </label>
+          </div>
+          <label id="step-song-file-label" class="song-file-label" for="step-song-file-input">🎵 자유 음원 트랙</label>
+          <input type="file" id="step-song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
+          <label class="settings-select-label">속도
+            <select id="step-speed-select">
+              <option value="slow">느림</option>
+              <option value="normal">보통</option>
+              <option value="fast">빠름</option>
+            </select>
+          </label>
+          <label class="settings-select-label">난이도
+            <select id="step-difficulty-select">
+              <option value="easy">쉬움</option>
+              <option value="normal">보통</option>
+              <option value="hard">어려움</option>
+            </select>
+          </label>
+        </div>
+        <p id="step-setup-warning" hidden>속도 또는 난이도 중 하나는 반드시 이전 단계보다 높아야 합니다.</p>
+        <button id="step-start-button" type="button" disabled>STEP 시작</button>
       </div>
       <div id="name-entry-overlay">
         <div id="name-entry-title" class="text-metallic-gold">TOP 20 진입!</div>
