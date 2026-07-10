@@ -208,19 +208,39 @@ body::before {
   z-index: 5;
 }
 
+/* Brushed-metal text with a moving specular highlight — a diagonal bright band sweeps across the
+   glyphs and back, reading as light glinting off metal rather than the static gradient the other
+   .text-metallic elements use. */
 #game-subtitle {
   position: fixed;
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--font-body);
-  font-size: 12px;
+  font-weight: 700;
+  font-size: 14px;
   letter-spacing: 0.06em;
-  color: rgba(201, 211, 222, 0.65);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
   white-space: nowrap;
   pointer-events: none;
   z-index: 11;
+  background: linear-gradient(100deg, #838d9b 30%, #ffffff 48%, #f5f9ff 50%, #ffffff 52%, #838d9b 70%);
+  background-size: 250% 100%;
+  background-position: 200% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.6));
+  animation: subtitle-shine 5s ease-in-out infinite;
+}
+
+@keyframes subtitle-shine {
+  0%,
+  100% {
+    background-position: 200% 0;
+  }
+  50% {
+    background-position: -100% 0;
+  }
 }
 
 #visitor-welcome {
@@ -722,11 +742,6 @@ body::before {
   display: none;
 }
 
-#song-file-name {
-  font-size: 12px;
-  color: rgba(201, 211, 222, 0.55);
-}
-
 #calibration-toggle-label {
   display: flex;
   align-items: center;
@@ -1060,11 +1075,6 @@ body::before {
   #song-file-label {
     font-size: 12px;
     padding: 7px 14px;
-  }
-
-  #song-file-name {
-    font-size: 11px;
-    text-align: center;
   }
 
   #settings-row {

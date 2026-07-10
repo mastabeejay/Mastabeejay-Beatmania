@@ -58,8 +58,6 @@ const stopButton = document.querySelector<HTMLButtonElement>("#stop-button")!;
 const speedSelect = document.querySelector<HTMLSelectElement>("#speed-select")!;
 const difficultySelect = document.querySelector<HTMLSelectElement>("#difficulty-select")!;
 const songFileInput = document.querySelector<HTMLInputElement>("#song-file-input")!;
-const songFileName = document.querySelector<HTMLSpanElement>("#song-file-name")!;
-const bgmModeTestRadio = document.querySelector<HTMLInputElement>("#bgm-mode-test")!;
 const bgmModeDefaultRadio = document.querySelector<HTMLInputElement>("#bgm-mode-default")!;
 const trackInfoEl = document.querySelector<HTMLDivElement>("#track-info")!;
 const trackInfoTitleEl = document.querySelector<HTMLDivElement>("#track-info-title")!;
@@ -95,22 +93,9 @@ const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
 
-function updateSongFileNameDisplay(): void {
-  if (selectedSongFile) {
-    songFileName.textContent = `선택됨: ${selectedSongFile.name}`;
-  } else if (bgmModeDefaultRadio.checked) {
-    songFileName.textContent = "YBJ 힙합 트랙 중 랜덤 선택됨";
-  } else {
-    songFileName.textContent = "선택 안 함 — 무반주 연습 트랙으로 시작";
-  }
-}
-
 songFileInput.addEventListener("change", () => {
   selectedSongFile = songFileInput.files?.[0] ?? null;
-  updateSongFileNameDisplay();
 });
-bgmModeTestRadio.addEventListener("change", updateSongFileNameDisplay);
-bgmModeDefaultRadio.addEventListener("change", updateSongFileNameDisplay);
 
 async function renderLeaderboard(): Promise<void> {
   const board = await loadLeaderboard();
