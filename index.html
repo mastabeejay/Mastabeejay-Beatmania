@@ -57,25 +57,27 @@
               <text x="55" y="27" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="16" fill="#4a2f00">P2B 2.0</text>
             </svg>
           </div>
-          <div id="leaderboard-title" class="text-metallic-gold">BEST 10 RECORD</div>
         </div>
-        <div id="leaderboard-panel">
-          <table id="leaderboard-table">
-            <thead>
-              <tr>
-                <th>순위</th>
-                <th>이름</th>
-                <th>사진</th>
-                <th>메세지</th>
-                <th>점수</th>
-                <th>속도</th>
-                <th>난이도</th>
-                <th>BGM</th>
-                <th>기록일</th>
-              </tr>
-            </thead>
-            <tbody id="leaderboard-body"></tbody>
-          </table>
+        <div id="leaderboard-section">
+          <div id="leaderboard-title" class="text-metallic-gold">BEST 20 RECORD</div>
+          <div id="leaderboard-panel">
+            <table id="leaderboard-table">
+              <thead>
+                <tr>
+                  <th>순위</th>
+                  <th>이름</th>
+                  <th>사진</th>
+                  <th>메세지</th>
+                  <th>점수</th>
+                  <th>속도</th>
+                  <th>난이도</th>
+                  <th>BGM</th>
+                  <th>기록일</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboard-body"></tbody>
+            </table>
+          </div>
         </div>
         <div id="song-select">
           <div id="settings-row">
@@ -142,18 +144,18 @@
         <button id="results-confirm-button" type="button">확인</button>
       </div>
       <div id="name-entry-overlay">
-        <div id="name-entry-title" class="text-metallic-gold">TOP 10 진입!</div>
+        <div id="name-entry-title" class="text-metallic-gold">TOP 20 진입!</div>
         <p id="name-entry-desc">이름과 메세지를 남겨주세요</p>
         <input type="text" id="name-entry-name" maxlength="12" placeholder="이름" />
         <input type="text" id="name-entry-message" maxlength="40" placeholder="한마디 메세지" />
         <button id="name-entry-submit" type="button">등록</button>
       </div>
       <div id="photo-countdown-overlay">
-        <div id="photo-countdown-desc">Top 10 진입! 기념 사진을 찍습니다</div>
+        <div id="photo-countdown-desc"></div>
         <div id="photo-countdown-number">5</div>
       </div>
       <div id="photo-lightbox-overlay">
-        <img id="photo-lightbox-image" src="" alt="Best 10 기념 사진" />
+        <img id="photo-lightbox-image" src="" alt="Best 20 기념 사진" />
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

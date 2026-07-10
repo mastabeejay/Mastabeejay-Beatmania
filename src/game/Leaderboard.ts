@@ -34,7 +34,7 @@ interface LeaderboardRow {
   created_at: string;
 }
 
-const MAX_ENTRIES = 10;
+const MAX_ENTRIES = 20;
 
 function toEntry(row: LeaderboardRow): LeaderboardEntry {
   return {
@@ -62,11 +62,18 @@ export async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
   return data.map(toEntry);
 }
 
-/** Ties with the current 10th place don't bump it — only a strictly higher score earns a slot. */
-export async function qualifiesForTop10(score: number): Promise<boolean> {
+/** Ties with the current 20th place don't bump it — only a strictly higher score earns a slot. */
+export async function qualifiesForTop20(score: number): Promise<boolean> {
   const board = await loadLeaderboard();
   if (board.length < MAX_ENTRIES) return true;
   return score > board[board.length - 1].score;
+}
+
+/** Where this score would land if submitted right now — 1-indexed, counting how many current
+ *  entries outscore it. Used to announce "N위 입성" before the photo countdown. */
+export async function computeProjectedRank(score: number): Promise<number> {
+  const board = await loadLeaderboard();
+  return board.filter((entry) => entry.score > score).length + 1;
 }
 
 export async function addLeaderboardEntry(entry: NewLeaderboardEntry): Promise<LeaderboardEntry[]> {

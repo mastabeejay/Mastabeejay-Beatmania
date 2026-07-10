@@ -78,12 +78,12 @@ begin
   insert into leaderboard (name, message, score, speed, difficulty, bgm, photo)
   values (left(p_name, 20), left(p_message, 80), p_score, left(p_speed, 10), left(p_difficulty, 10), left(p_bgm, 10), left(p_photo, 500000));
 
-  -- Keep only the current top 10 — mirrors the old server's trim-after-insert behavior.
+  -- Keep only the current top 20 — mirrors the old server's trim-after-insert behavior.
   delete from leaderboard where id not in (
-    select id from leaderboard order by score desc, id asc limit 10
+    select id from leaderboard order by score desc, id asc limit 20
   );
 
-  return query select * from leaderboard order by score desc, id asc limit 10;
+  return query select * from leaderboard order by score desc, id asc limit 20;
 end;
 $$;
 

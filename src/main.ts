@@ -6,7 +6,7 @@ import { CameraManager } from "./camera/CameraManager";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
 import { addGuestbookEntry, deleteGuestbookEntry, editGuestbookEntry, loadGuestbook, WrongPasswordError } from "./game/Guestbook";
-import { addLeaderboardEntry, loadLeaderboard, qualifiesForTop10 } from "./game/Leaderboard";
+import { addLeaderboardEntry, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { ScoreManager } from "./game/ScoreManager";
@@ -87,6 +87,7 @@ const guestbookOpenCard = document.querySelector<HTMLButtonElement>("#guestbook-
 const guestbookOverlay = document.querySelector<HTMLDivElement>("#guestbook-overlay")!;
 const guestbookCloseButton = document.querySelector<HTMLButtonElement>("#guestbook-close-button")!;
 const photoCountdownOverlay = document.querySelector<HTMLDivElement>("#photo-countdown-overlay")!;
+const photoCountdownDescEl = document.querySelector<HTMLDivElement>("#photo-countdown-desc")!;
 const photoCountdownNumberEl = document.querySelector<HTMLDivElement>("#photo-countdown-number")!;
 const photoLightboxOverlay = document.querySelector<HTMLDivElement>("#photo-lightbox-overlay")!;
 const photoLightboxImage = document.querySelector<HTMLImageElement>("#photo-lightbox-image")!;
@@ -334,23 +335,31 @@ function capturePhoto(videoEl: HTMLVideoElement): string {
 }
 
 /** Counts down over the still-live camera feed (see endGame — camera.stop() is deliberately
- *  deferred until after this resolves) and captures a photo the moment it hits zero. */
-function runPhotoCountdown(videoEl: HTMLVideoElement): Promise<string> {
+ *  deferred until after this resolves) and captures a photo the moment it hits zero. Two phases:
+ *  first the rank announcement sits alone for a couple seconds so it actually gets read, then the
+ *  5-4-3-2-1 number starts — showing both at once from the start meant most players never noticed
+ *  which rank they'd hit before the photo fired. */
+function runPhotoCountdown(videoEl: HTMLVideoElement, rank: number): Promise<string> {
   return new Promise((resolve) => {
-    let count = 5;
-    photoCountdownNumberEl.textContent = String(count);
+    photoCountdownDescEl.textContent = `${rank}위 입성을 축하합니다! 기념촬영을 하겠습니다.`;
+    photoCountdownNumberEl.textContent = "";
     photoCountdownOverlay.style.display = "flex";
-    const interval = setInterval(() => {
-      count -= 1;
-      if (count > 0) {
-        photoCountdownNumberEl.textContent = String(count);
-        return;
-      }
-      clearInterval(interval);
-      const photo = capturePhoto(videoEl);
-      photoCountdownOverlay.style.display = "none";
-      resolve(photo);
-    }, 1000);
+
+    setTimeout(() => {
+      let count = 5;
+      photoCountdownNumberEl.textContent = String(count);
+      const interval = setInterval(() => {
+        count -= 1;
+        if (count > 0) {
+          photoCountdownNumberEl.textContent = String(count);
+          return;
+        }
+        clearInterval(interval);
+        const photo = capturePhoto(videoEl);
+        photoCountdownOverlay.style.display = "none";
+        resolve(photo);
+      }, 1000);
+    }, 2000);
   });
 }
 
@@ -511,8 +520,9 @@ async function startApp(
 
     resultsConfirmButton.onclick = async () => {
       resultsOverlay.style.display = "none";
-      if (await qualifiesForTop10(finalScore)) {
-        capturedPhoto = await runPhotoCountdown(video);
+      if (await qualifiesForTop20(finalScore)) {
+        const rank = await computeProjectedRank(finalScore);
+        capturedPhoto = await runPhotoCountdown(video, rank);
         camera.stop();
         nameEntryOverlay.style.display = "flex";
       } else {

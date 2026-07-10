@@ -253,14 +253,23 @@ body::before {
   z-index: 10;
 }
 
-/* Title, P2B badge, and "BEST 10 RECORD" all live outside the bordered box below — the box holds
-   only the table itself, so those don't eat into its (now taller) height budget. */
+/* Tagline + P2B badge live in their own header block, further up. "BEST 20 RECORD" moved out of
+   #leaderboard-panel too, but grouped tightly with it in #leaderboard-section instead (a small
+   gap, not the full inter-section spacing), so the title reads as sitting right above the box
+   rather than drifting up toward the tagline block above it. The box itself holds only the table,
+   so neither of these eats into its (now taller) height budget. */
 #leaderboard-header {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+}
+
+#leaderboard-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 #leaderboard-panel {
