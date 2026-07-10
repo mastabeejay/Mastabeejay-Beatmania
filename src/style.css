@@ -264,11 +264,25 @@ body::before {
   box-shadow: 0 0 20px rgba(255, 210, 0, 0.1);
 }
 
+#leaderboard-tagline-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
 #leaderboard-tagline {
   font-size: clamp(14px, 2.4vw, 20px);
   text-align: center;
-  margin-bottom: 8px;
   letter-spacing: 0.05em;
+}
+
+#p2b-badge {
+  width: 62px;
+  height: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(255, 210, 0, 0.4)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
 }
 
 #leaderboard-title {

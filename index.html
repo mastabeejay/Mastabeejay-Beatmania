@@ -30,12 +30,33 @@
         <div id="status-hud"></div>
       </div>
       <div id="game-title" class="text-metallic">Beejay's Deejay Jackey</div>
-      <div id="game-subtitle">Produced by Beejay 2026. 07. 05</div>
+      <div id="game-subtitle">Produced by Beejay 2026.</div>
       <button id="stop-button" type="button">⏹ 중단</button>
       <div id="calibration-status"></div>
       <div id="start-overlay">
         <div id="leaderboard-panel">
-          <div id="leaderboard-tagline" class="text-metallic">Masta Beejay Beat Breaker</div>
+          <div id="leaderboard-tagline-row">
+            <div id="leaderboard-tagline" class="text-metallic">Masta Beejay Beat Breaker</div>
+            <svg id="p2b-badge" viewBox="0 0 110 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="P2B 2.0">
+              <defs>
+                <linearGradient id="p2bTopFace" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#fff9e6" />
+                  <stop offset="50%" stop-color="#ffe98a" />
+                  <stop offset="100%" stop-color="#fff9e6" />
+                </linearGradient>
+                <linearGradient id="p2bFrontFace" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#fff6d8" />
+                  <stop offset="28%" stop-color="#ffd200" />
+                  <stop offset="55%" stop-color="#9a6a00" />
+                  <stop offset="78%" stop-color="#ffd200" />
+                  <stop offset="100%" stop-color="#fff6d8" />
+                </linearGradient>
+              </defs>
+              <polygon points="18,8 92,8 100,3 26,3" fill="url(#p2bTopFace)" stroke="#9a6a00" stroke-width="0.5" />
+              <polygon points="18,8 92,8 100,34 10,34" fill="url(#p2bFrontFace)" stroke="#7a5200" stroke-width="1" />
+              <text x="55" y="26" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="13" fill="#4a2f00">P2B 2.0</text>
+            </svg>
+          </div>
           <div id="leaderboard-title" class="text-metallic-gold">BEST 10 RECORD</div>
           <table id="leaderboard-table">
             <thead>
