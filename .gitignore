@@ -28,6 +28,9 @@ server/data
 # public/audio/ybj/ (renamed to safe ASCII slugs to avoid URL-encoding issues).
 /YBJ_music
 
+# Source app-icon artwork — the files actually served are the resized copies under public/icons/.
+/MBBMicon.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
