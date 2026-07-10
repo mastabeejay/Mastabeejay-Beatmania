@@ -177,8 +177,6 @@ body::before {
   width: 200px;
   box-sizing: border-box;
   padding: 10px 14px;
-  background: rgba(6, 10, 18, 0.72);
-  backdrop-filter: blur(6px);
   border-radius: 8px;
   color: var(--color-cyber-cyan);
   font-family: var(--font-body);
@@ -1047,6 +1045,20 @@ body::before {
   color: var(--color-cyber-silver);
 }
 
+/* The dropdown's OPEN option list is rendered by the OS/browser chrome, not our page styling — it
+   ignores the closed box's dark background and falls back to a light native popup, so light-toned
+   option text (readable against our dark box) turned nearly invisible against that light popup.
+   Forcing plain black text on every option (and a lighter grey specifically for disabled ones, so
+   the step-escalation lockout still reads as "can't pick this") fixes it regardless of OS theme. */
+select option {
+  color: #000;
+  background: #fff;
+}
+
+select option:disabled {
+  color: #999;
+}
+
 .song-file-label {
   font-family: var(--font-body);
   font-weight: 600;
@@ -1170,6 +1182,45 @@ body::before {
 #pwa-refresh-button:hover {
   background: rgba(0, 240, 255, 0.2);
   box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+}
+
+#youtube-link-button,
+#tiktok-link-button {
+  position: fixed;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  background: rgba(6, 10, 18, 0.7);
+  z-index: 11;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+#youtube-link-button svg,
+#tiktok-link-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+#youtube-link-button {
+  top: 54px;
+}
+
+#tiktok-link-button {
+  top: 96px;
+}
+
+#youtube-link-button:hover,
+#tiktok-link-button:hover {
+  background: rgba(0, 240, 255, 0.2);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+  transform: scale(1.08);
 }
 
 #start-button {
