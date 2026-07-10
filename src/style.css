@@ -267,14 +267,6 @@ body::before {
   margin-top: 2px;
 }
 
-#install-guide-heading {
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  color: rgba(201, 211, 222, 0.6);
-}
-
 #install-guide-cards {
   display: flex;
   flex-wrap: wrap;
@@ -286,9 +278,9 @@ body::before {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   width: 92px;
-  padding: 10px 8px;
+  padding: 6px 8px;
   border-radius: 12px;
   border: 1px solid rgba(0, 240, 255, 0.3);
   background: rgba(0, 240, 255, 0.05);
@@ -308,8 +300,8 @@ body::before {
 }
 
 .install-guide-card-icon {
-  font-size: 22px;
-  line-height: 1.2;
+  font-size: 18px;
+  line-height: 1.1;
 }
 
 .install-guide-card-label {
@@ -1423,11 +1415,11 @@ body::before {
 
   .install-guide-card {
     width: 80px;
-    padding: 8px 6px;
+    padding: 5px 6px;
   }
 
   .install-guide-card-icon {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   #install-guide-overlay-panel {

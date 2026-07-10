@@ -327,14 +327,24 @@ guestbookCloseButton.addEventListener("click", () => {
   hideAllGuestbookForms();
 });
 
-const INSTALL_GUIDES: Record<"pc" | "ios" | "android", { title: string; steps: string[] }> = {
-  pc: {
-    title: "💻 PC에 설치하기",
+const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: string; steps: string[] }> = {
+  windows: {
+    title: "🖥️ Windows에 설치하기",
     steps: [
       "크롬(Chrome) 또는 엣지(Edge) 브라우저로 이 사이트에 접속하세요.",
-      "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 'Beejay's Deejay Jackey 설치'를 찾아 클릭하세요.",
+      "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 '설치'를 찾아 클릭하세요.",
       "나타나는 창에서 '설치' 버튼을 클릭하세요.",
       "바탕화면이나 시작 메뉴에 MBBM 아이콘이 생깁니다. 더블클릭하면 브라우저 주소창 없이 바로 게임이 실행됩니다.",
+    ],
+  },
+  macos: {
+    title: "💻 macOS에 설치하기",
+    steps: [
+      "크롬(Chrome) 또는 엣지(Edge) 브라우저로 이 사이트에 접속하세요.",
+      "주소창 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 메뉴에서 '설치'를 찾아 클릭하세요.",
+      "나타나는 창에서 '설치' 버튼을 클릭하세요.",
+      "Dock이나 런치패드에 MBBM 아이콘이 생깁니다. 클릭하면 바로 게임이 실행됩니다.",
+      "참고: 사파리(Safari)를 쓰신다면 macOS Sonoma(14) 이상에서 메뉴바의 '파일' → 'Dock에 추가'로도 설치할 수 있어요.",
     ],
   },
   ios: {
