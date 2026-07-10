@@ -1,12 +1,21 @@
 import "./style.css";
 import { AudioEngine } from "./audio/AudioEngine";
 import { SfxEngine } from "./audio/SfxEngine";
+import { adminLogin, WrongAdminPasswordError } from "./game/Admin";
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
-import { addGuestbookEntry, deleteGuestbookEntry, editGuestbookEntry, loadGuestbook, WrongPasswordError } from "./game/Guestbook";
-import { addLeaderboardEntry, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
+import {
+  addGuestbookEntry,
+  adminDeleteGuestbookEntries,
+  deleteGuestbookEntry,
+  editGuestbookEntry,
+  loadGuestbook,
+  WrongPasswordError,
+  type GuestbookEntry,
+} from "./game/Guestbook";
+import { addLeaderboardEntry, adminDeleteLeaderboardEntries, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { ScoreManager } from "./game/ScoreManager";
@@ -113,10 +122,26 @@ const installGuideOverlay = document.querySelector<HTMLDivElement>("#install-gui
 const installGuideModalTitle = document.querySelector<HTMLDivElement>("#install-guide-modal-title")!;
 const installGuideModalSteps = document.querySelector<HTMLOListElement>("#install-guide-modal-steps")!;
 const installGuideCloseButton = document.querySelector<HTMLButtonElement>("#install-guide-close-button")!;
+const adminLoginLink = document.querySelector<HTMLButtonElement>("#admin-login-link")!;
+const adminLogoutButton = document.querySelector<HTMLButtonElement>("#admin-logout-button")!;
+const adminLoginOverlay = document.querySelector<HTMLDivElement>("#admin-login-overlay")!;
+const adminLoginPasswordInput = document.querySelector<HTMLInputElement>("#admin-login-password")!;
+const adminLoginError = document.querySelector<HTMLSpanElement>("#admin-login-error")!;
+const adminLoginSubmitButton = document.querySelector<HTMLButtonElement>("#admin-login-submit")!;
+const adminLoginCancelButton = document.querySelector<HTMLButtonElement>("#admin-login-cancel")!;
+const leaderboardAdminDeleteButton = document.querySelector<HTMLButtonElement>("#leaderboard-admin-delete-button")!;
+const guestbookAdminDeleteButton = document.querySelector<HTMLButtonElement>("#guestbook-admin-delete-button")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
 let stepSelectedSongFile: File | null = null;
+
+// Admin mode: no session/token, just the password kept in memory (and sessionStorage so a reload
+// within the same tab doesn't force re-login) and re-sent with every delete call for the server to
+// re-verify — see supabase/schema.sql's admin_login()/admin_delete_* functions.
+let adminPassword: string | null = sessionStorage.getItem("bdj-admin-password");
+const selectedLeaderboardIds = new Set<number>();
+const selectedGuestbookIds = new Set<number>();
 
 songFileInput.addEventListener("change", () => {
   selectedSongFile = songFileInput.files?.[0] ?? null;
@@ -127,6 +152,8 @@ stepSongFileInput.addEventListener("change", () => {
 
 async function renderLeaderboard(): Promise<void> {
   const board = await loadLeaderboard();
+  selectedLeaderboardIds.clear();
+  leaderboardAdminDeleteButton.hidden = !adminPassword;
   if (board.length === 0) {
     leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="10">기록이 없습니다 — 첫 기록의 주인공이 되어보세요!</td></tr>`;
     return;
@@ -135,7 +162,7 @@ async function renderLeaderboard(): Promise<void> {
     .map(
       (entry, index) => `
         <tr>
-          <td>${index + 1}</td>
+          <td>${adminPassword ? `<input type="checkbox" class="leaderboard-select-checkbox" data-id="${entry.id}" /> ` : ""}${index + 1}</td>
           <td>${escapeHtml(entry.name)}</td>
           <td>${entry.photo ? `<img class="leaderboard-photo-thumb" data-photo-index="${index}" alt="${escapeHtml(entry.name)} 사진" />` : `<span class="leaderboard-photo-empty">-</span>`}</td>
           <td>${escapeHtml(entry.message)}</td>
@@ -170,6 +197,28 @@ photoLightboxOverlay.addEventListener("click", () => {
   photoLightboxImage.src = "";
 });
 
+leaderboardBody.addEventListener("change", (event) => {
+  const checkbox = event.target as HTMLInputElement;
+  if (!checkbox.classList.contains("leaderboard-select-checkbox")) return;
+  const id = Number(checkbox.dataset.id);
+  if (checkbox.checked) selectedLeaderboardIds.add(id);
+  else selectedLeaderboardIds.delete(id);
+});
+
+leaderboardAdminDeleteButton.addEventListener("click", () => {
+  if (!adminPassword || selectedLeaderboardIds.size === 0) return;
+  if (!window.confirm(`선택한 ${selectedLeaderboardIds.size}개 기록을 삭제하시겠습니까?`)) return;
+  void adminDeleteLeaderboardEntries(Array.from(selectedLeaderboardIds), adminPassword)
+    .then(() => renderLeaderboard())
+    .catch((err) => {
+      if (err instanceof WrongAdminPasswordError) {
+        forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
+      } else {
+        console.error("리더보드 삭제 실패:", err);
+      }
+    });
+});
+
 /** Local calendar date, not the ISO string's UTC date — slicing the raw ISO string would show the
  *  wrong day for anyone playing near midnight in a timezone ahead of UTC (e.g. KST). */
 function formatLocalDate(dateIso: string): string {
@@ -186,44 +235,83 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+/** Replies skip the reply button (only one level of nesting) and get a subtler card via the
+ *  .guestbook-reply class, but are otherwise identical — same edit/delete inline forms, same
+ *  admin checkbox when logged in. */
+function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): string {
+  return `
+    <div class="guestbook-entry${isReply ? " guestbook-reply" : ""}" data-id="${entry.id}">
+      <div class="guestbook-entry-top">
+        ${adminPassword ? `<input type="checkbox" class="guestbook-select-checkbox" data-id="${entry.id}" />` : ""}
+        <span class="guestbook-entry-name">${escapeHtml(entry.name)}</span>
+        <span class="guestbook-entry-date">${formatLocalDate(entry.dateIso)}</span>
+      </div>
+      <div class="guestbook-entry-message">${escapeHtml(entry.message)}</div>
+      <div class="guestbook-entry-actions">
+        ${isReply ? "" : `<button type="button" class="guestbook-action-btn" data-action="reply" data-id="${entry.id}">답글쓰기</button>`}
+        <button type="button" class="guestbook-action-btn" data-action="edit" data-id="${entry.id}">수정</button>
+        <button type="button" class="guestbook-action-btn" data-action="delete" data-id="${entry.id}">삭제</button>
+      </div>
+      <div class="guestbook-inline-form" data-mode="edit" data-id="${entry.id}" hidden>
+        <input type="text" class="guestbook-edit-message" maxlength="80" />
+        <input type="password" class="guestbook-inline-password" placeholder="비밀번호" maxlength="20" />
+        <span class="guestbook-inline-error" hidden>비밀번호가 일치하지 않습니다</span>
+        <div class="guestbook-inline-actions">
+          <button type="button" class="guestbook-confirm-btn" data-action="save" data-id="${entry.id}">저장</button>
+          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
+        </div>
+      </div>
+      <div class="guestbook-inline-form" data-mode="delete" data-id="${entry.id}" hidden>
+        <input type="password" class="guestbook-inline-password" placeholder="비밀번호" maxlength="20" />
+        <span class="guestbook-inline-error" hidden>비밀번호가 일치하지 않습니다</span>
+        <div class="guestbook-inline-actions">
+          <button type="button" class="guestbook-confirm-btn" data-action="confirm-delete" data-id="${entry.id}">삭제 확인</button>
+          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
+        </div>
+      </div>
+      ${
+        isReply
+          ? ""
+          : `<div class="guestbook-inline-form" data-mode="reply" data-id="${entry.id}" hidden>
+        <input type="text" class="guestbook-reply-name" placeholder="이름" maxlength="12" />
+        <input type="text" class="guestbook-reply-message" placeholder="답글을 남겨주세요" maxlength="80" />
+        <input type="password" class="guestbook-reply-password" placeholder="비밀번호 (수정/삭제용)" maxlength="20" />
+        <div class="guestbook-inline-actions">
+          <button type="button" class="guestbook-confirm-btn" data-action="submit-reply" data-id="${entry.id}">등록</button>
+          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
+        </div>
+      </div>`
+      }
+    </div>`;
+}
+
 async function renderGuestbook(): Promise<void> {
   const entries = await loadGuestbook();
+  selectedGuestbookIds.clear();
+  guestbookAdminDeleteButton.hidden = !adminPassword;
   if (entries.length === 0) {
     guestbookList.innerHTML = `<p id="guestbook-empty">아직 방명록이 없습니다 — 첫 글을 남겨보세요!</p>`;
     return;
   }
-  guestbookList.innerHTML = entries
-    .map(
-      (entry) => `
-        <div class="guestbook-entry" data-id="${entry.id}">
-          <div class="guestbook-entry-top">
-            <span class="guestbook-entry-name">${escapeHtml(entry.name)}</span>
-            <span class="guestbook-entry-date">${formatLocalDate(entry.dateIso)}</span>
-          </div>
-          <div class="guestbook-entry-message">${escapeHtml(entry.message)}</div>
-          <div class="guestbook-entry-actions">
-            <button type="button" class="guestbook-action-btn" data-action="edit" data-id="${entry.id}">수정</button>
-            <button type="button" class="guestbook-action-btn" data-action="delete" data-id="${entry.id}">삭제</button>
-          </div>
-          <div class="guestbook-inline-form" data-mode="edit" data-id="${entry.id}" hidden>
-            <input type="text" class="guestbook-edit-message" maxlength="80" />
-            <input type="password" class="guestbook-inline-password" placeholder="비밀번호" maxlength="20" />
-            <span class="guestbook-inline-error" hidden>비밀번호가 일치하지 않습니다</span>
-            <div class="guestbook-inline-actions">
-              <button type="button" class="guestbook-confirm-btn" data-action="save" data-id="${entry.id}">저장</button>
-              <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
-            </div>
-          </div>
-          <div class="guestbook-inline-form" data-mode="delete" data-id="${entry.id}" hidden>
-            <input type="password" class="guestbook-inline-password" placeholder="비밀번호" maxlength="20" />
-            <span class="guestbook-inline-error" hidden>비밀번호가 일치하지 않습니다</span>
-            <div class="guestbook-inline-actions">
-              <button type="button" class="guestbook-confirm-btn" data-action="confirm-delete" data-id="${entry.id}">삭제 확인</button>
-              <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
-            </div>
-          </div>
-        </div>`,
-    )
+
+  const topLevel = entries.filter((e) => e.parentId === null);
+  const repliesByParent = new Map<number, GuestbookEntry[]>();
+  for (const entry of entries) {
+    if (entry.parentId === null) continue;
+    const list = repliesByParent.get(entry.parentId) ?? [];
+    list.push(entry);
+    repliesByParent.set(entry.parentId, list);
+  }
+  // Oldest reply first within a thread reads more naturally than the newest-first ordering used
+  // for top-level entries.
+  repliesByParent.forEach((list) => list.sort((a, b) => a.id - b.id));
+
+  guestbookList.innerHTML = topLevel
+    .map((entry) => {
+      const replies = repliesByParent.get(entry.id) ?? [];
+      const repliesHtml = replies.map((reply) => renderGuestbookEntryHtml(reply, true)).join("");
+      return renderGuestbookEntryHtml(entry, false) + (repliesHtml ? `<div class="guestbook-replies">${repliesHtml}</div>` : "");
+    })
     .join("");
 
   // Set via the DOM property, never interpolated into the HTML attribute above — a message
@@ -239,10 +327,33 @@ function hideAllGuestbookForms(): void {
     form.hidden = true;
     const error = form.querySelector<HTMLSpanElement>(".guestbook-inline-error");
     if (error) error.hidden = true;
-    const password = form.querySelector<HTMLInputElement>(".guestbook-inline-password");
-    if (password) password.value = "";
+    form.querySelectorAll<HTMLInputElement>('input[type="password"], .guestbook-reply-name, .guestbook-reply-message').forEach((input) => {
+      input.value = "";
+    });
   });
 }
+
+guestbookList.addEventListener("change", (event) => {
+  const checkbox = event.target as HTMLInputElement;
+  if (!checkbox.classList.contains("guestbook-select-checkbox")) return;
+  const id = Number(checkbox.dataset.id);
+  if (checkbox.checked) selectedGuestbookIds.add(id);
+  else selectedGuestbookIds.delete(id);
+});
+
+guestbookAdminDeleteButton.addEventListener("click", () => {
+  if (!adminPassword || selectedGuestbookIds.size === 0) return;
+  if (!window.confirm(`선택한 ${selectedGuestbookIds.size}개 글을 삭제하시겠습니까? (답글이 있는 글은 답글도 함께 삭제됩니다)`)) return;
+  void adminDeleteGuestbookEntries(Array.from(selectedGuestbookIds), adminPassword)
+    .then(() => renderGuestbook())
+    .catch((err) => {
+      if (err instanceof WrongAdminPasswordError) {
+        forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
+      } else {
+        console.error("방명록 삭제 실패:", err);
+      }
+    });
+});
 
 guestbookList.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
@@ -251,7 +362,7 @@ guestbookList.addEventListener("click", (event) => {
   const action = button.dataset.action;
   const entry = button.closest<HTMLDivElement>(".guestbook-entry")!;
 
-  if (action === "edit" || action === "delete") {
+  if (action === "edit" || action === "delete" || action === "reply") {
     const alreadyOpen = !entry.querySelector<HTMLDivElement>(`.guestbook-inline-form[data-mode="${action}"]`)?.hidden;
     hideAllGuestbookForms();
     if (!alreadyOpen) {
@@ -298,6 +409,18 @@ guestbookList.addEventListener("click", (event) => {
           console.error("방명록 삭제 실패:", err);
         }
       });
+    return;
+  }
+
+  if (action === "submit-reply") {
+    const form = entry.querySelector<HTMLDivElement>(`.guestbook-inline-form[data-mode="reply"][data-id="${id}"]`)!;
+    const name = form.querySelector<HTMLInputElement>(".guestbook-reply-name")!.value.trim();
+    const message = form.querySelector<HTMLInputElement>(".guestbook-reply-message")!.value.trim();
+    const password = form.querySelector<HTMLInputElement>(".guestbook-reply-password")!.value;
+    if (!name || !message || !password) return;
+    void addGuestbookEntry({ name, message, password, parentId: id })
+      .then(() => renderGuestbook())
+      .catch((err) => console.error("답글 등록 실패:", err));
   }
 });
 
@@ -383,11 +506,91 @@ installGuideCloseButton.addEventListener("click", () => {
   installGuideOverlay.style.display = "none";
 });
 
-void renderLeaderboard();
-void renderGuestbook();
+function setAdminModeUI(active: boolean): void {
+  adminLoginLink.hidden = active;
+  adminLogoutButton.hidden = !active;
+}
+
+/** Clears admin state everywhere (memory + sessionStorage) and drops back to the logged-out view.
+ *  Called both for a deliberate logout and when a stored password gets rejected server-side (e.g.
+ *  the owner rotated it in Supabase since the last login) mid-action. */
+function forceAdminLogout(alertMessage?: string): void {
+  adminPassword = null;
+  sessionStorage.removeItem("bdj-admin-password");
+  setAdminModeUI(false);
+  void renderLeaderboard();
+  void renderGuestbook();
+  if (alertMessage) window.alert(alertMessage);
+}
+
+adminLoginLink.addEventListener("click", () => {
+  adminLoginPasswordInput.value = "";
+  adminLoginError.hidden = true;
+  adminLoginOverlay.style.display = "flex";
+  adminLoginPasswordInput.focus();
+});
+
+adminLoginCancelButton.addEventListener("click", () => {
+  adminLoginOverlay.style.display = "none";
+});
+
+adminLoginPasswordInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") adminLoginSubmitButton.click();
+});
+
+adminLoginSubmitButton.addEventListener("click", () => {
+  const password = adminLoginPasswordInput.value;
+  if (!password) return;
+  void adminLogin(password).then((ok) => {
+    if (!ok) {
+      adminLoginError.hidden = false;
+      return;
+    }
+    adminPassword = password;
+    sessionStorage.setItem("bdj-admin-password", password);
+    adminLoginOverlay.style.display = "none";
+    setAdminModeUI(true);
+    void renderLeaderboard();
+    void renderGuestbook();
+  });
+});
+
+adminLogoutButton.addEventListener("click", () => forceAdminLogout());
+
+/** A password carried over from a previous tab session (sessionStorage) is re-verified before
+ *  trusting it — the owner may have rotated it in Supabase directly since then. */
+async function initAdminSession(): Promise<void> {
+  if (!adminPassword) return;
+  const stillValid = await adminLogin(adminPassword);
+  if (stillValid) {
+    setAdminModeUI(true);
+  } else {
+    adminPassword = null;
+    sessionStorage.removeItem("bdj-admin-password");
+  }
+}
+
+void initAdminSession().then(() => {
+  void renderLeaderboard();
+  void renderGuestbook();
+});
 
 void reportVisit().then((count) => {
   if (count !== null) visitorCountEl.textContent = count.toLocaleString();
+});
+
+// Installed as a home-screen/desktop app (standalone display mode) has no browser chrome at all —
+// no address bar, no pull-to-refresh in some contexts — so there's otherwise no way to reload.
+// `navigator.standalone` is iOS Safari's older, non-standard equivalent of the same check.
+const pwaRefreshButton = document.querySelector<HTMLButtonElement>("#pwa-refresh-button")!;
+const isStandaloneApp =
+  window.matchMedia("(display-mode: standalone)").matches ||
+  ("standalone" in navigator && (navigator as unknown as { standalone?: boolean }).standalone === true);
+if (isStandaloneApp) {
+  pwaRefreshButton.style.display = "block";
+}
+pwaRefreshButton.addEventListener("click", () => {
+  window.location.reload();
 });
 
 /** Grabs the current camera frame as a JPEG data URL. Mirrored horizontally to match what the

@@ -1,6 +1,8 @@
+import { WrongAdminPasswordError } from "./Admin";
 import { supabase } from "./supabaseClient";
 
 export interface LeaderboardEntry {
+  id: number;
   name: string;
   message: string;
   score: number;
@@ -28,6 +30,7 @@ export interface NewLeaderboardEntry {
 }
 
 interface LeaderboardRow {
+  id: number;
   name: string;
   message: string;
   score: number;
@@ -43,6 +46,7 @@ const MAX_ENTRIES = 20;
 
 function toEntry(row: LeaderboardRow): LeaderboardEntry {
   return {
+    id: row.id,
     name: row.name,
     message: row.message,
     score: row.score,
@@ -60,7 +64,7 @@ function toEntry(row: LeaderboardRow): LeaderboardEntry {
 export async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
   const { data, error } = await supabase
     .from("leaderboard")
-    .select("name, message, score, speed, difficulty, step, bgm, photo, created_at")
+    .select("id, name, message, score, speed, difficulty, step, bgm, photo, created_at")
     .order("score", { ascending: false })
     .order("id", { ascending: true })
     .limit(MAX_ENTRIES);
@@ -95,4 +99,15 @@ export async function addLeaderboardEntry(entry: NewLeaderboardEntry): Promise<L
   });
   if (error || !data) throw new Error(error?.message ?? "Failed to save leaderboard entry");
   return (data as LeaderboardRow[]).map(toEntry);
+}
+
+/** Bypasses the normal per-row rules entirely (there is no per-row password for leaderboard rows
+ *  to begin with) — gated purely by the shared admin password, re-verified server-side every call. */
+export async function adminDeleteLeaderboardEntries(ids: number[], adminPassword: string): Promise<LeaderboardEntry[]> {
+  const { data, error } = await supabase.rpc("admin_delete_leaderboard_entries", { p_ids: ids, p_admin_password: adminPassword });
+  if (error) {
+    if (error.message === "wrong_password") throw new WrongAdminPasswordError();
+    throw new Error(error.message);
+  }
+  return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
 }
