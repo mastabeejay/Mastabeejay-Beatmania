@@ -119,7 +119,7 @@ stepSongFileInput.addEventListener("change", () => {
 async function renderLeaderboard(): Promise<void> {
   const board = await loadLeaderboard();
   if (board.length === 0) {
-    leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="9">기록이 없습니다 — 첫 기록의 주인공이 되어보세요!</td></tr>`;
+    leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="10">기록이 없습니다 — 첫 기록의 주인공이 되어보세요!</td></tr>`;
     return;
   }
   leaderboardBody.innerHTML = board
@@ -133,6 +133,7 @@ async function renderLeaderboard(): Promise<void> {
           <td>${entry.score}</td>
           <td>${escapeHtml(entry.speed)}</td>
           <td>${escapeHtml(entry.difficulty)}</td>
+          <td>${entry.step}</td>
           <td>${escapeHtml(entry.bgm)}</td>
           <td>${formatLocalDate(entry.dateIso)}</td>
         </tr>`,
@@ -716,7 +717,12 @@ function showStepSetup(stepNumber: number, prevSettings: StepSettings): Promise<
  *  the cumulative score against the leaderboard and runs the photo/name-entry flow if it qualifies.
  *  Note that camera.stop() is deliberately deferred until after the photo countdown (or skipped
  *  straight to if not qualifying) — the countdown needs the live feed. */
-async function finalizeSession(cumulativeScore: number, finalSettings: StepSettings, camera: CameraManager): Promise<void> {
+async function finalizeSession(
+  cumulativeScore: number,
+  finalSettings: StepSettings,
+  camera: CameraManager,
+  stepsCompleted: number,
+): Promise<void> {
   if (!(await qualifiesForTop20(cumulativeScore))) {
     camera.stop();
     startOverlay.style.removeProperty("display");
@@ -739,6 +745,7 @@ async function finalizeSession(cumulativeScore: number, finalSettings: StepSetti
           score: cumulativeScore,
           speed: finalSettings.speedLabel,
           difficulty: finalSettings.difficultyLabel,
+          step: stepsCompleted,
           bgm: finalSettings.bgmLabel,
           photo: capturedPhoto,
         });
@@ -835,7 +842,7 @@ async function runSession(
     if (choice === "end") {
       handTracker.dispose();
       void audioCtx.close();
-      await finalizeSession(cumulativeScore, settings, camera);
+      await finalizeSession(cumulativeScore, settings, camera, step);
       return;
     }
 

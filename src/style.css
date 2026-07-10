@@ -345,6 +345,18 @@ body::before {
   text-overflow: ellipsis;
 }
 
+/* 순위/이름/사진 need far less horizontal room than the other columns — narrowing their padding
+   frees up enough width for the Step column without the table wrapping to a second line. */
+#leaderboard-table th:nth-child(1),
+#leaderboard-table td:nth-child(1),
+#leaderboard-table th:nth-child(2),
+#leaderboard-table td:nth-child(2),
+#leaderboard-table th:nth-child(3),
+#leaderboard-table td:nth-child(3) {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
 #leaderboard-table td:nth-child(4) {
   white-space: normal;
   max-width: 180px;
@@ -1161,7 +1173,7 @@ body::before {
   /* Squishing 8 columns to fit a phone's width made every cell unreadable — instead the table
      keeps a real minimum width and the panel scrolls horizontally to reach the rest. */
   #leaderboard-table {
-    min-width: 480px;
+    min-width: 520px;
     font-size: 11px;
   }
 

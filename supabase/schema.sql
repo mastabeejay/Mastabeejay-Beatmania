@@ -19,13 +19,16 @@ create table if not exists leaderboard (
   score integer not null,
   speed text not null default '-',
   difficulty text not null default '-',
+  step integer not null default 1,
   bgm text not null default '-',
   photo text,
   created_at timestamptz not null default now()
 );
 
--- Migrate a database created before the photo column existed.
+-- Migrate a database created before these columns existed. Existing rows default to step 1 — they
+-- predate the multi-step escalation feature, so they're all single-step runs.
 alter table leaderboard add column if not exists photo text;
+alter table leaderboard add column if not exists step integer not null default 1;
 
 create table if not exists guestbook (
   id bigint generated always as identity primary key,
@@ -66,17 +69,18 @@ grant select on guestbook_public to anon, authenticated;
 
 -- --- RPC functions (all security definer, all owned by postgres) --------------------------------
 
--- Signature changed (added p_photo) — drop the old 6-arg overload so it doesn't linger alongside
--- the new one.
+-- Signature changed (added p_photo, then p_step) — drop the older overloads so they don't linger
+-- alongside the current one.
 drop function if exists submit_score(text, text, integer, text, text, text);
+drop function if exists submit_score(text, text, integer, text, text, text, text);
 
 create or replace function submit_score(
-  p_name text, p_message text, p_score integer, p_speed text, p_difficulty text, p_bgm text, p_photo text default null
+  p_name text, p_message text, p_score integer, p_speed text, p_difficulty text, p_bgm text, p_photo text default null, p_step integer default 1
 ) returns setof leaderboard
 language plpgsql security definer set search_path = public as $$
 begin
-  insert into leaderboard (name, message, score, speed, difficulty, bgm, photo)
-  values (left(p_name, 20), left(p_message, 80), p_score, left(p_speed, 10), left(p_difficulty, 10), left(p_bgm, 10), left(p_photo, 500000));
+  insert into leaderboard (name, message, score, speed, difficulty, step, bgm, photo)
+  values (left(p_name, 20), left(p_message, 80), p_score, left(p_speed, 10), left(p_difficulty, 10), greatest(p_step, 1), left(p_bgm, 10), left(p_photo, 500000));
 
   -- Keep only the current top 20 — mirrors the old server's trim-after-insert behavior.
   delete from leaderboard where id not in (
@@ -152,7 +156,7 @@ begin
 end;
 $$;
 
-grant execute on function submit_score(text, text, integer, text, text, text, text) to anon, authenticated;
+grant execute on function submit_score(text, text, integer, text, text, text, text, integer) to anon, authenticated;
 grant execute on function add_guestbook_entry(text, text, text) to anon, authenticated;
 grant execute on function edit_guestbook_entry(bigint, text, text) to anon, authenticated;
 grant execute on function delete_guestbook_entry(bigint, text) to anon, authenticated;

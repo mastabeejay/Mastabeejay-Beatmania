@@ -6,6 +6,9 @@ export interface LeaderboardEntry {
   score: number;
   speed: string;
   difficulty: string;
+  /** How many escalation steps the run reached — 1 for a single-step run (including every row
+   *  recorded before the multi-step feature existed, via the column's DB default). */
+  step: number;
   bgm: string;
   /** Base64 data URL of the top-10 celebration photo — null for older rows migrated before this
    *  existed, or if the player's camera wasn't available at capture time. */
@@ -19,6 +22,7 @@ export interface NewLeaderboardEntry {
   score: number;
   speed: string;
   difficulty: string;
+  step: number;
   bgm: string;
   photo: string | null;
 }
@@ -29,6 +33,7 @@ interface LeaderboardRow {
   score: number;
   speed: string;
   difficulty: string;
+  step: number;
   bgm: string;
   photo: string | null;
   created_at: string;
@@ -43,6 +48,7 @@ function toEntry(row: LeaderboardRow): LeaderboardEntry {
     score: row.score,
     speed: row.speed,
     difficulty: row.difficulty,
+    step: row.step,
     bgm: row.bgm,
     photo: row.photo,
     dateIso: row.created_at,
@@ -54,7 +60,7 @@ function toEntry(row: LeaderboardRow): LeaderboardEntry {
 export async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
   const { data, error } = await supabase
     .from("leaderboard")
-    .select("name, message, score, speed, difficulty, bgm, photo, created_at")
+    .select("name, message, score, speed, difficulty, step, bgm, photo, created_at")
     .order("score", { ascending: false })
     .order("id", { ascending: true })
     .limit(MAX_ENTRIES);
@@ -83,6 +89,7 @@ export async function addLeaderboardEntry(entry: NewLeaderboardEntry): Promise<L
     p_score: entry.score,
     p_speed: entry.speed,
     p_difficulty: entry.difficulty,
+    p_step: entry.step,
     p_bgm: entry.bgm,
     p_photo: entry.photo,
   });
