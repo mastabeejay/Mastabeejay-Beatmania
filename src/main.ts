@@ -99,9 +99,9 @@ function updateSongFileNameDisplay(): void {
   if (selectedSongFile) {
     songFileName.textContent = `선택됨: ${selectedSongFile.name}`;
   } else if (bgmModeDefaultRadio.checked) {
-    songFileName.textContent = "기본 음악 트랙 중 랜덤 선택됨";
+    songFileName.textContent = "YBJ 힙합 트랙 중 랜덤 선택됨";
   } else {
-    songFileName.textContent = "선택 안 함 — 기본 테스트 트랙으로 시작";
+    songFileName.textContent = "선택 안 함 — 무반주 연습 트랙으로 시작";
   }
 }
 
@@ -480,7 +480,7 @@ async function startApp(
 
   // A selected song plays to its natural end; the default test track runs for a fixed 2 minutes.
   const gameDurationMs = songFile ? audioEngine.getDurationMs() : DEFAULT_GAME_DURATION_MS;
-  const bgmLabel = defaultTrack ? "기본음악" : songFile ? "음원" : "기본";
+  const bgmLabel = defaultTrack ? "YBJ" : songFile ? "자유" : "무반주";
 
   const skeletonRenderer = new DebugSkeletonRenderer(ctx);
   const gestureDetector = new GestureDetector(calibratedZones);
@@ -688,7 +688,7 @@ startButton.addEventListener("click", () => {
       .then((blob) => new File([blob], track.fileName, { type: blob.type }))
       .then((file) => startApp(sfxEngine, audioCtx, lookaheadMs, density, file, calibrationToggle.checked, speedLabel, difficultyLabel, track))
       .catch((err) => {
-        hud.textContent = `기본 음악 트랙 로드 실패: ${(err as Error).message}`;
+        hud.textContent = `YBJ 힙합 트랙 로드 실패: ${(err as Error).message}`;
         startOverlay.style.removeProperty("display");
       });
   } else {
