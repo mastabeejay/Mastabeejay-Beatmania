@@ -108,6 +108,11 @@ const photoCountdownDescEl = document.querySelector<HTMLDivElement>("#photo-coun
 const photoCountdownNumberEl = document.querySelector<HTMLDivElement>("#photo-countdown-number")!;
 const photoLightboxOverlay = document.querySelector<HTMLDivElement>("#photo-lightbox-overlay")!;
 const photoLightboxImage = document.querySelector<HTMLImageElement>("#photo-lightbox-image")!;
+const installGuideCards = document.querySelectorAll<HTMLButtonElement>(".install-guide-card");
+const installGuideOverlay = document.querySelector<HTMLDivElement>("#install-guide-overlay")!;
+const installGuideModalTitle = document.querySelector<HTMLDivElement>("#install-guide-modal-title")!;
+const installGuideModalSteps = document.querySelector<HTMLOListElement>("#install-guide-modal-steps")!;
+const installGuideCloseButton = document.querySelector<HTMLButtonElement>("#install-guide-close-button")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
@@ -320,6 +325,52 @@ guestbookOpenCard.addEventListener("click", () => {
 guestbookCloseButton.addEventListener("click", () => {
   guestbookOverlay.style.display = "none";
   hideAllGuestbookForms();
+});
+
+const INSTALL_GUIDES: Record<"pc" | "ios" | "android", { title: string; steps: string[] }> = {
+  pc: {
+    title: "💻 PC에 설치하기",
+    steps: [
+      "크롬(Chrome) 또는 엣지(Edge) 브라우저로 이 사이트에 접속하세요.",
+      "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 'Beejay's Deejay Jackey 설치'를 찾아 클릭하세요.",
+      "나타나는 창에서 '설치' 버튼을 클릭하세요.",
+      "바탕화면이나 시작 메뉴에 MBBM 아이콘이 생깁니다. 더블클릭하면 브라우저 주소창 없이 바로 게임이 실행됩니다.",
+    ],
+  },
+  ios: {
+    title: "📱 iPhone에 설치하기",
+    steps: [
+      "반드시 사파리(Safari) 브라우저로 이 사이트에 접속하세요. 다른 브라우저(크롬 등)에서는 이 기능이 보이지 않습니다.",
+      "화면 하단(또는 상단) 가운데의 공유 버튼(네모 안에 위쪽 화살표, □↑ 모양)을 탭하세요.",
+      "위로 열리는 메뉴를 아래로 스크롤해서 '홈 화면에 추가'를 찾아 탭하세요.",
+      "오른쪽 위의 '추가'를 탭하세요.",
+      "홈 화면에 MBBM 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
+    ],
+  },
+  android: {
+    title: "🤖 Android에 설치하기",
+    steps: [
+      "안드로이드 폰의 크롬(Chrome) 앱으로 이 사이트에 접속하세요.",
+      "화면 오른쪽 위의 점 3개(⋮) 메뉴를 탭하세요.",
+      "메뉴에서 '앱 설치' 또는 '홈 화면에 추가'를 찾아 탭하세요. 화면 하단에 자동으로 설치 안내 배너가 뜨면 그걸 탭해도 됩니다.",
+      "'설치' 버튼을 한 번 더 탭해서 확인하세요.",
+      "홈 화면에 MBBM 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
+    ],
+  },
+};
+
+installGuideCards.forEach((card) => {
+  card.addEventListener("click", () => {
+    const platform = card.dataset.platform as keyof typeof INSTALL_GUIDES;
+    const guide = INSTALL_GUIDES[platform];
+    installGuideModalTitle.textContent = guide.title;
+    installGuideModalSteps.innerHTML = guide.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("");
+    installGuideOverlay.style.display = "flex";
+  });
+});
+
+installGuideCloseButton.addEventListener("click", () => {
+  installGuideOverlay.style.display = "none";
 });
 
 void renderLeaderboard();
