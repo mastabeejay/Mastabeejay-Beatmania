@@ -621,26 +621,44 @@ async function renderAdminBannerImagesList(): Promise<void> {
   });
 }
 
-/** Caps the images row's height so its bottom edge stops a fixed gap above the footer (producer
- *  credit + admin link), which is position:fixed and would otherwise just render on top of
- *  whatever content happens to reach that far down — reading as the image getting "cut off".
- *  Measured live (not a static CSS value) since the images container's own document position
- *  depends on everything above it in the page, which isn't knowable in advance.
+/** Caps the notice-board's overall height (whichever of notice/graffiti/images it's showing) so
+ *  its bottom edge stops a fixed gap above the footer (producer credit + admin link), which is
+ *  position:fixed and would otherwise just sit under whatever content happens to reach that far
+ *  down — reading as clipped/overlapping. Measured live (not a static CSS value) since the
+ *  notice-board's document position depends on everything above it in the page, which isn't
+ *  knowable in advance.
  *
  *  #start-overlay is a `justify-content: center` flex column, so this element's own height feeds
  *  back into its own top position (shrinking it moves its top down, by half the shrink amount) —
  *  naively solving `top + height = target` using the pre-resize top overshoots the target every
  *  time. Solved in closed form instead: measuring height H0/top T0 before resizing, and using
  *  T(H) = T0 - (H-H0)/2 (the centering relationship) to solve for the H that puts the bottom edge
- *  exactly GAP_PX above the footer. Verified empirically in the browser preview. */
-function fitNoticeBoardImagesHeight(): void {
-  const GAP_PX = 16; // ~4mm at the 96 CSS-px/inch reference used throughout this spec
+ *  exactly GAP_PX above the footer. Verified empirically in the browser preview.
+ *
+ *  Images mode needs a *definite* pixel height on the inner row specifically (percentage heights
+ *  on the <img> children only resolve against a definite parent height), so that's the lever used
+ *  there — corrected by the notice-board's own padding/border so it's the *outer* box's edge that
+ *  lands GAP_PX above the footer, not just the inner row's. Notice/graffiti mode has no such
+ *  constraint, so a max-height directly on the notice-board itself is enough. */
+function fitNoticeBoardHeight(showImages: boolean): void {
+  const GAP_PX = 35; // ~9mm at the 96 CSS-px/inch reference used throughout this spec
   noticeBoardImages.style.height = "";
+  noticeBoard.style.maxHeight = "";
   const footerTop = footerRow.getBoundingClientRect().top;
-  const h0 = noticeBoardImages.getBoundingClientRect().height;
-  const t0 = noticeBoardImages.getBoundingClientRect().top;
-  const available = 2 * (footerTop - GAP_PX - t0) - h0;
-  noticeBoardImages.style.height = `${Math.max(60, available)}px`;
+
+  if (showImages) {
+    const boardBottomOffset = noticeBoard.getBoundingClientRect().bottom - noticeBoardImages.getBoundingClientRect().bottom;
+    const h0 = noticeBoardImages.getBoundingClientRect().height;
+    const t0 = noticeBoardImages.getBoundingClientRect().top;
+    const target = footerTop - GAP_PX - boardBottomOffset;
+    const available = 2 * (target - t0) - h0;
+    noticeBoardImages.style.height = `${Math.max(60, available)}px`;
+  } else {
+    const h0 = noticeBoard.getBoundingClientRect().height;
+    const t0 = noticeBoard.getBoundingClientRect().top;
+    const available = 2 * (footerTop - GAP_PX - t0) - h0;
+    noticeBoard.style.maxHeight = `${Math.max(60, available)}px`;
+  }
 }
 
 async function renderBanner(): Promise<void> {
@@ -672,11 +690,11 @@ async function renderBanner(): Promise<void> {
   noticeBoardImages.hidden = !showImages;
 
   noticeBoard.hidden = !showNotice && !showGraffiti && !showImages;
-  if (showImages) fitNoticeBoardImagesHeight();
+  if (!noticeBoard.hidden) fitNoticeBoardHeight(showImages);
 }
 
 window.addEventListener("resize", () => {
-  if (!noticeBoardImages.hidden) fitNoticeBoardImagesHeight();
+  if (!noticeBoard.hidden) fitNoticeBoardHeight(!noticeBoardImages.hidden);
 });
 
 /** Clears admin state everywhere (memory + sessionStorage) and drops back to the logged-out view.

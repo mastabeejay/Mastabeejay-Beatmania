@@ -597,6 +597,7 @@ body::before {
 #admin-banner-mode-select {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 14px;
   margin-bottom: 12px;
   font-family: var(--font-body);
@@ -1155,10 +1156,7 @@ body::before {
   flex-shrink: 0;
   text-align: center;
   background: linear-gradient(135deg, rgba(24, 8, 32, 0.88), rgba(6, 10, 18, 0.92));
-  /* Brushed-chrome edge — same light/dark/light gradient formula as .text-metallic and #start-button
-     — instead of the flat magenta border this used to have. */
-  border: 1px solid transparent;
-  border-image: linear-gradient(135deg, #eef4fa 0%, #9fb0c2 35%, #4c5a6c 50%, #9fb0c2 65%, #eef4fa 100%) 1;
+  border: none;
   box-shadow:
     0 0 22px rgba(201, 211, 222, 0.25),
     inset 0 0 24px rgba(0, 240, 255, 0.06);
