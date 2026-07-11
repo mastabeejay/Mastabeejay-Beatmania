@@ -431,6 +431,162 @@ body::before {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* --- Chatbot ------------------------------------------------------------------------------------ */
+
+/* Mobile-first default: a floating button opens the panel as a full-screen modal. This is the
+   right choice below ~1440px too, not just on phones — the centered start-screen column (up to
+   860px wide) plus its own side margins already fills anything narrower, so a persistent side
+   panel would overlap it. Upgraded to a persistent left-side panel only once verified-wide (see
+   the min-width:1440px override below). Still a child of #start-overlay, so it hides automatically
+   during gameplay along with everything else in that flow. */
+#chatbot-panel {
+  display: none;
+  position: fixed;
+  inset: 0;
+  flex-direction: column;
+  background: rgba(6, 10, 18, 0.96);
+  z-index: 20;
+}
+
+#chatbot-panel.chatbot-open {
+  display: flex;
+}
+
+#chatbot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.15);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--color-cyber-cyan);
+}
+
+#chatbot-close-button {
+  display: block;
+  font-size: 13px;
+  border: none;
+  background: none;
+  color: rgba(201, 211, 222, 0.6);
+  cursor: pointer;
+}
+
+#chatbot-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.chatbot-message {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 7px 10px;
+  border-radius: 10px;
+  max-width: 92%;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chatbot-message-bot {
+  align-self: flex-start;
+  background: rgba(0, 240, 255, 0.1);
+  color: rgba(201, 211, 222, 0.92);
+}
+
+.chatbot-message-user {
+  align-self: flex-end;
+  background: rgba(255, 210, 0, 0.14);
+  color: var(--color-cyber-silver);
+}
+
+#chatbot-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(0, 240, 255, 0.15);
+}
+
+#chatbot-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.06);
+  color: var(--color-cyber-silver);
+}
+
+#chatbot-send-button {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  background: rgba(0, 240, 255, 0.14);
+  color: var(--color-cyber-silver);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+#chatbot-send-button:hover {
+  background: rgba(0, 240, 255, 0.26);
+}
+
+#chatbot-toggle-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  background: rgba(6, 10, 18, 0.9);
+  color: var(--color-cyber-cyan);
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
+  z-index: 11;
+}
+
+/* Wide viewport only — enough room beside the centered (up to 860px-wide) start-screen column for
+   a persistent panel without overlapping it. Below this, the floating-button/modal default (above)
+   applies instead, exactly like it does on mobile. */
+@media (min-width: 1440px) {
+  #chatbot-panel {
+    display: flex;
+    inset: auto;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 260px;
+    height: min(60vh, 460px);
+    border-radius: 14px;
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    background: rgba(6, 10, 18, 0.82);
+    box-shadow: 0 0 24px rgba(0, 240, 255, 0.1);
+    overflow: hidden;
+    z-index: 11;
+  }
+
+  #chatbot-close-button,
+  #chatbot-toggle-button {
+    display: none;
+  }
+}
+
 /* --- Admin login ----------------------------------------------------------------------------- */
 
 #admin-login-link,

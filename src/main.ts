@@ -4,6 +4,8 @@ import { SfxEngine } from "./audio/SfxEngine";
 import { adminChangePassword, adminLogin, WrongAdminPasswordError } from "./game/Admin";
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
+import { askGemini, GeminiRateLimitedError, type ChatMessage } from "./game/Chatbot";
+import { matchFaq } from "./game/ChatbotFaq";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
 import {
@@ -168,6 +170,12 @@ const adminBannerImagesFilenames = document.querySelector<HTMLSpanElement>("#adm
 const adminBannerImagesError = document.querySelector<HTMLSpanElement>("#admin-banner-images-error")!;
 const adminBannerImagesSuccess = document.querySelector<HTMLSpanElement>("#admin-banner-images-success")!;
 const adminBannerImagesAddButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-add-button")!;
+const chatbotPanel = document.querySelector<HTMLDivElement>("#chatbot-panel")!;
+const chatbotMessages = document.querySelector<HTMLDivElement>("#chatbot-messages")!;
+const chatbotInput = document.querySelector<HTMLInputElement>("#chatbot-input")!;
+const chatbotSendButton = document.querySelector<HTMLButtonElement>("#chatbot-send-button")!;
+const chatbotCloseButton = document.querySelector<HTMLButtonElement>("#chatbot-close-button")!;
+const chatbotToggleButton = document.querySelector<HTMLButtonElement>("#chatbot-toggle-button")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
@@ -985,6 +993,48 @@ void initAdminSession().then(() => {
 void reportVisit().then((count) => {
   if (count !== null) visitorCountEl.textContent = count.toLocaleString();
 });
+
+// --- Chatbot -------------------------------------------------------------------------------------
+
+const chatbotHistory: ChatMessage[] = [];
+let chatbotBusy = false;
+
+function appendChatbotMessage(text: string, role: "user" | "model"): void {
+  const el = document.createElement("div");
+  el.className = `chatbot-message chatbot-message-${role === "user" ? "user" : "bot"}`;
+  el.textContent = text;
+  chatbotMessages.appendChild(el);
+  chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+}
+
+/** Gemini first (free tier); on any failure — quota hit, network error, no key configured yet —
+ *  falls back to plain keyword-matched FAQ answers instead of surfacing an error to the player. */
+async function sendChatbotMessage(): Promise<void> {
+  const question = chatbotInput.value.trim();
+  if (!question || chatbotBusy) return;
+  chatbotBusy = true;
+  chatbotInput.value = "";
+  appendChatbotMessage(question, "user");
+
+  try {
+    const answer = await askGemini(chatbotHistory, question);
+    chatbotHistory.push({ role: "user", text: question }, { role: "model", text: answer });
+    appendChatbotMessage(answer, "model");
+  } catch (err) {
+    if (!(err instanceof GeminiRateLimitedError)) console.error("Gemini 응답 실패:", err);
+    const faqAnswer = matchFaq(question);
+    appendChatbotMessage(faqAnswer ?? "죄송해요, 그 질문은 아직 답해드리기 어려워요. 다른 방식으로 물어봐 주시겠어요?", "model");
+  } finally {
+    chatbotBusy = false;
+  }
+}
+
+chatbotSendButton.addEventListener("click", () => void sendChatbotMessage());
+chatbotInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") void sendChatbotMessage();
+});
+chatbotToggleButton.addEventListener("click", () => chatbotPanel.classList.add("chatbot-open"));
+chatbotCloseButton.addEventListener("click", () => chatbotPanel.classList.remove("chatbot-open"));
 
 // Installed as a home-screen/desktop app (standalone display mode) has no browser chrome at all —
 // no address bar, no pull-to-refresh in some contexts — so there's otherwise no way to reload.
