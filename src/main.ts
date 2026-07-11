@@ -4,7 +4,7 @@ import { SfxEngine } from "./audio/SfxEngine";
 import { adminChangePassword, adminLogin, WrongAdminPasswordError } from "./game/Admin";
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
-import { askGemini, GeminiRateLimitedError, type ChatMessage } from "./game/Chatbot";
+import { askGemini, GeminiRateLimitedError, isGeminiConfigured, type ChatMessage } from "./game/Chatbot";
 import { matchFaq } from "./game/ChatbotFaq";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
@@ -171,6 +171,7 @@ const adminBannerImagesError = document.querySelector<HTMLSpanElement>("#admin-b
 const adminBannerImagesSuccess = document.querySelector<HTMLSpanElement>("#admin-banner-images-success")!;
 const adminBannerImagesAddButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-add-button")!;
 const chatbotPanel = document.querySelector<HTMLDivElement>("#chatbot-panel")!;
+const chatbotMode = document.querySelector<HTMLSpanElement>("#chatbot-mode")!;
 const chatbotMessages = document.querySelector<HTMLDivElement>("#chatbot-messages")!;
 const chatbotInput = document.querySelector<HTMLInputElement>("#chatbot-input")!;
 const chatbotSendButton = document.querySelector<HTMLButtonElement>("#chatbot-send-button")!;
@@ -994,10 +995,18 @@ void reportVisit().then((count) => {
   if (count !== null) visitorCountEl.textContent = count.toLocaleString();
 });
 
-// --- Chatbot -------------------------------------------------------------------------------------
+// --- Chatbot (Jaybot) ------------------------------------------------------------------------------
 
 const chatbotHistory: ChatMessage[] = [];
 let chatbotBusy = false;
+
+/** Shown in the panel header so it's visible which brain is answering: Gemini normally, the fixed
+ *  FAQ when the free-tier quota is exhausted (or no key is configured). Starts from the configured
+ *  state and then tracks what actually happened on the most recent message. */
+function setChatbotMode(aiMode: boolean): void {
+  chatbotMode.textContent = aiMode ? "AI Gemini 모드" : "Local FAQ 모드";
+}
+setChatbotMode(isGeminiConfigured);
 
 function appendChatbotMessage(text: string, role: "user" | "model"): void {
   const el = document.createElement("div");
@@ -1019,9 +1028,11 @@ async function sendChatbotMessage(): Promise<void> {
   try {
     const answer = await askGemini(chatbotHistory, question);
     chatbotHistory.push({ role: "user", text: question }, { role: "model", text: answer });
+    setChatbotMode(true);
     appendChatbotMessage(answer, "model");
   } catch (err) {
     if (!(err instanceof GeminiRateLimitedError)) console.error("Gemini 응답 실패:", err);
+    setChatbotMode(false);
     const faqAnswer = matchFaq(question);
     appendChatbotMessage(faqAnswer ?? "죄송해요, 그 질문은 아직 답해드리기 어려워요. 다른 방식으로 물어봐 주시겠어요?", "model");
   } finally {
@@ -1033,7 +1044,10 @@ chatbotSendButton.addEventListener("click", () => void sendChatbotMessage());
 chatbotInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") void sendChatbotMessage();
 });
-chatbotToggleButton.addEventListener("click", () => chatbotPanel.classList.add("chatbot-open"));
+chatbotToggleButton.addEventListener("click", () => {
+  const opened = chatbotPanel.classList.toggle("chatbot-open");
+  if (opened) chatbotInput.focus();
+});
 chatbotCloseButton.addEventListener("click", () => chatbotPanel.classList.remove("chatbot-open"));
 
 // Installed as a home-screen/desktop app (standalone display mode) has no browser chrome at all —

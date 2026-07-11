@@ -191,18 +191,27 @@
         </div>
         <div id="chatbot-panel">
           <div id="chatbot-header">
-            <span id="chatbot-title">🎮 BDJ 도우미</span>
+            <div id="chatbot-header-left">
+              <img id="chatbot-header-icon" src="/icons/jaybot.png" alt="Jaybot" />
+              <div id="chatbot-header-text">
+                <span id="chatbot-title">Jaybot (제이봇)</span>
+                <span id="chatbot-mode"></span>
+              </div>
+            </div>
             <button id="chatbot-close-button" type="button" aria-label="닫기">✕</button>
           </div>
           <div id="chatbot-messages">
-            <div class="chatbot-message chatbot-message-bot">안녕하세요! BDJ 플레이 방법이나 기능에 대해 무엇이든 물어보세요.</div>
+            <div class="chatbot-message chatbot-message-bot">안녕하세요, 제이봇입니다! BDJ 플레이 방법이나 기능에 대해 무엇이든 물어보세요.</div>
           </div>
           <div id="chatbot-input-row">
             <input type="text" id="chatbot-input" placeholder="게임에 대해 물어보세요..." maxlength="300" />
             <button id="chatbot-send-button" type="button">전송</button>
           </div>
         </div>
-        <button id="chatbot-toggle-button" type="button" aria-label="챗봇 열기">💬</button>
+        <button id="chatbot-toggle-button" type="button" aria-label="제이봇 열기">
+          <img id="chatbot-toggle-icon" src="/icons/jaybot.png" alt="" />
+          <span id="chatbot-toggle-label">Jaybot</span>
+        </button>
       </div>
       <div id="admin-login-overlay">
         <div id="admin-login-panel">

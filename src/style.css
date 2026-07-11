@@ -431,21 +431,30 @@ body::before {
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* --- Chatbot ------------------------------------------------------------------------------------ */
+/* --- Chatbot (Jaybot) ---------------------------------------------------------------------------- */
 
-/* Mobile-first default: a floating button opens the panel as a full-screen modal. This is the
-   right choice below ~1440px too, not just on phones — the centered start-screen column (up to
-   860px wide) plus its own side margins already fills anything narrower, so a persistent side
-   panel would overlap it. Upgraded to a persistent left-side panel only once verified-wide (see
-   the min-width:1440px override below). Still a child of #start-overlay, so it hides automatically
-   during gameplay along with everything else in that flow. */
+/* Left-anchored floating panel at every width — deliberately NOT a full-screen modal, so the main
+   start screen stays visible behind/beside it while chatting. Opens below the top-left Jaybot
+   icon. Still a child of #start-overlay, so it hides automatically during gameplay along with
+   everything else in that flow. */
 #chatbot-panel {
   display: none;
   position: fixed;
-  inset: 0;
+  left: 16px;
+  top: 96px;
   flex-direction: column;
-  background: rgba(6, 10, 18, 0.96);
-  z-index: 20;
+  /* Sized to the actual free gap beside the centered start-screen column (max 860px wide), so the
+     panel hugs the left margin instead of covering the main content — with a 220px floor so it
+     stays usable on viewports where that gap runs out. */
+  width: clamp(220px, calc((100vw - 860px) / 2 - 24px), 320px);
+  max-width: 80vw;
+  height: min(58vh, 440px);
+  border-radius: 14px;
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  background: rgba(6, 10, 18, 0.92);
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.12);
+  overflow: hidden;
+  z-index: 12;
 }
 
 #chatbot-panel.chatbot-open {
@@ -456,13 +465,46 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid rgba(0, 240, 255, 0.15);
+}
+
+#chatbot-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#chatbot-header-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+}
+
+#chatbot-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+#chatbot-title {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.06em;
   color: var(--color-cyber-cyan);
+}
+
+/* Which brain answered the last message — "AI Gemini 모드" normally, "Local FAQ 모드" when the
+   free-tier quota is exhausted (or no key) and answers come from the fixed FAQ instead. */
+#chatbot-mode {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: rgba(255, 210, 0, 0.75);
 }
 
 #chatbot-close-button {
@@ -542,49 +584,46 @@ body::before {
   background: rgba(0, 240, 255, 0.26);
 }
 
+/* Jaybot launcher — the circularly-cropped IMG_1141 artwork with the name under it, pinned to the
+   top-left of the start screen (top-left is free there: the refresh/social buttons live top-right,
+   and the gameplay HUD that also uses top-left sits *behind* the start overlay). */
 #chatbot-toggle-button {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 3px;
   position: fixed;
   left: 16px;
-  bottom: 16px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 1px solid rgba(0, 240, 255, 0.4);
-  background: rgba(6, 10, 18, 0.9);
-  color: var(--color-cyber-cyan);
-  font-size: 20px;
+  top: 14px;
+  padding: 0;
+  border: none;
+  background: none;
   cursor: pointer;
-  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
-  z-index: 11;
+  z-index: 12;
 }
 
-/* Wide viewport only — enough room beside the centered (up to 860px-wide) start-screen column for
-   a persistent panel without overlapping it. Below this, the floating-button/modal default (above)
-   applies instead, exactly like it does on mobile. */
-@media (min-width: 1440px) {
-  #chatbot-panel {
-    display: flex;
-    inset: auto;
-    left: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 260px;
-    height: min(60vh, 460px);
-    border-radius: 14px;
-    border: 1px solid rgba(0, 240, 255, 0.25);
-    background: rgba(6, 10, 18, 0.82);
-    box-shadow: 0 0 24px rgba(0, 240, 255, 0.1);
-    overflow: hidden;
-    z-index: 11;
-  }
+#chatbot-toggle-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(0, 240, 255, 0.5);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
 
-  #chatbot-close-button,
-  #chatbot-toggle-button {
-    display: none;
-  }
+#chatbot-toggle-button:hover #chatbot-toggle-icon {
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.55);
+  transform: scale(1.05);
+}
+
+#chatbot-toggle-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--color-cyber-cyan);
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
 }
 
 /* --- Admin login ----------------------------------------------------------------------------- */

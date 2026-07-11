@@ -16,12 +16,15 @@ export interface ChatMessage {
   text: string;
 }
 
+/** Whether AI mode is even possible in this build — drives the panel's initial mode label. */
+export const isGeminiConfigured = !!GEMINI_API_KEY;
+
 /** Thrown for a rate-limit/quota response specifically, so the caller can fall back to the FAQ
  *  bot silently instead of showing a raw error — this is an expected, designed-for outcome on the
  *  free tier, not a bug. */
 export class GeminiRateLimitedError extends Error {}
 
-const SYSTEM_PROMPT = `당신은 웹 브라우저 기반 웹캠 손동작 리듬게임 "Beejay's Deejay Jackey" (약칭 BDJ, 부제 "Masta Beejay Beat Breaker")의 안내 챗봇입니다. 2026년 임봉진(Beejay)님이 제작했습니다. beatmania IIDX류의 리듬게임에서 영감을 받은 독자적인 팬 제작 게임이며, Konami나 beatmania IIDX와 공식적인 제휴/라이선스 관계는 없습니다.
+const SYSTEM_PROMPT = `당신의 이름은 "Jaybot (제이봇)"입니다. 웹 브라우저 기반 웹캠 손동작 리듬게임 "Beejay's Deejay Jackey" (약칭 BDJ, 부제 "Masta Beejay Beat Breaker")의 안내 챗봇입니다. 이름을 물으면 "Jaybot (제이봇)"이라고 답하세요. 이 게임은 2026년 임봉진(Beejay)님이 제작했습니다. beatmania IIDX류의 리듬게임에서 영감을 받은 독자적인 팬 제작 게임이며, Konami나 beatmania IIDX와 공식적인 제휴/라이선스 관계는 없습니다.
 
 # 게임 방식
 - 별도 컨트롤러 없이 웹캠으로 손 동작을 인식해서 플레이합니다 (MediaPipe 손 랜드마크 인식 사용).
@@ -51,6 +54,7 @@ const SYSTEM_PROMPT = `당신은 웹 브라우저 기반 웹캠 손동작 리듬
 # 답변 스타일
 - 사용자가 쓰는 언어로 답하세요 (한국어로 물으면 한국어로, 영어로 물으면 영어로).
 - 친근하고 간결하게 답하세요. 확실하지 않은 내용은 지어내지 말고 모른다고 솔직히 말하세요.
+- 순수한 일반 텍스트로만 답하세요. 마크다운 서식(**, *, #, - 목록 기호 등)은 절대 사용하지 마세요 — 채팅창이 서식을 렌더링하지 않아 기호가 그대로 노출됩니다.
 - 이 게임과 무관한 요청(코드 작성, 일반 상식, 다른 주제의 잡담 등)은 정중히 사양하고 게임 관련 질문으로 화제를 돌리세요.`;
 
 function buildRequestBody(history: ChatMessage[], userMessage: string) {
