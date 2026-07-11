@@ -18,7 +18,7 @@ import {
 } from "./game/Guestbook";
 import { addLeaderboardEntry, adminDeleteLeaderboardEntries, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
-import { adminSetNotice, loadNotice } from "./game/Notice";
+import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
 import { ScoreManager } from "./game/ScoreManager";
@@ -139,14 +139,18 @@ const adminPanelOpenButton = document.querySelector<HTMLButtonElement>("#admin-p
 const adminPanelOverlay = document.querySelector<HTMLDivElement>("#admin-panel-overlay")!;
 const adminPanelCloseButton = document.querySelector<HTMLButtonElement>("#admin-panel-close-button")!;
 const adminNoticeInput = document.querySelector<HTMLTextAreaElement>("#admin-notice-input")!;
-const adminNoticeSaveButton = document.querySelector<HTMLButtonElement>("#admin-notice-save-button")!;
+const adminGraffitiInput = document.querySelector<HTMLInputElement>("#admin-graffiti-input")!;
+const adminBannerModeRadios = document.querySelectorAll<HTMLInputElement>('input[name="admin-banner-mode"]');
+const adminBannerSaveButton = document.querySelector<HTMLButtonElement>("#admin-banner-save-button")!;
 const adminSocialLinksList = document.querySelector<HTMLDivElement>("#admin-social-links-list")!;
 const adminSocialLinkPlatformSelect = document.querySelector<HTMLSelectElement>("#admin-social-link-platform")!;
 const adminSocialLinkUrlInput = document.querySelector<HTMLInputElement>("#admin-social-link-url")!;
 const adminSocialLinkAddButton = document.querySelector<HTMLButtonElement>("#admin-social-link-add-button")!;
 const socialLinksContainer = document.querySelector<HTMLDivElement>("#social-links-container")!;
 const noticeBoard = document.querySelector<HTMLDivElement>("#notice-board")!;
+const noticeBoardLabel = document.querySelector<HTMLDivElement>("#notice-board-label")!;
 const noticeBoardText = document.querySelector<HTMLDivElement>("#notice-board-text")!;
+const noticeBoardGraffiti = document.querySelector<HTMLDivElement>("#notice-board-graffiti")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
@@ -582,10 +586,17 @@ async function renderAdminSocialLinksList(): Promise<void> {
   });
 }
 
-async function renderNotice(): Promise<void> {
-  const message = await loadNotice();
-  noticeBoardText.textContent = message ?? "";
-  noticeBoard.hidden = !message;
+async function renderBanner(): Promise<void> {
+  const banner = await loadBanner();
+  const showNotice = banner.displayMode === "notice" && !!banner.message;
+  const showGraffiti = banner.displayMode === "graffiti" && !!banner.graffitiText;
+
+  noticeBoardText.textContent = banner.message ?? "";
+  noticeBoardText.hidden = !showNotice;
+  noticeBoardGraffiti.textContent = banner.graffitiText ?? "";
+  noticeBoardGraffiti.hidden = !showGraffiti;
+  noticeBoardLabel.hidden = !showNotice;
+  noticeBoard.hidden = !showNotice && !showGraffiti;
 }
 
 /** Clears admin state everywhere (memory + sessionStorage) and drops back to the logged-out view.
@@ -647,8 +658,12 @@ function handleAdminPanelError(err: unknown, context: string): void {
 }
 
 adminPanelOpenButton.addEventListener("click", () => {
-  void loadNotice().then((message) => {
-    adminNoticeInput.value = message ?? "";
+  void loadBanner().then((banner) => {
+    adminNoticeInput.value = banner.message ?? "";
+    adminGraffitiInput.value = banner.graffitiText ?? "";
+    adminBannerModeRadios.forEach((radio) => {
+      radio.checked = radio.value === banner.displayMode;
+    });
   });
   void renderAdminSocialLinksList();
   adminPanelOverlay.style.display = "flex";
@@ -658,11 +673,13 @@ adminPanelCloseButton.addEventListener("click", () => {
   adminPanelOverlay.style.display = "none";
 });
 
-adminNoticeSaveButton.addEventListener("click", () => {
+adminBannerSaveButton.addEventListener("click", () => {
   if (!adminPassword) return;
-  void adminSetNotice(adminNoticeInput.value, adminPassword)
-    .then(() => renderNotice())
-    .catch((err) => handleAdminPanelError(err, "공지 저장 실패:"));
+  const checkedRadio = Array.from(adminBannerModeRadios).find((radio) => radio.checked);
+  const displayMode = (checkedRadio?.value as BannerMode | undefined) ?? "none";
+  void adminSetBanner(adminNoticeInput.value, adminGraffitiInput.value, displayMode, adminPassword)
+    .then(() => renderBanner())
+    .catch((err) => handleAdminPanelError(err, "배너 저장 실패:"));
 });
 
 adminSocialLinkAddButton.addEventListener("click", () => {
@@ -720,7 +737,7 @@ void initAdminSession().then(() => {
   void renderLeaderboard();
   void renderGuestbook();
   void renderSocialLinks();
-  void renderNotice();
+  void renderBanner();
 });
 
 void reportVisit().then((count) => {

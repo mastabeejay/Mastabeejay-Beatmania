@@ -78,14 +78,23 @@ create table if not exists social_links (
   created_at timestamptz not null default now()
 );
 
--- Singleton notice banner shown on the start screen, editable only by the admin.
+-- Singleton banner shown on the start screen, editable only by the admin — either a plain notice
+-- message or a big graffiti-style tag, never both at once (display_mode picks which, if either).
+-- display_mode is constrained by admin_set_banner() below, not a table CHECK — a CHECK added here
+-- wouldn't retroactively apply to a table that already exists from an earlier run anyway.
 create table if not exists site_notice (
   id integer primary key default 1,
   message text,
+  graffiti_text text,
+  display_mode text not null default 'none',
   updated_at timestamptz not null default now(),
   constraint site_notice_single_row check (id = 1)
 );
 insert into site_notice (id, message) values (1, null) on conflict (id) do nothing;
+
+-- Migrate a database created before these columns existed.
+alter table site_notice add column if not exists graffiti_text text;
+alter table site_notice add column if not exists display_mode text not null default 'none';
 
 -- --- Row Level Security -------------------------------------------------------------------------
 -- Enabling RLS with no policy = deny-all by default. Only the policies below (plus the
@@ -315,18 +324,24 @@ begin
 end;
 $$;
 
-create or replace function admin_set_notice(p_message text, p_admin_password text)
-returns text
+-- Superseded by admin_set_banner (also sets graffiti_text/display_mode) — drop it so it doesn't
+-- linger as dead code.
+drop function if exists admin_set_notice(text, text);
+
+create or replace function admin_set_banner(p_notice_text text, p_graffiti_text text, p_display_mode text, p_admin_password text)
+returns setof site_notice
 language plpgsql security definer set search_path = public, extensions as $$
-declare
-  v_message text;
 begin
   if not admin_login(p_admin_password) then
     raise exception 'wrong_password';
   end if;
-  v_message := nullif(trim(left(p_message, 500)), '');
-  update site_notice set message = v_message, updated_at = now() where id = 1;
-  return v_message;
+  update site_notice set
+    message = nullif(trim(left(coalesce(p_notice_text, ''), 500)), ''),
+    graffiti_text = nullif(trim(left(coalesce(p_graffiti_text, ''), 60)), ''),
+    display_mode = case when p_display_mode in ('notice', 'graffiti') then p_display_mode else 'none' end,
+    updated_at = now()
+  where id = 1;
+  return query select * from site_notice where id = 1;
 end;
 $$;
 
@@ -341,4 +356,4 @@ grant execute on function admin_delete_leaderboard_entries(bigint[], text) to an
 grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;
 grant execute on function admin_update_social_link(bigint, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_social_link(bigint, text) to anon, authenticated;
-grant execute on function admin_set_notice(text, text) to anon, authenticated;
+grant execute on function admin_set_banner(text, text, text, text) to anon, authenticated;

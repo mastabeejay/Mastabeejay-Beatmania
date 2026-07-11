@@ -40,7 +40,11 @@
         <div id="status-hud"></div>
       </div>
       <div id="game-title" class="text-metallic">Beejay's Deejay Jackey</div>
-      <div id="game-subtitle">Produced by Beejay (Yim Bongjin) in 2026</div>
+      <div id="footer-row">
+        <div id="game-subtitle">Produced by Beejay (Yim Bongjin) in 2026</div>
+        <button id="admin-login-link" type="button">🔐 관리자</button>
+        <button id="admin-logout-button" type="button" hidden>🔓 관리자 모드 (로그아웃)</button>
+      </div>
       <button id="stop-button" type="button">⏹ 중단</button>
       <div id="calibration-status"></div>
       <div id="start-overlay">
@@ -95,7 +99,7 @@
         </div>
         <div id="main-controls-row">
           <div class="control-group" id="track-group">
-            <div class="control-group-title">[Track]</div>
+            <div class="control-group-title">Track</div>
             <div class="control-group-body">
               <div id="bgm-mode-select" class="bgm-mode-select">
                 <label>
@@ -112,7 +116,7 @@
             </div>
           </div>
           <div class="control-group" id="level-group">
-            <div class="control-group-title">[Level]</div>
+            <div class="control-group-title">Level</div>
             <div class="control-group-body">
               <label class="settings-select-label">속도
                 <select id="speed-select">
@@ -133,7 +137,7 @@
             </div>
           </div>
           <div class="control-group" id="option-group">
-            <div class="control-group-title">[Option]</div>
+            <div class="control-group-title">Option</div>
             <div class="control-group-body">
               <label id="calibration-toggle-label">
                 <input type="checkbox" id="calibration-toggle" />
@@ -157,9 +161,8 @@
         <div id="notice-board" hidden>
           <div id="notice-board-label">📢 NOTICE</div>
           <div id="notice-board-text"></div>
+          <div id="notice-board-graffiti"></div>
         </div>
-        <button id="admin-login-link" type="button">🔐 관리자</button>
-        <button id="admin-logout-button" type="button" hidden>🔓 관리자 모드 (로그아웃)</button>
         <button id="admin-panel-open-button" type="button" hidden>⚙️ 관리자 패널</button>
         <div id="install-guide-section">
           <div id="install-guide-cards">
@@ -202,9 +205,21 @@
           <div id="admin-panel-title" class="text-metallic-gold">관리자 패널</div>
 
           <div class="admin-panel-section">
-            <div class="admin-panel-section-title">공지사항</div>
-            <textarea id="admin-notice-input" maxlength="500" placeholder="공지 내용을 입력하세요 (비우고 저장하면 공지가 사라집니다)"></textarea>
-            <button id="admin-notice-save-button" type="button">저장</button>
+            <div class="admin-panel-section-title">공지 / 그래피티</div>
+            <div id="admin-banner-mode-select">
+              <label><input type="radio" name="admin-banner-mode" id="admin-banner-mode-none" value="none" /> 표시 안 함</label>
+              <label><input type="radio" name="admin-banner-mode" id="admin-banner-mode-notice" value="notice" /> 공지 표시</label>
+              <label><input type="radio" name="admin-banner-mode" id="admin-banner-mode-graffiti" value="graffiti" /> 그래피티 표시</label>
+            </div>
+            <label class="admin-banner-field-label">
+              공지 내용
+              <textarea id="admin-notice-input" maxlength="500" placeholder="공지 내용을 입력하세요"></textarea>
+            </label>
+            <label class="admin-banner-field-label">
+              그래피티 문구 (짧게 — 예: MBBM 2026)
+              <input type="text" id="admin-graffiti-input" maxlength="60" placeholder="그래피티로 표시할 글자/숫자" />
+            </label>
+            <button id="admin-banner-save-button" type="button">저장</button>
           </div>
 
           <div class="admin-panel-section">

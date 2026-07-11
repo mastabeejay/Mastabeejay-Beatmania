@@ -205,21 +205,30 @@ body::before {
   z-index: 5;
 }
 
-/* Brushed-metal text with a moving specular highlight — a diagonal bright band sweeps across the
-   glyphs and back, reading as light glinting off metal rather than the static gradient the other
-   .text-metallic elements use. */
-#game-subtitle {
+/* Fixed footer row holding the producer credit plus the admin login/logout toggle just to its
+   right — a shared flex container so the button's gap from the text stays consistent regardless
+   of the credit text's own (variable) rendered width. */
+#footer-row {
   position: fixed;
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  z-index: 11;
+}
+
+/* Brushed-metal text with a moving specular highlight — a diagonal bright band sweeps across the
+   glyphs and back, reading as light glinting off metal rather than the static gradient the other
+   .text-metallic elements use. */
+#game-subtitle {
   font-family: var(--font-body);
   font-weight: 700;
   font-size: 14px;
   letter-spacing: 0.06em;
   white-space: nowrap;
   pointer-events: none;
-  z-index: 11;
   background: linear-gradient(100deg, #838d9b 30%, #ffffff 48%, #f5f9ff 50%, #ffffff 52%, #838d9b 70%);
   background-size: 250% 100%;
   background-position: 200% 0;
@@ -585,11 +594,40 @@ body::before {
   margin-bottom: 10px;
 }
 
-#admin-notice-input {
+#admin-banner-mode-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 12px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: rgba(201, 211, 222, 0.85);
+}
+
+#admin-banner-mode-select label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  accent-color: var(--color-cyber-cyan);
+}
+
+.admin-banner-field-label {
+  display: block;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  color: rgba(201, 211, 222, 0.7);
+  margin-bottom: 10px;
+}
+
+#admin-notice-input,
+#admin-graffiti-input {
+  display: block;
   width: 100%;
   box-sizing: border-box;
-  min-height: 72px;
-  resize: vertical;
+  margin-top: 6px;
   font-family: var(--font-body);
   font-size: 13px;
   padding: 10px 12px;
@@ -597,10 +635,15 @@ body::before {
   border: 1px solid rgba(0, 240, 255, 0.3);
   background: rgba(0, 240, 255, 0.06);
   color: var(--color-cyber-silver);
+}
+
+#admin-notice-input {
+  min-height: 72px;
+  resize: vertical;
   margin-bottom: 8px;
 }
 
-#admin-notice-save-button,
+#admin-banner-save-button,
 #admin-social-link-add-button,
 .admin-social-link-row button {
   font-family: var(--font-body);
@@ -615,7 +658,7 @@ body::before {
   transition: background 0.2s ease;
 }
 
-#admin-notice-save-button:hover,
+#admin-banner-save-button:hover,
 #admin-social-link-add-button:hover,
 .admin-social-link-row button:hover {
   background: rgba(0, 240, 255, 0.26);
@@ -1089,6 +1132,28 @@ body::before {
   z-index: 1;
 }
 
+/* Spray-paint tag look for arbitrary admin-entered text: a rainbow gradient fill instead of a flat
+   color, a thick dark stroke standing in for a spray-can outline, a slight rotate+skew so it reads
+   as sprayed on at an angle rather than typeset, and a soft drop shadow for depth. */
+#notice-board-graffiti {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(28px, 6vw, 48px);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  word-break: break-word;
+  background: linear-gradient(135deg, #ffd200 0%, #ff2ee0 35%, #00f0ff 70%, #ffd200 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(0, 0, 0, 0.55);
+  transform: rotate(-2deg) skewX(-4deg);
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 18px rgba(255, 46, 224, 0.4));
+  position: relative;
+  z-index: 1;
+}
+
 #guestbook-overlay {
   display: none;
   position: fixed;
@@ -1348,12 +1413,22 @@ body::before {
 }
 
 .control-group-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 14px;
   letter-spacing: 0.14em;
   color: var(--color-cyber-cyan);
   text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+.control-group-title::before {
+  content: "◆";
+  font-size: 9px;
+  color: var(--color-cyber-gold);
+  text-shadow: 0 0 6px rgba(255, 210, 0, 0.7);
 }
 
 .control-group-body {
@@ -1369,7 +1444,7 @@ body::before {
   gap: 18px;
   font-family: var(--font-body);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   color: rgba(201, 211, 222, 0.85);
 }
 
@@ -1388,7 +1463,7 @@ body::before {
   align-items: center;
   font-family: var(--font-body);
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .settings-select-label select {
@@ -1450,7 +1525,7 @@ select option:disabled {
   background: rgba(0, 240, 255, 0.05);
   font-family: var(--font-body);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.25;
   color: rgba(201, 211, 222, 0.85);
   accent-color: var(--color-cyber-cyan);
@@ -1985,7 +2060,7 @@ select option:disabled {
   }
 
   .settings-select-label {
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .settings-select-label select {
@@ -1994,7 +2069,7 @@ select option:disabled {
   }
 
   #calibration-toggle-label {
-    font-size: 11px;
+    font-size: 12px;
     padding: 8px 12px;
   }
 
