@@ -1101,7 +1101,10 @@ chatbotInput.addEventListener("keydown", (event) => {
 });
 chatbotToggleButton.addEventListener("click", () => {
   const opened = chatbotPanel.classList.toggle("chatbot-open");
-  if (opened) chatbotInput.focus();
+  // Desktop nicety only: on phones, focusing here pops the soft keyboard the instant the panel
+  // opens (covering most of a landscape screen) and used to trigger iOS's focus auto-zoom — the
+  // keyboard should appear only when the user actually taps the input field.
+  if (opened && !window.matchMedia("(max-width: 640px), (max-height: 480px)").matches) chatbotInput.focus();
 });
 chatbotCloseButton.addEventListener("click", () => chatbotPanel.classList.remove("chatbot-open"));
 

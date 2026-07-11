@@ -2391,6 +2391,12 @@ select option:disabled {
     z-index: 20;
   }
 
+  /* 16px is iOS Safari's threshold for NOT auto-zooming the page when a field gets focus — the
+     old 12px made the whole layout blow up past the screen the moment the input was tapped. */
+  #chatbot-input {
+    font-size: 16px;
+  }
+
   /* Same story as the Jaybot launcher: the fixed bottom-right install-guide stack was covering
      the guestbook/notice/footer area. It becomes the column's last row, cards side by side. */
   #install-guide-section {
@@ -2463,18 +2469,14 @@ select option:disabled {
     padding: 4px 5px;
   }
 
-  /* Track takes a full row of its own; Level and Option share the next row side by side at the
-     same height (wrap keeps them from overflowing on very narrow screens). */
+  /* All three groups share one band: titles on one line, contents on the next — flex-start plus
+     equal single-line title heights means every group's body starts at the same y. */
   #main-controls-row {
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: center;
     align-items: flex-start;
     gap: 14px 14px;
-    width: 100%;
-  }
-
-  #track-group {
     width: 100%;
   }
 
@@ -2539,20 +2541,22 @@ select option:disabled {
     padding: 14px 40px;
   }
 
+  /* Welcome text and the guest-board button side by side at the same height. */
   #welcome-guestbook-row {
-    flex-direction: column;
-    gap: 10px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
     width: 100%;
   }
 
   #guestbook-open-card {
-    padding: 8px 16px;
+    padding: 8px 14px;
   }
 
   #visitor-welcome {
-    font-size: 14px;
+    font-size: 13px;
     text-align: center;
-    padding: 0 12px;
   }
 
   #install-guide-section {
@@ -2605,5 +2609,109 @@ select option:disabled {
   #notice-board-images {
     height: min(22vh, 260px);
     gap: 8px;
+  }
+}
+
+/* --- Phone portrait only (narrow AND tall — excludes landscape phones, which match the shared
+   block via max-height instead) ------------------------------------------------------------- */
+@media (max-width: 640px) and (min-height: 481px) {
+  #leaderboard-tagline {
+    font-size: 22px;
+  }
+
+  /* Everything shrinks and every item label breaks into two stacked lines ('무반주/연습',
+     '속도/(box)', 'Finger/Learning', …) so all three groups fit one 375px-wide band: titles on
+     one line, contents on the next, each aligned across the groups. */
+  #main-controls-row {
+    gap: 8px 10px;
+  }
+
+  .control-group {
+    gap: 6px;
+  }
+
+  .control-group-title {
+    font-size: 13px;
+  }
+
+  .control-group-body {
+    gap: 4px;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+  }
+
+  .bgm-mode-select {
+    gap: 4px;
+    font-size: 10px;
+    flex-wrap: nowrap;
+  }
+
+  .bgm-mode-select label {
+    width: 46px;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .song-file-label {
+    font-size: 10px;
+    padding: 4px 4px;
+    width: 52px;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .settings-select-label {
+    flex-direction: column;
+    gap: 3px;
+    font-size: 10px;
+  }
+
+  .settings-select-label select {
+    font-size: 10px;
+    padding: 2px 2px;
+  }
+
+  #calibration-toggle-label {
+    font-size: 10px;
+    padding: 5px 4px;
+    gap: 4px;
+  }
+
+  #calibration-toggle-text {
+    white-space: normal;
+    width: 46px;
+    text-align: center;
+  }
+
+  /* Two stacked lines ("Welcome to MastaBeejay World :" / "N Manias.") — the width is tuned so
+     the natural wrap lands right before the counter — with the guest-board button compacted so
+     both fit side by side on a 375px screen. */
+  #visitor-welcome {
+    font-size: 12px;
+    max-width: 185px;
+  }
+
+  #guestbook-open-card {
+    padding: 6px 10px;
+  }
+
+  #guestbook-card-title {
+    font-size: 12px;
+  }
+
+  #guestbook-card-sub {
+    font-size: 10px;
+  }
+}
+
+/* --- Phone landscape only (short viewport) ------------------------------------------------------ */
+@media (max-height: 480px) {
+  /* Plenty of width sideways — let the tagline fill it, and tuck it right under the Jaybot row. */
+  #leaderboard-tagline {
+    font-size: 27px;
+  }
+
+  #leaderboard-header {
+    margin-top: -6px;
   }
 }
