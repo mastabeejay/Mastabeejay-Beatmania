@@ -399,7 +399,9 @@ begin
     raise exception 'too_many_images';
   end if;
 
-  delete from site_banner_images;
+  -- "where true" — this Supabase project's Postgres rejects a bare unqualified DELETE outright
+  -- ("DELETE requires a WHERE clause"), even though clearing the whole table is the intent here.
+  delete from site_banner_images where true;
   insert into site_banner_images (image_data, sort_order)
   select img, idx - 1 from unnest(p_images) with ordinality as t(img, idx);
   update site_notice set display_mode = 'images', updated_at = now() where id = 1;
