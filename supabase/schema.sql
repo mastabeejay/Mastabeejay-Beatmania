@@ -78,10 +78,11 @@ create table if not exists social_links (
   created_at timestamptz not null default now()
 );
 
--- Singleton banner shown on the start screen, editable only by the admin — either a plain notice
--- message or a big graffiti-style tag, never both at once (display_mode picks which, if either).
--- display_mode is constrained by admin_set_banner() below, not a table CHECK — a CHECK added here
--- wouldn't retroactively apply to a table that already exists from an earlier run anyway.
+-- Singleton banner shown on the start screen, editable only by the admin — a plain notice message,
+-- a big graffiti-style tag, or an uploaded image set, never more than one at once (display_mode
+-- picks which, if any). display_mode is constrained by admin_set_banner() below, not a table CHECK
+-- — a CHECK added here wouldn't retroactively apply to a table that already exists from an earlier
+-- run anyway.
 create table if not exists site_notice (
   id integer primary key default 1,
   message text,
@@ -96,6 +97,18 @@ insert into site_notice (id, message) values (1, null) on conflict (id) do nothi
 alter table site_notice add column if not exists graffiti_text text;
 alter table site_notice add column if not exists display_mode text not null default 'none';
 
+-- Up to 4 admin-uploaded images shown side by side when display_mode = 'images'. Stored as
+-- data: URLs (like the leaderboard's celebration photo) rather than Supabase Storage, since the
+-- set is always tiny (<=4 rows) and the client already has the same base64-in-Postgres pattern.
+-- Uploading a new set always replaces the old one in full (see admin_set_banner_images) — this
+-- isn't a growing gallery, it's "the current banner images", just structured as up to 4 files.
+create table if not exists site_banner_images (
+  id bigint generated always as identity primary key,
+  image_data text not null,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 -- --- Row Level Security -------------------------------------------------------------------------
 -- Enabling RLS with no policy = deny-all by default. Only the policies below (plus the
 -- `security definer` functions further down, which bypass RLS) can touch these tables.
@@ -106,6 +119,7 @@ alter table visits enable row level security;
 alter table admin_settings enable row level security;
 alter table social_links enable row level security;
 alter table site_notice enable row level security;
+alter table site_banner_images enable row level security;
 -- `admin_settings` has no policies at all — not even select. Only admin_login() below can read it.
 
 drop policy if exists "public read leaderboard" on leaderboard;
@@ -118,6 +132,10 @@ grant select on social_links to anon, authenticated;
 drop policy if exists "public read site_notice" on site_notice;
 create policy "public read site_notice" on site_notice for select using (true);
 grant select on site_notice to anon, authenticated;
+
+drop policy if exists "public read site_banner_images" on site_banner_images;
+create policy "public read site_banner_images" on site_banner_images for select using (true);
+grant select on site_banner_images to anon, authenticated;
 
 -- No select policy on `guestbook` itself — password_hash must never reach the client. Anon reads
 -- go through the view below instead, which is defined without `security_invoker`, so it queries
@@ -355,10 +373,38 @@ begin
   update site_notice set
     message = nullif(trim(left(coalesce(p_notice_text, ''), 500)), ''),
     graffiti_text = nullif(trim(left(coalesce(p_graffiti_text, ''), 60)), ''),
-    display_mode = case when p_display_mode in ('notice', 'graffiti') then p_display_mode else 'none' end,
+    display_mode = case when p_display_mode in ('notice', 'graffiti', 'images') then p_display_mode else 'none' end,
     updated_at = now()
   where id = 1;
   return query select * from site_notice where id = 1;
+end;
+$$;
+
+-- Replaces the whole image set in one call (not an incremental add/remove) and switches
+-- display_mode to 'images' automatically — uploading images and having to separately remember to
+-- flip a mode radio would be a confusing two-step flow. Switching to notice/graffiti mode later
+-- (via admin_set_banner above) leaves these rows untouched, so switching back to 'images' doesn't
+-- require re-uploading.
+create or replace function admin_set_banner_images(p_images text[], p_admin_password text)
+returns setof site_banner_images
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  if p_images is null or array_length(p_images, 1) is null or array_length(p_images, 1) = 0 then
+    raise exception 'no_images';
+  end if;
+  if array_length(p_images, 1) > 4 then
+    raise exception 'too_many_images';
+  end if;
+
+  delete from site_banner_images;
+  insert into site_banner_images (image_data, sort_order)
+  select img, idx - 1 from unnest(p_images) with ordinality as t(img, idx);
+  update site_notice set display_mode = 'images', updated_at = now() where id = 1;
+
+  return query select * from site_banner_images order by sort_order;
 end;
 $$;
 
@@ -375,3 +421,4 @@ grant execute on function admin_add_social_link(text, text, text) to anon, authe
 grant execute on function admin_update_social_link(bigint, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_social_link(bigint, text) to anon, authenticated;
 grant execute on function admin_set_banner(text, text, text, text) to anon, authenticated;
+grant execute on function admin_set_banner_images(text[], text) to anon, authenticated;

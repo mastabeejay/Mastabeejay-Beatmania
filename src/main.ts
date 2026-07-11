@@ -18,6 +18,7 @@ import {
 } from "./game/Guestbook";
 import { addLeaderboardEntry, adminDeleteLeaderboardEntries, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
+import { adminSetBannerImages, loadBannerImages, type BannerImage } from "./game/BannerImages";
 import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
@@ -157,6 +158,10 @@ const noticeBoard = document.querySelector<HTMLDivElement>("#notice-board")!;
 const noticeBoardLabel = document.querySelector<HTMLDivElement>("#notice-board-label")!;
 const noticeBoardText = document.querySelector<HTMLDivElement>("#notice-board-text")!;
 const noticeBoardGraffiti = document.querySelector<HTMLDivElement>("#notice-board-graffiti")!;
+const noticeBoardImages = document.querySelector<HTMLDivElement>("#notice-board-images")!;
+const adminBannerImagesInput = document.querySelector<HTMLInputElement>("#admin-banner-images-input")!;
+const adminBannerImagesError = document.querySelector<HTMLSpanElement>("#admin-banner-images-error")!;
+const adminBannerImagesUploadButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-upload-button")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
@@ -597,12 +602,30 @@ async function renderBanner(): Promise<void> {
   const showNotice = banner.displayMode === "notice" && !!banner.message;
   const showGraffiti = banner.displayMode === "graffiti" && !!banner.graffitiText;
 
+  let images: BannerImage[] = [];
+  if (banner.displayMode === "images") images = await loadBannerImages();
+  const showImages = images.length > 0;
+
   noticeBoardText.textContent = banner.message ?? "";
   noticeBoardText.hidden = !showNotice;
   noticeBoardGraffiti.textContent = banner.graffitiText ?? "";
   noticeBoardGraffiti.hidden = !showGraffiti;
   noticeBoardLabel.hidden = !showNotice;
-  noticeBoard.hidden = !showNotice && !showGraffiti;
+
+  if (showImages) {
+    // Set via the DOM property, not interpolated into the HTML attribute above — consistent with
+    // how leaderboard/guestbook always avoid putting arbitrary content inside an attribute value.
+    noticeBoardImages.innerHTML = images.map((_, i) => `<img data-banner-image-index="${i}" alt="배너 이미지" />`).join("");
+    images.forEach((image, i) => {
+      const img = noticeBoardImages.querySelector<HTMLImageElement>(`img[data-banner-image-index="${i}"]`);
+      if (img) img.src = image.imageData;
+    });
+  } else {
+    noticeBoardImages.innerHTML = "";
+  }
+  noticeBoardImages.hidden = !showImages;
+
+  noticeBoard.hidden = !showNotice && !showGraffiti && !showImages;
 }
 
 /** Clears admin state everywhere (memory + sessionStorage) and drops back to the logged-out view.
@@ -682,6 +705,8 @@ adminPanelCloseButton.addEventListener("click", () => {
   adminChangeConfirmPasswordInput.value = "";
   adminChangePasswordError.hidden = true;
   adminChangePasswordSuccess.hidden = true;
+  adminBannerImagesInput.value = "";
+  adminBannerImagesError.hidden = true;
 });
 
 adminBannerSaveButton.addEventListener("click", () => {
@@ -691,6 +716,52 @@ adminBannerSaveButton.addEventListener("click", () => {
   void adminSetBanner(adminNoticeInput.value, adminGraffitiInput.value, displayMode, adminPassword)
     .then(() => renderBanner())
     .catch((err) => handleAdminPanelError(err, "배너 저장 실패:"));
+});
+
+const BANNER_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/bmp"];
+const BANNER_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
+const BANNER_IMAGE_MAX_COUNT = 4;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+adminBannerImagesUploadButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const currentAdminPassword = adminPassword;
+  const files = Array.from(adminBannerImagesInput.files ?? []);
+  adminBannerImagesError.hidden = true;
+
+  if (files.length < 1 || files.length > BANNER_IMAGE_MAX_COUNT) {
+    adminBannerImagesError.textContent = `이미지는 1~${BANNER_IMAGE_MAX_COUNT}개까지 선택할 수 있습니다.`;
+    adminBannerImagesError.hidden = false;
+    return;
+  }
+  for (const file of files) {
+    if (!BANNER_IMAGE_TYPES.includes(file.type)) {
+      adminBannerImagesError.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
+      adminBannerImagesError.hidden = false;
+      return;
+    }
+    if (file.size > BANNER_IMAGE_MAX_BYTES) {
+      adminBannerImagesError.textContent = `파일이 너무 큽니다 (최대 3MB): ${file.name}`;
+      adminBannerImagesError.hidden = false;
+      return;
+    }
+  }
+
+  void Promise.all(files.map(readFileAsDataUrl))
+    .then((dataUrls) => adminSetBannerImages(dataUrls, currentAdminPassword))
+    .then(() => {
+      adminBannerImagesInput.value = "";
+      return renderBanner();
+    })
+    .catch((err) => handleAdminPanelError(err, "이미지 업로드 실패:"));
 });
 
 adminSocialLinkAddButton.addEventListener("click", () => {

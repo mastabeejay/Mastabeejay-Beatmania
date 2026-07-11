@@ -676,6 +676,7 @@ body::before {
 #admin-banner-save-button,
 #admin-social-link-add-button,
 #admin-change-password-button,
+#admin-banner-images-upload-button,
 .admin-social-link-row button {
   font-family: var(--font-body);
   font-weight: 700;
@@ -692,8 +693,18 @@ body::before {
 #admin-banner-save-button:hover,
 #admin-social-link-add-button:hover,
 #admin-change-password-button:hover,
+#admin-banner-images-upload-button:hover,
 .admin-social-link-row button:hover {
   background: rgba(0, 240, 255, 0.26);
+}
+
+#admin-banner-images-input {
+  display: block;
+  margin-top: 6px;
+  margin-bottom: 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: rgba(201, 211, 222, 0.85);
 }
 
 #admin-social-links-list {
@@ -1214,6 +1225,34 @@ body::before {
     drop-shadow(0 0 26px rgba(0, 240, 255, 0.22));
   position: relative;
   z-index: 1;
+}
+
+/* Each image's height fills the row (a definite pixel height, not just a max-height — percentage
+   heights on the <img> children only resolve against a definite parent height), width follows its
+   own aspect ratio. flex-wrap is a safety net in case 4 wide images together would overflow the
+   panel's width; in the common case they just sit in one centered row with a small, fixed gap. */
+#notice-board-images {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: min(32vh, 400px);
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+#notice-board-images img {
+  height: 100%;
+  width: auto;
+  /* Without this, flexbox's default flex-shrink:1 collapses a replaced element's auto width to 0
+     when height is a percentage — the aspect ratio never gets a chance to resolve a real width. */
+  flex-shrink: 0;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 #guestbook-overlay {
@@ -2199,5 +2238,10 @@ select option:disabled {
 
   #admin-login-panel {
     padding: 18px;
+  }
+
+  #notice-board-images {
+    height: min(22vh, 260px);
+    gap: 8px;
   }
 }

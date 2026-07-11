@@ -162,6 +162,7 @@
           <div id="notice-board-label">📢 NOTICE</div>
           <div id="notice-board-text"></div>
           <div id="notice-board-graffiti"></div>
+          <div id="notice-board-images"></div>
         </div>
         <button id="admin-panel-open-button" type="button" hidden>⚙️ 관리자 패널</button>
         <div id="install-guide-section">
@@ -205,11 +206,12 @@
           <div id="admin-panel-title" class="text-metallic-gold">관리자 패널</div>
 
           <div class="admin-panel-section">
-            <div class="admin-panel-section-title">공지 / 그래피티</div>
+            <div class="admin-panel-section-title">배너 (공지 / 그래피티 / 이미지)</div>
             <div id="admin-banner-mode-select">
               <label><input type="radio" name="admin-banner-mode" id="admin-banner-mode-none" value="none" /> 표시 안 함</label>
               <label><input type="radio" name="admin-banner-mode" id="admin-banner-mode-notice" value="notice" /> 공지 표시</label>
               <label><input type="radio" name="admin-banner-mode" id="admin-banner-mode-graffiti" value="graffiti" /> 그래피티 표시</label>
+              <label><input type="radio" name="admin-banner-mode" id="admin-banner-mode-images" value="images" /> 이미지 표시</label>
             </div>
             <label class="admin-banner-field-label">
               공지 내용
@@ -219,7 +221,14 @@
               그래피티 문구 (짧게 — 예: MBBM 2026)
               <input type="text" id="admin-graffiti-input" maxlength="60" placeholder="그래피티로 표시할 글자/숫자" />
             </label>
-            <button id="admin-banner-save-button" type="button">저장</button>
+            <button id="admin-banner-save-button" type="button">저장 (공지/그래피티 모드)</button>
+
+            <label class="admin-banner-field-label" style="margin-top: 14px">
+              이미지 파일 (1~4개, JPG/JPEG/BMP/PNG/GIF, 개당 최대 3MB)
+              <input type="file" id="admin-banner-images-input" accept="image/jpeg,image/png,image/gif,image/bmp" multiple />
+            </label>
+            <span id="admin-banner-images-error" class="admin-panel-inline-error" hidden></span>
+            <button id="admin-banner-images-upload-button" type="button">이미지 업로드 (이미지 모드로 전환)</button>
           </div>
 
           <div class="admin-panel-section">

@@ -1,7 +1,7 @@
 import { WrongAdminPasswordError } from "./Admin";
 import { supabase } from "./supabaseClient";
 
-export type BannerMode = "none" | "notice" | "graffiti";
+export type BannerMode = "none" | "notice" | "graffiti" | "images";
 
 export interface SiteBanner {
   message: string | null;
