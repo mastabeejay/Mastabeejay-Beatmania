@@ -747,13 +747,19 @@ adminLogoutButton.addEventListener("click", () => forceAdminLogout());
 
 /** Shared by every admin-panel action below — a rejected password means the stored one no longer
  *  matches (e.g. the owner rotated it directly in Supabase), so drop out of admin mode entirely
- *  rather than leaving the panel open in a now-unauthenticated state. */
-function handleAdminPanelError(err: unknown, context: string): void {
+ *  rather than leaving the panel open in a now-unauthenticated state. Pass errorSpan for actions
+ *  that show their failure inline (not just console.error) — a silent failure there is exactly
+ *  what made past bugs ("업로드가 안 되고 있다") hard to diagnose with no visible cause. */
+function handleAdminPanelError(err: unknown, context: string, errorSpan?: HTMLSpanElement): void {
   if (err instanceof WrongAdminPasswordError) {
     adminPanelOverlay.style.display = "none";
     forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
-  } else {
-    console.error(context, err);
+    return;
+  }
+  console.error(context, err);
+  if (errorSpan) {
+    errorSpan.textContent = `${context} ${err instanceof Error ? err.message : String(err)}`;
+    errorSpan.hidden = false;
   }
 }
 
@@ -806,16 +812,7 @@ adminBannerSaveButton.addEventListener("click", () => {
       adminBannerSaveSuccess.hidden = false;
       return renderBanner();
     })
-    .catch((err) => {
-      if (err instanceof WrongAdminPasswordError) {
-        adminPanelOverlay.style.display = "none";
-        forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
-        return;
-      }
-      adminBannerSaveError.textContent = `배너 저장에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
-      adminBannerSaveError.hidden = false;
-      console.error("배너 저장 실패:", err);
-    });
+    .catch((err) => handleAdminPanelError(err, "배너 저장에 실패했습니다:", adminBannerSaveError));
 });
 
 const BANNER_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/bmp"];
@@ -880,19 +877,7 @@ adminBannerImagesAddButton.addEventListener("click", () => {
       adminBannerImagesSuccess.hidden = false;
       return Promise.all([renderAdminBannerImagesList(), renderBanner()]);
     })
-    .catch((err) => {
-      if (err instanceof WrongAdminPasswordError) {
-        adminPanelOverlay.style.display = "none";
-        forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
-        return;
-      }
-      // Visible, not just console.error — a silent failure here is exactly what looked like
-      // "업로드가 안 되고 있다" with no clue why (e.g. the SQL migration not having been run yet,
-      // so the RPC genuinely doesn't exist on the database).
-      adminBannerImagesError.textContent = `이미지 저장에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
-      adminBannerImagesError.hidden = false;
-      console.error("이미지 업로드 실패:", err);
-    });
+    .catch((err) => handleAdminPanelError(err, "이미지 저장에 실패했습니다:", adminBannerImagesError));
 });
 
 adminBannerImagesList.addEventListener("click", (event) => {

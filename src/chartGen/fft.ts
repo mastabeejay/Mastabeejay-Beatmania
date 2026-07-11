@@ -1,14 +1,3 @@
-/** In-place inverse FFT via the standard conjugate trick: ifft(x) = conj(fft(conj(x))) / N. */
-export function ifft(real: Float32Array, imag: Float32Array): void {
-  const n = real.length;
-  for (let i = 0; i < n; i++) imag[i] = -imag[i];
-  fft(real, imag);
-  for (let i = 0; i < n; i++) {
-    real[i] = real[i] / n;
-    imag[i] = -imag[i] / n;
-  }
-}
-
 /** In-place iterative radix-2 Cooley-Tukey FFT. `real`/`imag` length must be a power of two. */
 export function fft(real: Float32Array, imag: Float32Array): void {
   const n = real.length;
