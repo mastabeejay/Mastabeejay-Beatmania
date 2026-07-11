@@ -223,12 +223,15 @@
             </label>
             <button id="admin-banner-save-button" type="button">저장 (공지/그래피티 모드)</button>
 
-            <label class="admin-banner-field-label" style="margin-top: 14px">
-              이미지 파일 (1~4개, JPG/JPEG/BMP/PNG/GIF, 개당 최대 3MB)
+            <div class="admin-banner-field-label" style="margin-top: 14px">이미지 파일 (1~4개, JPG/JPEG/BMP/PNG/GIF, 개당 최대 3MB)</div>
+            <div id="admin-banner-images-row">
+              <label id="admin-banner-images-trigger" class="song-file-label" for="admin-banner-images-input">🖼️ 이미지 찾기</label>
               <input type="file" id="admin-banner-images-input" accept="image/jpeg,image/png,image/gif,image/bmp" multiple />
-            </label>
+              <span id="admin-banner-images-filenames"></span>
+            </div>
             <span id="admin-banner-images-error" class="admin-panel-inline-error" hidden></span>
-            <button id="admin-banner-images-upload-button" type="button">이미지 업로드 (이미지 모드로 전환)</button>
+            <span id="admin-banner-images-success" class="admin-panel-inline-success" hidden>이미지가 저장되어 이미지 표시 모드로 전환되었습니다.</span>
+            <button id="admin-banner-images-save-button" type="button">저장 (이미지 모드로 전환)</button>
           </div>
 
           <div class="admin-panel-section">

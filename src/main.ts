@@ -160,8 +160,10 @@ const noticeBoardText = document.querySelector<HTMLDivElement>("#notice-board-te
 const noticeBoardGraffiti = document.querySelector<HTMLDivElement>("#notice-board-graffiti")!;
 const noticeBoardImages = document.querySelector<HTMLDivElement>("#notice-board-images")!;
 const adminBannerImagesInput = document.querySelector<HTMLInputElement>("#admin-banner-images-input")!;
+const adminBannerImagesFilenames = document.querySelector<HTMLSpanElement>("#admin-banner-images-filenames")!;
 const adminBannerImagesError = document.querySelector<HTMLSpanElement>("#admin-banner-images-error")!;
-const adminBannerImagesUploadButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-upload-button")!;
+const adminBannerImagesSuccess = document.querySelector<HTMLSpanElement>("#admin-banner-images-success")!;
+const adminBannerImagesSaveButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-save-button")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
@@ -706,7 +708,9 @@ adminPanelCloseButton.addEventListener("click", () => {
   adminChangePasswordError.hidden = true;
   adminChangePasswordSuccess.hidden = true;
   adminBannerImagesInput.value = "";
+  adminBannerImagesFilenames.textContent = "";
   adminBannerImagesError.hidden = true;
+  adminBannerImagesSuccess.hidden = true;
 });
 
 adminBannerSaveButton.addEventListener("click", () => {
@@ -731,11 +735,22 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-adminBannerImagesUploadButton.addEventListener("click", () => {
+// The label's native for="admin-banner-images-input" already opens the file picker on click — no
+// JS needed for that part. This just reflects back what got picked, since a raw <input type="file">
+// gives no other visible confirmation once it's styled out of view.
+adminBannerImagesInput.addEventListener("change", () => {
+  const files = Array.from(adminBannerImagesInput.files ?? []);
+  adminBannerImagesFilenames.textContent = files.length > 0 ? `${files.length}개 선택됨: ${files.map((f) => f.name).join(", ")}` : "";
+  adminBannerImagesError.hidden = true;
+  adminBannerImagesSuccess.hidden = true;
+});
+
+adminBannerImagesSaveButton.addEventListener("click", () => {
   if (!adminPassword) return;
   const currentAdminPassword = adminPassword;
   const files = Array.from(adminBannerImagesInput.files ?? []);
   adminBannerImagesError.hidden = true;
+  adminBannerImagesSuccess.hidden = true;
 
   if (files.length < 1 || files.length > BANNER_IMAGE_MAX_COUNT) {
     adminBannerImagesError.textContent = `이미지는 1~${BANNER_IMAGE_MAX_COUNT}개까지 선택할 수 있습니다.`;
@@ -759,9 +774,23 @@ adminBannerImagesUploadButton.addEventListener("click", () => {
     .then((dataUrls) => adminSetBannerImages(dataUrls, currentAdminPassword))
     .then(() => {
       adminBannerImagesInput.value = "";
+      adminBannerImagesFilenames.textContent = "";
+      adminBannerImagesSuccess.hidden = false;
       return renderBanner();
     })
-    .catch((err) => handleAdminPanelError(err, "이미지 업로드 실패:"));
+    .catch((err) => {
+      if (err instanceof WrongAdminPasswordError) {
+        adminPanelOverlay.style.display = "none";
+        forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
+        return;
+      }
+      // Visible, not just console.error — a silent failure here is exactly what looked like
+      // "업로드가 안 되고 있다" with no clue why (e.g. the SQL migration not having been run yet,
+      // so the RPC genuinely doesn't exist on the database).
+      adminBannerImagesError.textContent = `이미지 저장에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
+      adminBannerImagesError.hidden = false;
+      console.error("이미지 업로드 실패:", err);
+    });
 });
 
 adminSocialLinkAddButton.addEventListener("click", () => {

@@ -676,7 +676,7 @@ body::before {
 #admin-banner-save-button,
 #admin-social-link-add-button,
 #admin-change-password-button,
-#admin-banner-images-upload-button,
+#admin-banner-images-save-button,
 .admin-social-link-row button {
   font-family: var(--font-body);
   font-weight: 700;
@@ -693,18 +693,29 @@ body::before {
 #admin-banner-save-button:hover,
 #admin-social-link-add-button:hover,
 #admin-change-password-button:hover,
-#admin-banner-images-upload-button:hover,
+#admin-banner-images-save-button:hover,
 .admin-social-link-row button:hover {
   background: rgba(0, 240, 255, 0.26);
 }
 
+#admin-banner-images-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 10px;
+}
+
+/* Reuses the same trigger-a-hidden-input-via-<label> pattern as .song-file-label elsewhere — a
+   styled label click natively opens the file picker, no JS needed for that part. */
 #admin-banner-images-input {
-  display: block;
-  margin-top: 6px;
-  margin-bottom: 10px;
+  display: none;
+}
+
+#admin-banner-images-filenames {
   font-family: var(--font-body);
   font-size: 12px;
-  color: rgba(201, 211, 222, 0.85);
+  color: rgba(201, 211, 222, 0.75);
 }
 
 #admin-social-links-list {
