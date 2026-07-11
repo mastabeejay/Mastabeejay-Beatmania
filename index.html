@@ -44,6 +44,7 @@
         <div id="game-subtitle">Produced by Beejay (Yim Bongjin) in 2026</div>
         <button id="admin-login-link" type="button">🔐 관리자</button>
         <button id="admin-logout-button" type="button" hidden>🔓 관리자 모드 (로그아웃)</button>
+        <button id="admin-panel-open-button" type="button" hidden>⚙️ 관리자 패널</button>
       </div>
       <button id="stop-button" type="button">⏹ 중단</button>
       <div id="calibration-status"></div>
@@ -53,7 +54,7 @@
         <div id="leaderboard-header">
           <div id="leaderboard-tagline-row">
             <div id="leaderboard-tagline" class="text-metallic">Masta Beejay Beat Breaker</div>
-            <svg id="p2b-badge" viewBox="0 0 110 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="P2B 2.11">
+            <svg id="p2b-badge" viewBox="0 0 110 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="P2B 2.16">
               <defs>
                 <linearGradient id="p2bTopFace" x1="0" y1="0" x2="1" y2="0">
                   <stop offset="0%" stop-color="#fff9e6" />
@@ -70,7 +71,7 @@
               </defs>
               <polygon points="18,8 92,8 100,3 26,3" fill="url(#p2bTopFace)" stroke="#9a6a00" stroke-width="0.5" />
               <polygon points="18,8 92,8 100,34 10,34" fill="url(#p2bFrontFace)" stroke="#7a5200" stroke-width="1" />
-              <text x="55" y="27" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="16" fill="#4a2f00">P2B 2.11</text>
+              <text x="55" y="27" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="16" fill="#4a2f00">P2B 2.16</text>
             </svg>
           </div>
         </div>
@@ -164,7 +165,6 @@
           <div id="notice-board-graffiti"></div>
           <div id="notice-board-images"></div>
         </div>
-        <button id="admin-panel-open-button" type="button" hidden>⚙️ 관리자 패널</button>
         <div id="install-guide-section">
           <div id="install-guide-cards">
             <button type="button" class="install-guide-card" data-platform="windows">
@@ -214,6 +214,8 @@
               <label><input type="radio" name="admin-banner-mode" id="admin-banner-mode-images" value="images" /> 이미지 표시</label>
               <button id="admin-banner-save-button" type="button">저장</button>
             </div>
+            <span id="admin-banner-save-error" class="admin-panel-inline-error" hidden></span>
+            <span id="admin-banner-save-success" class="admin-panel-inline-success" hidden></span>
             <label class="admin-banner-field-label">
               공지 내용
               <textarea id="admin-notice-input" maxlength="500" placeholder="공지 내용을 입력하세요"></textarea>
@@ -261,7 +263,7 @@
             <input type="password" id="admin-change-new-password" class="admin-panel-password-input" placeholder="새 비밀번호" maxlength="60" />
             <input type="password" id="admin-change-confirm-password" class="admin-panel-password-input" placeholder="새 비밀번호 확인" maxlength="60" />
             <span id="admin-change-password-error" class="admin-panel-inline-error" hidden></span>
-            <span id="admin-change-password-success" class="admin-panel-inline-success" hidden>비밀번호가 변경되었습니다.</span>
+            <span id="admin-change-password-success" class="admin-panel-inline-success" hidden>새 비밀번호로 변경 적용 완료되었습니다.</span>
             <button id="admin-change-password-button" type="button">변경</button>
           </div>
 

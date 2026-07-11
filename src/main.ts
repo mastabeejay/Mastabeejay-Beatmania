@@ -143,6 +143,8 @@ const adminNoticeInput = document.querySelector<HTMLTextAreaElement>("#admin-not
 const adminGraffitiInput = document.querySelector<HTMLInputElement>("#admin-graffiti-input")!;
 const adminBannerModeRadios = document.querySelectorAll<HTMLInputElement>('input[name="admin-banner-mode"]');
 const adminBannerSaveButton = document.querySelector<HTMLButtonElement>("#admin-banner-save-button")!;
+const adminBannerSaveError = document.querySelector<HTMLSpanElement>("#admin-banner-save-error")!;
+const adminBannerSaveSuccess = document.querySelector<HTMLSpanElement>("#admin-banner-save-success")!;
 const adminSocialLinksList = document.querySelector<HTMLDivElement>("#admin-social-links-list")!;
 const adminSocialLinkPlatformSelect = document.querySelector<HTMLSelectElement>("#admin-social-link-platform")!;
 const adminSocialLinkUrlInput = document.querySelector<HTMLInputElement>("#admin-social-link-url")!;
@@ -775,19 +777,45 @@ adminPanelCloseButton.addEventListener("click", () => {
   adminChangeConfirmPasswordInput.value = "";
   adminChangePasswordError.hidden = true;
   adminChangePasswordSuccess.hidden = true;
+  adminBannerSaveError.hidden = true;
+  adminBannerSaveSuccess.hidden = true;
   adminBannerImagesInput.value = "";
   adminBannerImagesFilenames.textContent = "";
   adminBannerImagesError.hidden = true;
   adminBannerImagesSuccess.hidden = true;
 });
 
+// Same labels as the admin-banner-mode-select radio labels — reused here so the save confirmation
+// echoes back a name the admin already recognizes from the form above it.
+const BANNER_MODE_LABELS: Record<BannerMode, string> = {
+  none: "표시 안 함",
+  notice: "공지 표시",
+  graffiti: "그래피티 표시",
+  images: "이미지 표시",
+};
+
 adminBannerSaveButton.addEventListener("click", () => {
   if (!adminPassword) return;
   const checkedRadio = Array.from(adminBannerModeRadios).find((radio) => radio.checked);
   const displayMode = (checkedRadio?.value as BannerMode | undefined) ?? "none";
+  adminBannerSaveError.hidden = true;
+  adminBannerSaveSuccess.hidden = true;
   void adminSetBanner(adminNoticeInput.value, adminGraffitiInput.value, displayMode, adminPassword)
-    .then(() => renderBanner())
-    .catch((err) => handleAdminPanelError(err, "배너 저장 실패:"));
+    .then(() => {
+      adminBannerSaveSuccess.textContent = `${BANNER_MODE_LABELS[displayMode]} 로 적용 저장되었습니다.`;
+      adminBannerSaveSuccess.hidden = false;
+      return renderBanner();
+    })
+    .catch((err) => {
+      if (err instanceof WrongAdminPasswordError) {
+        adminPanelOverlay.style.display = "none";
+        forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
+        return;
+      }
+      adminBannerSaveError.textContent = `배너 저장에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
+      adminBannerSaveError.hidden = false;
+      console.error("배너 저장 실패:", err);
+    });
 });
 
 const BANNER_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/bmp"];
