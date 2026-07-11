@@ -663,8 +663,9 @@ function fitNoticeBoardHeight(showImages: boolean): void {
   // stop above the fixed footer. On a phone the board sits mid-scroll-column: its measured top is
   // scroll-dependent and often already at/below the footer, which collapsed the cap to its 60px
   // floor and visibly clipped the graffiti text. There the column scrolls, so natural height
-  // (plus the stylesheet's own mobile fallback for the images row) is correct.
-  if (window.matchMedia("(max-width: 640px)").matches) return;
+  // (plus the stylesheet's own mobile fallback for the images row) is correct. Must mirror the
+  // stylesheet's mobile breakpoint exactly — width for portrait, height for landscape phones.
+  if (window.matchMedia("(max-width: 640px), (max-height: 480px)").matches) return;
   const footerTop = footerRow.getBoundingClientRect().top;
 
   if (showImages) {

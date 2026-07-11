@@ -2337,10 +2337,11 @@ select option:disabled {
 }
 
 /* --- Mobile layout for the pre-game start screen -----------------------------------------------
-   Desktop styles above are untouched. Below only kicks in at narrow viewport widths, where the
-   stacked panels (leaderboard table, BGM toggle, settings, action buttons) were cramped/crude —
-   same design and functionality, just resized/repositioned to fit a small screen. */
-@media (max-width: 640px) {
+   Desktop styles above are untouched. Below kicks in for narrow viewports (phone portrait) OR
+   short ones (phone landscape, 360-430px tall — wider than 640px, so a width test alone left
+   landscape phones on the desktop layout with all its floating-element overlaps). Real desktop
+   windows are practically never under 480px tall, so this never triggers there. */
+@media (max-width: 640px), (max-height: 480px) {
   /* flex-start, not the desktop's center: once the column grows taller than the phone screen,
      justify-content:center clips the overflowing top rows unreachably (a scroll container can't
      scroll above its content-box start). Bottom padding keeps the last rows clear of the fixed
@@ -2379,9 +2380,11 @@ select option:disabled {
   }
 
   /* The chat popup stays an overlay, but nearly full-width here — the desktop side-gap it's
-     normally sized to doesn't exist on a phone. Bottom stops above the footer. */
+     normally sized to doesn't exist on a phone. Capped at 480px so landscape (wide but short)
+     gets a sane left-anchored box rather than a letterbox-wide strip. Bottom stops above the
+     footer. */
   #chatbot-panel {
-    width: calc(100vw - 32px);
+    width: min(480px, calc(100vw - 32px));
     max-width: none;
     top: 76px;
     bottom: 84px;
