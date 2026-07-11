@@ -1,3 +1,6 @@
+import { WrongAdminPasswordError } from "./Admin";
+import { supabase } from "./supabaseClient";
+
 // Client-side Gemini call (not proxied through a backend) — a deliberate simplification, not an
 // oversight. The key ships in the client bundle exactly like VITE_SUPABASE_ANON_KEY already does;
 // this is only reasonable because (a) it's a free-tier key so a leaked key risks quota exhaustion,
@@ -18,6 +21,27 @@ export interface ChatMessage {
 
 /** Whether AI mode is even possible in this build — drives the panel's initial mode label. */
 export const isGeminiConfigured = !!GEMINI_API_KEY;
+
+/** The admin's site-wide preference: "gemini" tries AI first (still degrading to the FAQ on
+ *  quota/network failure), "faq" answers from the fixed FAQ only without ever calling Gemini. */
+export type ChatbotMode = "gemini" | "faq";
+
+/** Queried separately from loadBanner on purpose — if this column doesn't exist yet (SQL
+ *  migration not run), only the mode read degrades to its default instead of taking the whole
+ *  banner render down with it. */
+export async function loadChatbotMode(): Promise<ChatbotMode> {
+  const { data, error } = await supabase.from("site_notice").select("chatbot_mode").eq("id", 1).maybeSingle();
+  if (error || data?.chatbot_mode !== "faq") return "gemini";
+  return "faq";
+}
+
+export async function adminSetChatbotMode(mode: ChatbotMode, adminPassword: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_set_chatbot_mode", { p_mode: mode, p_admin_password: adminPassword });
+  if (error) {
+    if (error.message === "wrong_password") throw new WrongAdminPasswordError();
+    throw new Error(error.message);
+  }
+}
 
 /** Thrown for a rate-limit/quota response specifically, so the caller can fall back to the FAQ
  *  bot silently instead of showing a raw error — this is an expected, designed-for outcome on the

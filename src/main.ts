@@ -4,7 +4,7 @@ import { SfxEngine } from "./audio/SfxEngine";
 import { adminChangePassword, adminLogin, WrongAdminPasswordError } from "./game/Admin";
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
-import { askGemini, GeminiRateLimitedError, isGeminiConfigured, type ChatMessage } from "./game/Chatbot";
+import { adminSetChatbotMode, askGemini, GeminiRateLimitedError, isGeminiConfigured, loadChatbotMode, type ChatbotMode, type ChatMessage } from "./game/Chatbot";
 import { matchFaq } from "./game/ChatbotFaq";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
@@ -172,6 +172,10 @@ const adminBannerImagesSuccess = document.querySelector<HTMLSpanElement>("#admin
 const adminBannerImagesAddButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-add-button")!;
 const chatbotPanel = document.querySelector<HTMLDivElement>("#chatbot-panel")!;
 const chatbotMode = document.querySelector<HTMLSpanElement>("#chatbot-mode")!;
+const adminChatbotModeRadios = document.querySelectorAll<HTMLInputElement>('input[name="admin-chatbot-mode"]');
+const adminChatbotModeSaveButton = document.querySelector<HTMLButtonElement>("#admin-chatbot-mode-save-button")!;
+const adminChatbotModeError = document.querySelector<HTMLSpanElement>("#admin-chatbot-mode-error")!;
+const adminChatbotModeSuccess = document.querySelector<HTMLSpanElement>("#admin-chatbot-mode-success")!;
 const chatbotMessages = document.querySelector<HTMLDivElement>("#chatbot-messages")!;
 const chatbotInput = document.querySelector<HTMLInputElement>("#chatbot-input")!;
 const chatbotSendButton = document.querySelector<HTMLButtonElement>("#chatbot-send-button")!;
@@ -780,6 +784,12 @@ adminPanelOpenButton.addEventListener("click", () => {
       radio.checked = radio.value === banner.displayMode;
     });
   });
+  void loadChatbotMode().then((mode) => {
+    chatbotAdminMode = mode;
+    adminChatbotModeRadios.forEach((radio) => {
+      radio.checked = radio.value === mode;
+    });
+  });
   void renderAdminSocialLinksList();
   void renderAdminBannerImagesList();
   adminPanelOverlay.style.display = "flex";
@@ -798,6 +808,24 @@ adminPanelCloseButton.addEventListener("click", () => {
   adminBannerImagesFilenames.textContent = "";
   adminBannerImagesError.hidden = true;
   adminBannerImagesSuccess.hidden = true;
+  adminChatbotModeError.hidden = true;
+  adminChatbotModeSuccess.hidden = true;
+});
+
+adminChatbotModeSaveButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const checkedRadio = Array.from(adminChatbotModeRadios).find((radio) => radio.checked);
+  const mode = (checkedRadio?.value as ChatbotMode | undefined) ?? "gemini";
+  adminChatbotModeError.hidden = true;
+  adminChatbotModeSuccess.hidden = true;
+  void adminSetChatbotMode(mode, adminPassword)
+    .then(() => {
+      chatbotAdminMode = mode;
+      setChatbotModeLabel(chatbotAiModeActive());
+      adminChatbotModeSuccess.textContent = `${mode === "faq" ? "Local FQA 모드" : "AI Gemini 모드"} 로 적용 저장되었습니다.`;
+      adminChatbotModeSuccess.hidden = false;
+    })
+    .catch((err) => handleAdminPanelError(err, "제이봇 모드 저장에 실패했습니다:", adminChatbotModeError));
 });
 
 // Same labels as the admin-banner-mode-select radio labels — reused here so the save confirmation
@@ -999,14 +1027,25 @@ void reportVisit().then((count) => {
 
 const chatbotHistory: ChatMessage[] = [];
 let chatbotBusy = false;
+// The admin's site-wide preference (loaded from site_notice below): "faq" pins Jaybot to the fixed
+// FQA answers without ever calling Gemini; "gemini" tries AI first with the FQA as fallback.
+let chatbotAdminMode: ChatbotMode = "gemini";
 
 /** Shown in the panel header so it's visible which brain is answering: Gemini normally, the fixed
- *  FAQ when the free-tier quota is exhausted (or no key is configured). Starts from the configured
- *  state and then tracks what actually happened on the most recent message. */
-function setChatbotMode(aiMode: boolean): void {
-  chatbotMode.textContent = aiMode ? "AI Gemini 모드" : "Local FAQ 모드";
+ *  FQA when the admin pinned that mode or when the free-tier quota is exhausted (or no key is
+ *  configured). Tracks what actually happened on the most recent message. */
+function setChatbotModeLabel(aiMode: boolean): void {
+  chatbotMode.textContent = aiMode ? "AI Gemini 모드" : "Local FQA 모드";
 }
-setChatbotMode(isGeminiConfigured);
+
+function chatbotAiModeActive(): boolean {
+  return chatbotAdminMode === "gemini" && isGeminiConfigured;
+}
+setChatbotModeLabel(chatbotAiModeActive());
+void loadChatbotMode().then((mode) => {
+  chatbotAdminMode = mode;
+  setChatbotModeLabel(chatbotAiModeActive());
+});
 
 function appendChatbotMessage(text: string, role: "user" | "model"): void {
   const el = document.createElement("div");
@@ -1016,8 +1055,15 @@ function appendChatbotMessage(text: string, role: "user" | "model"): void {
   chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
 }
 
-/** Gemini first (free tier); on any failure — quota hit, network error, no key configured yet —
- *  falls back to plain keyword-matched FAQ answers instead of surfacing an error to the player. */
+function answerFromFaq(question: string): void {
+  setChatbotModeLabel(false);
+  const faqAnswer = matchFaq(question);
+  appendChatbotMessage(faqAnswer ?? "죄송해요, 그 질문은 아직 답해드리기 어려워요. 다른 방식으로 물어봐 주시겠어요?", "model");
+}
+
+/** Gemini first (free tier) unless the admin pinned FQA mode; on any Gemini failure — quota hit,
+ *  network error, no key configured yet — falls back to the fixed FQA answers instead of surfacing
+ *  an error to the player. */
 async function sendChatbotMessage(): Promise<void> {
   const question = chatbotInput.value.trim();
   if (!question || chatbotBusy) return;
@@ -1026,15 +1072,17 @@ async function sendChatbotMessage(): Promise<void> {
   appendChatbotMessage(question, "user");
 
   try {
+    if (chatbotAdminMode === "faq") {
+      answerFromFaq(question);
+      return;
+    }
     const answer = await askGemini(chatbotHistory, question);
     chatbotHistory.push({ role: "user", text: question }, { role: "model", text: answer });
-    setChatbotMode(true);
+    setChatbotModeLabel(true);
     appendChatbotMessage(answer, "model");
   } catch (err) {
     if (!(err instanceof GeminiRateLimitedError)) console.error("Gemini 응답 실패:", err);
-    setChatbotMode(false);
-    const faqAnswer = matchFaq(question);
-    appendChatbotMessage(faqAnswer ?? "죄송해요, 그 질문은 아직 답해드리기 어려워요. 다른 방식으로 물어봐 주시겠어요?", "model");
+    answerFromFaq(question);
   } finally {
     chatbotBusy = false;
   }

@@ -445,10 +445,11 @@ body::before {
   flex-direction: column;
   /* Sized to the actual free gap beside the centered start-screen column (max 860px wide), so the
      panel hugs the left margin instead of covering the main content — with a 220px floor so it
-     stays usable on viewports where that gap runs out. */
+     stays usable on viewports where that gap runs out. Vertically it runs all the way down to
+     near the bottom edge (bottom-anchored, not a fixed height). */
   width: clamp(220px, calc((100vw - 860px) / 2 - 24px), 320px);
   max-width: 80vw;
-  height: min(58vh, 440px);
+  bottom: 16px;
   border-radius: 14px;
   border: 1px solid rgba(0, 240, 255, 0.25);
   background: rgba(6, 10, 18, 0.92);
@@ -584,14 +585,15 @@ body::before {
   background: rgba(0, 240, 255, 0.26);
 }
 
-/* Jaybot launcher — the circularly-cropped IMG_1141 artwork with the name under it, pinned to the
-   top-left of the start screen (top-left is free there: the refresh/social buttons live top-right,
-   and the gameplay HUD that also uses top-left sits *behind* the start overlay). */
+/* Jaybot launcher — the circularly-cropped IMG_1141 artwork with the name under it and an invite
+   line to its right, pinned to the top-left of the start screen (top-left is free there: the
+   refresh/social buttons live top-right, and the gameplay HUD that also uses top-left sits
+   *behind* the start overlay). */
 #chatbot-toggle-button {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 3px;
+  gap: 10px;
   position: fixed;
   left: 16px;
   top: 14px;
@@ -599,7 +601,25 @@ body::before {
   border: none;
   background: none;
   cursor: pointer;
+  text-align: left;
   z-index: 12;
+}
+
+#chatbot-toggle-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+#chatbot-toggle-tagline {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 150px;
+  color: rgba(201, 211, 222, 0.85);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
 #chatbot-toggle-icon {
@@ -788,7 +808,8 @@ body::before {
   margin-bottom: 10px;
 }
 
-#admin-banner-mode-select {
+#admin-banner-mode-select,
+#admin-chatbot-mode-select {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -800,7 +821,8 @@ body::before {
   color: rgba(201, 211, 222, 0.85);
 }
 
-#admin-banner-mode-select label {
+#admin-banner-mode-select label,
+#admin-chatbot-mode-select label {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -869,6 +891,7 @@ body::before {
 }
 
 #admin-banner-save-button,
+#admin-chatbot-mode-save-button,
 #admin-social-link-add-button,
 #admin-change-password-button,
 #admin-banner-images-add-button,
@@ -887,6 +910,7 @@ body::before {
 }
 
 #admin-banner-save-button:hover,
+#admin-chatbot-mode-save-button:hover,
 #admin-social-link-add-button:hover,
 #admin-change-password-button:hover,
 #admin-banner-images-add-button:hover,

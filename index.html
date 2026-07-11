@@ -209,8 +209,11 @@
           </div>
         </div>
         <button id="chatbot-toggle-button" type="button" aria-label="제이봇 열기">
-          <img id="chatbot-toggle-icon" src="/icons/jaybot.png" alt="" />
-          <span id="chatbot-toggle-label">Jaybot</span>
+          <span id="chatbot-toggle-main">
+            <img id="chatbot-toggle-icon" src="/icons/jaybot.png" alt="" />
+            <span id="chatbot-toggle-label">Jaybot</span>
+          </span>
+          <span id="chatbot-toggle-tagline">BDJ에 대한 궁금증은 Jaybot에게 물어보세요.</span>
         </button>
       </div>
       <div id="admin-login-overlay">
@@ -258,6 +261,18 @@
             <span id="admin-banner-images-error" class="admin-panel-inline-error" hidden></span>
             <span id="admin-banner-images-success" class="admin-panel-inline-success" hidden>이미지가 추가되어 이미지 표시 모드로 전환되었습니다.</span>
             <button id="admin-banner-images-add-button" type="button">추가 (이미지 모드로 전환)</button>
+          </div>
+
+          <div class="admin-panel-section">
+            <div class="admin-panel-section-title">제이봇 (Jaybot) 모드</div>
+            <div id="admin-chatbot-mode-select">
+              <label><input type="radio" name="admin-chatbot-mode" id="admin-chatbot-mode-gemini" value="gemini" /> AI Gemini 모드</label>
+              <label><input type="radio" name="admin-chatbot-mode" id="admin-chatbot-mode-faq" value="faq" /> Local FQA 모드</label>
+              <button id="admin-chatbot-mode-save-button" type="button">저장</button>
+            </div>
+            <span id="admin-chatbot-mode-error" class="admin-panel-inline-error" hidden></span>
+            <span id="admin-chatbot-mode-success" class="admin-panel-inline-success" hidden></span>
+            <div class="admin-banner-field-label">AI Gemini 모드로 설정해도 무료 한도 소진·네트워크 오류 시에는 자동으로 Local FQA 모드로 동작합니다.</div>
           </div>
 
           <div class="admin-panel-section">

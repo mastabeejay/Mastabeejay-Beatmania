@@ -96,6 +96,10 @@ insert into site_notice (id, message) values (1, null) on conflict (id) do nothi
 -- Migrate a database created before these columns existed.
 alter table site_notice add column if not exists graffiti_text text;
 alter table site_notice add column if not exists display_mode text not null default 'none';
+-- Jaybot's admin-preferred mode: 'gemini' (AI answers, falling back to the fixed FAQ on quota/
+-- network failure) or 'faq' (fixed FAQ only, never call Gemini). Rides on this singleton since
+-- it's exactly the same shape of site-wide, admin-owned, publicly-readable setting as the banner.
+alter table site_notice add column if not exists chatbot_mode text not null default 'gemini';
 
 -- Up to 4 admin-uploaded images shown side by side when display_mode = 'images'. Stored as
 -- data: URLs (like the leaderboard's celebration photo) rather than Supabase Storage, since the
@@ -380,6 +384,23 @@ begin
 end;
 $$;
 
+-- Jaybot mode switch — 'faq' makes the client answer from its fixed FAQ only (never calling
+-- Gemini); 'gemini' restores AI answers, which still degrade to the FAQ on quota/network failure
+-- regardless of this setting (the client can't use quota that isn't there).
+create or replace function admin_set_chatbot_mode(p_mode text, p_admin_password text)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  if p_mode not in ('gemini', 'faq') then
+    raise exception 'invalid_mode';
+  end if;
+  update site_notice set chatbot_mode = p_mode, updated_at = now() where id = 1;
+end;
+$$;
+
 -- Superseded by admin_add_banner_images/admin_delete_banner_image — replacing the *entire* set on
 -- every call meant uploading images one at a time (the only option most browsers' file pickers make
 -- obvious) silently wiped out whatever was already there, leaving just the last upload.
@@ -442,5 +463,6 @@ grant execute on function admin_add_social_link(text, text, text) to anon, authe
 grant execute on function admin_update_social_link(bigint, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_social_link(bigint, text) to anon, authenticated;
 grant execute on function admin_set_banner(text, text, text, text) to anon, authenticated;
+grant execute on function admin_set_chatbot_mode(text, text) to anon, authenticated;
 grant execute on function admin_add_banner_images(text[], text) to anon, authenticated;
 grant execute on function admin_delete_banner_image(bigint, text) to anon, authenticated;
