@@ -18,7 +18,7 @@ import {
 } from "./game/Guestbook";
 import { addLeaderboardEntry, adminDeleteLeaderboardEntries, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
-import { adminSetBannerImages, loadBannerImages, type BannerImage } from "./game/BannerImages";
+import { adminAddBannerImages, adminDeleteBannerImage, loadBannerImages, type BannerImage } from "./game/BannerImages";
 import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
@@ -159,11 +159,13 @@ const noticeBoardLabel = document.querySelector<HTMLDivElement>("#notice-board-l
 const noticeBoardText = document.querySelector<HTMLDivElement>("#notice-board-text")!;
 const noticeBoardGraffiti = document.querySelector<HTMLDivElement>("#notice-board-graffiti")!;
 const noticeBoardImages = document.querySelector<HTMLDivElement>("#notice-board-images")!;
+const footerRow = document.querySelector<HTMLDivElement>("#footer-row")!;
+const adminBannerImagesList = document.querySelector<HTMLDivElement>("#admin-banner-images-list")!;
 const adminBannerImagesInput = document.querySelector<HTMLInputElement>("#admin-banner-images-input")!;
 const adminBannerImagesFilenames = document.querySelector<HTMLSpanElement>("#admin-banner-images-filenames")!;
 const adminBannerImagesError = document.querySelector<HTMLSpanElement>("#admin-banner-images-error")!;
 const adminBannerImagesSuccess = document.querySelector<HTMLSpanElement>("#admin-banner-images-success")!;
-const adminBannerImagesSaveButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-save-button")!;
+const adminBannerImagesAddButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-add-button")!;
 const ctx = canvas.getContext("2d")!;
 
 let selectedSongFile: File | null = null;
@@ -599,6 +601,48 @@ async function renderAdminSocialLinksList(): Promise<void> {
   });
 }
 
+/** Thumbnail rows in the admin panel showing which images are currently uploaded, each with its own
+ *  delete button — mirrors renderAdminSocialLinksList's list-of-rows pattern. */
+async function renderAdminBannerImagesList(): Promise<void> {
+  const images = await loadBannerImages();
+  adminBannerImagesList.innerHTML = images
+    .map(
+      (image, i) => `
+        <div class="admin-banner-image-row" data-id="${image.id}">
+          <img class="admin-banner-image-thumb" alt="이미지 ${i + 1}" />
+          <span>이미지 ${i + 1}</span>
+          <button type="button" data-action="delete-image" data-id="${image.id}">삭제</button>
+        </div>`
+    )
+    .join("");
+  images.forEach((image) => {
+    const thumb = adminBannerImagesList.querySelector<HTMLImageElement>(`.admin-banner-image-row[data-id="${image.id}"] .admin-banner-image-thumb`);
+    if (thumb) thumb.src = image.imageData;
+  });
+}
+
+/** Caps the images row's height so its bottom edge stops a fixed gap above the footer (producer
+ *  credit + admin link), which is position:fixed and would otherwise just render on top of
+ *  whatever content happens to reach that far down — reading as the image getting "cut off".
+ *  Measured live (not a static CSS value) since the images container's own document position
+ *  depends on everything above it in the page, which isn't knowable in advance.
+ *
+ *  #start-overlay is a `justify-content: center` flex column, so this element's own height feeds
+ *  back into its own top position (shrinking it moves its top down, by half the shrink amount) —
+ *  naively solving `top + height = target` using the pre-resize top overshoots the target every
+ *  time. Solved in closed form instead: measuring height H0/top T0 before resizing, and using
+ *  T(H) = T0 - (H-H0)/2 (the centering relationship) to solve for the H that puts the bottom edge
+ *  exactly GAP_PX above the footer. Verified empirically in the browser preview. */
+function fitNoticeBoardImagesHeight(): void {
+  const GAP_PX = 16; // ~4mm at the 96 CSS-px/inch reference used throughout this spec
+  noticeBoardImages.style.height = "";
+  const footerTop = footerRow.getBoundingClientRect().top;
+  const h0 = noticeBoardImages.getBoundingClientRect().height;
+  const t0 = noticeBoardImages.getBoundingClientRect().top;
+  const available = 2 * (footerTop - GAP_PX - t0) - h0;
+  noticeBoardImages.style.height = `${Math.max(60, available)}px`;
+}
+
 async function renderBanner(): Promise<void> {
   const banner = await loadBanner();
   const showNotice = banner.displayMode === "notice" && !!banner.message;
@@ -628,7 +672,12 @@ async function renderBanner(): Promise<void> {
   noticeBoardImages.hidden = !showImages;
 
   noticeBoard.hidden = !showNotice && !showGraffiti && !showImages;
+  if (showImages) fitNoticeBoardImagesHeight();
 }
+
+window.addEventListener("resize", () => {
+  if (!noticeBoardImages.hidden) fitNoticeBoardImagesHeight();
+});
 
 /** Clears admin state everywhere (memory + sessionStorage) and drops back to the logged-out view.
  *  Called both for a deliberate logout and when a stored password gets rejected server-side (e.g.
@@ -697,6 +746,7 @@ adminPanelOpenButton.addEventListener("click", () => {
     });
   });
   void renderAdminSocialLinksList();
+  void renderAdminBannerImagesList();
   adminPanelOverlay.style.display = "flex";
 });
 
@@ -745,15 +795,21 @@ adminBannerImagesInput.addEventListener("change", () => {
   adminBannerImagesSuccess.hidden = true;
 });
 
-adminBannerImagesSaveButton.addEventListener("click", () => {
+adminBannerImagesAddButton.addEventListener("click", () => {
   if (!adminPassword) return;
   const currentAdminPassword = adminPassword;
   const files = Array.from(adminBannerImagesInput.files ?? []);
   adminBannerImagesError.hidden = true;
   adminBannerImagesSuccess.hidden = true;
 
-  if (files.length < 1 || files.length > BANNER_IMAGE_MAX_COUNT) {
-    adminBannerImagesError.textContent = `이미지는 1~${BANNER_IMAGE_MAX_COUNT}개까지 선택할 수 있습니다.`;
+  if (files.length < 1) {
+    adminBannerImagesError.textContent = "추가할 이미지를 선택해주세요.";
+    adminBannerImagesError.hidden = false;
+    return;
+  }
+  const remainingSlots = BANNER_IMAGE_MAX_COUNT - adminBannerImagesList.querySelectorAll(".admin-banner-image-row").length;
+  if (files.length > remainingSlots) {
+    adminBannerImagesError.textContent = `이미지는 최대 ${BANNER_IMAGE_MAX_COUNT}개까지 등록할 수 있습니다 (현재 ${remainingSlots}개 추가 가능).`;
     adminBannerImagesError.hidden = false;
     return;
   }
@@ -771,12 +827,12 @@ adminBannerImagesSaveButton.addEventListener("click", () => {
   }
 
   void Promise.all(files.map(readFileAsDataUrl))
-    .then((dataUrls) => adminSetBannerImages(dataUrls, currentAdminPassword))
+    .then((dataUrls) => adminAddBannerImages(dataUrls, currentAdminPassword))
     .then(() => {
       adminBannerImagesInput.value = "";
       adminBannerImagesFilenames.textContent = "";
       adminBannerImagesSuccess.hidden = false;
-      return renderBanner();
+      return Promise.all([renderAdminBannerImagesList(), renderBanner()]);
     })
     .catch((err) => {
       if (err instanceof WrongAdminPasswordError) {
@@ -791,6 +847,16 @@ adminBannerImagesSaveButton.addEventListener("click", () => {
       adminBannerImagesError.hidden = false;
       console.error("이미지 업로드 실패:", err);
     });
+});
+
+adminBannerImagesList.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-action="delete-image"]');
+  if (!button || !adminPassword) return;
+  const id = Number(button.dataset.id);
+  if (!window.confirm("이 이미지를 삭제하시겠습니까?")) return;
+  void adminDeleteBannerImage(id, adminPassword)
+    .then(() => Promise.all([renderAdminBannerImagesList(), renderBanner()]))
+    .catch((err) => handleAdminPanelError(err, "이미지 삭제 실패:"));
 });
 
 adminSocialLinkAddButton.addEventListener("click", () => {

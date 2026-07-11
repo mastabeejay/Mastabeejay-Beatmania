@@ -26,10 +26,19 @@ export async function loadBannerImages(): Promise<BannerImage[]> {
   return data.map(toImage);
 }
 
-/** Replaces the whole set (1-4 images) in one call and switches display_mode to "images" server-side
- *  — see admin_set_banner_images in supabase/schema.sql. */
-export async function adminSetBannerImages(images: string[], adminPassword: string): Promise<BannerImage[]> {
-  const { data, error } = await supabase.rpc("admin_set_banner_images", { p_images: images, p_admin_password: adminPassword });
+/** Appends to the existing set (capped at 4 total server-side) and switches display_mode to
+ *  "images" — see admin_add_banner_images in supabase/schema.sql. */
+export async function adminAddBannerImages(images: string[], adminPassword: string): Promise<BannerImage[]> {
+  const { data, error } = await supabase.rpc("admin_add_banner_images", { p_images: images, p_admin_password: adminPassword });
+  if (error) {
+    if (error.message === "wrong_password") throw new WrongAdminPasswordError();
+    throw new Error(error.message);
+  }
+  return ((data as BannerImageRow[] | null) ?? []).map(toImage);
+}
+
+export async function adminDeleteBannerImage(id: number, adminPassword: string): Promise<BannerImage[]> {
+  const { data, error } = await supabase.rpc("admin_delete_banner_image", { p_id: id, p_admin_password: adminPassword });
   if (error) {
     if (error.message === "wrong_password") throw new WrongAdminPasswordError();
     throw new Error(error.message);

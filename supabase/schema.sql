@@ -100,8 +100,8 @@ alter table site_notice add column if not exists display_mode text not null defa
 -- Up to 4 admin-uploaded images shown side by side when display_mode = 'images'. Stored as
 -- data: URLs (like the leaderboard's celebration photo) rather than Supabase Storage, since the
 -- set is always tiny (<=4 rows) and the client already has the same base64-in-Postgres pattern.
--- Uploading a new set always replaces the old one in full (see admin_set_banner_images) — this
--- isn't a growing gallery, it's "the current banner images", just structured as up to 4 files.
+-- Managed incrementally — admin_add_banner_images appends (capped at 4 total) and
+-- admin_delete_banner_image removes one by id, rather than replacing the whole set every time.
 create table if not exists site_banner_images (
   id bigint generated always as identity primary key,
   image_data text not null,
@@ -380,14 +380,22 @@ begin
 end;
 $$;
 
--- Replaces the whole image set in one call (not an incremental add/remove) and switches
+-- Superseded by admin_add_banner_images/admin_delete_banner_image — replacing the *entire* set on
+-- every call meant uploading images one at a time (the only option most browsers' file pickers make
+-- obvious) silently wiped out whatever was already there, leaving just the last upload.
+drop function if exists admin_set_banner_images(text[], text);
+
+-- Appends to the existing set (capped at 4 total) rather than replacing it, and switches
 -- display_mode to 'images' automatically — uploading images and having to separately remember to
 -- flip a mode radio would be a confusing two-step flow. Switching to notice/graffiti mode later
 -- (via admin_set_banner above) leaves these rows untouched, so switching back to 'images' doesn't
 -- require re-uploading.
-create or replace function admin_set_banner_images(p_images text[], p_admin_password text)
+create or replace function admin_add_banner_images(p_images text[], p_admin_password text)
 returns setof site_banner_images
 language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_current_count integer;
+  v_next_sort integer;
 begin
   if not admin_login(p_admin_password) then
     raise exception 'wrong_password';
@@ -395,17 +403,28 @@ begin
   if p_images is null or array_length(p_images, 1) is null or array_length(p_images, 1) = 0 then
     raise exception 'no_images';
   end if;
-  if array_length(p_images, 1) > 4 then
+
+  select count(*), coalesce(max(sort_order), -1) + 1 into v_current_count, v_next_sort from site_banner_images;
+  if v_current_count + array_length(p_images, 1) > 4 then
     raise exception 'too_many_images';
   end if;
 
-  -- "where true" — this Supabase project's Postgres rejects a bare unqualified DELETE outright
-  -- ("DELETE requires a WHERE clause"), even though clearing the whole table is the intent here.
-  delete from site_banner_images where true;
   insert into site_banner_images (image_data, sort_order)
-  select img, idx - 1 from unnest(p_images) with ordinality as t(img, idx);
+  select img, v_next_sort + idx - 1 from unnest(p_images) with ordinality as t(img, idx);
   update site_notice set display_mode = 'images', updated_at = now() where id = 1;
 
+  return query select * from site_banner_images order by sort_order;
+end;
+$$;
+
+create or replace function admin_delete_banner_image(p_id bigint, p_admin_password text)
+returns setof site_banner_images
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  delete from site_banner_images where id = p_id;
   return query select * from site_banner_images order by sort_order;
 end;
 $$;
@@ -423,4 +442,5 @@ grant execute on function admin_add_social_link(text, text, text) to anon, authe
 grant execute on function admin_update_social_link(bigint, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_social_link(bigint, text) to anon, authenticated;
 grant execute on function admin_set_banner(text, text, text, text) to anon, authenticated;
-grant execute on function admin_set_banner_images(text[], text) to anon, authenticated;
+grant execute on function admin_add_banner_images(text[], text) to anon, authenticated;
+grant execute on function admin_delete_banner_image(bigint, text) to anon, authenticated;
