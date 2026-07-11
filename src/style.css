@@ -1170,6 +1170,23 @@ body::before {
 /* Spray-paint tag look for arbitrary admin-entered text: a rainbow gradient fill instead of a flat
    color, a thick dark stroke standing in for a spray-can outline, a slight rotate+skew so it reads
    as sprayed on at an angle rather than typeset, and a soft drop shadow for depth. */
+/* Scattered spray-can overspray flecks behind the tag — a handful of small radial dots in random-
+   feeling positions/colors, purely decorative, sitting behind (z-index 0) the text itself. */
+#notice-board-graffiti::before {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  background-image:
+    radial-gradient(circle 3px at 8% 15%, rgba(255, 210, 0, 0.4), transparent 65%),
+    radial-gradient(circle 2px at 92% 20%, rgba(0, 240, 255, 0.4), transparent 65%),
+    radial-gradient(circle 2.5px at 20% 85%, rgba(255, 46, 224, 0.35), transparent 65%),
+    radial-gradient(circle 2px at 78% 80%, rgba(255, 210, 0, 0.35), transparent 65%),
+    radial-gradient(circle 3px at 45% 10%, rgba(0, 240, 255, 0.3), transparent 65%),
+    radial-gradient(circle 1.5px at 60% 90%, rgba(255, 46, 224, 0.3), transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
 #notice-board-graffiti {
   font-family: var(--font-display);
   font-weight: 900;
@@ -1184,7 +1201,14 @@ body::before {
   color: transparent;
   -webkit-text-stroke: 1.5px rgba(0, 0, 0, 0.55);
   transform: rotate(-2deg) skewX(-4deg);
-  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 18px rgba(255, 46, 224, 0.4));
+  /* Stepped extrusion (the first three layers, each offset a little further down) reads as a thick
+     spray-painted 3D tag rather than flat text, topped with the same magenta/cyan glow as before. */
+  filter:
+    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55))
+    drop-shadow(0 4px 0 rgba(0, 0, 0, 0.4))
+    drop-shadow(0 7px 10px rgba(0, 0, 0, 0.45))
+    drop-shadow(0 0 18px rgba(255, 46, 224, 0.4))
+    drop-shadow(0 0 26px rgba(0, 240, 255, 0.22));
   position: relative;
   z-index: 1;
 }
