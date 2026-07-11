@@ -2341,9 +2341,77 @@ select option:disabled {
    stacked panels (leaderboard table, BGM toggle, settings, action buttons) were cramped/crude —
    same design and functionality, just resized/repositioned to fit a small screen. */
 @media (max-width: 640px) {
+  /* flex-start, not the desktop's center: once the column grows taller than the phone screen,
+     justify-content:center clips the overflowing top rows unreachably (a scroll container can't
+     scroll above its content-box start). Bottom padding keeps the last rows clear of the fixed
+     footer. */
   #start-overlay {
+    justify-content: flex-start;
     gap: 12px;
-    padding: 16px 0;
+    padding: 14px 0 88px;
+    /* backdrop-filter turns this overlay into the containing block for its fixed-position
+       descendants (chat panel etc.), which makes them scroll along with the column — invisible on
+       desktop where the column fits, but on a phone the panel drifted off-screen while scrolling.
+       Dropping the blur here re-anchors them to the viewport; slightly stronger dimming makes up
+       for the lost blur over the camera feed. */
+    backdrop-filter: none;
+    background: rgba(3, 5, 10, 0.92);
+  }
+
+  /* On a phone there's no free margin for floating elements — the fixed-position Jaybot launcher
+     sat right on top of the tagline/badge. It joins the scrollable column as its first row
+     instead (position:static turns it into a flex item; order:-1 hoists it above the header). */
+  #chatbot-toggle-button {
+    position: static;
+    order: -1;
+  }
+
+  #chatbot-toggle-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  #chatbot-toggle-tagline {
+    font-size: 11px;
+  }
+
+  /* The chat popup stays an overlay, but nearly full-width here — the desktop side-gap it's
+     normally sized to doesn't exist on a phone. Bottom stops above the footer. */
+  #chatbot-panel {
+    width: calc(100vw - 32px);
+    max-width: none;
+    top: 76px;
+    bottom: 84px;
+    z-index: 20;
+  }
+
+  /* Same story as the Jaybot launcher: the fixed bottom-right install-guide stack was covering
+     the guestbook/notice/footer area. It becomes the column's last row, cards side by side. */
+  #install-guide-section {
+    position: static;
+    align-items: center;
+  }
+
+  #install-guide-cards {
+    flex-direction: row;
+  }
+
+  /* A real bottom bar: full-width with its own background, so the (always-scrolling on a phone)
+     column passes cleanly behind it instead of its text mixing with the credit line. Wraps
+     centered (credit on one line, admin links beneath) instead of overflowing. */
+  #footer-row {
+    bottom: 0;
+    width: 100vw;
+    padding: 6px 12px 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px 10px;
+    background: rgba(3, 5, 10, 0.92);
+    border-top: 1px solid rgba(0, 240, 255, 0.12);
+  }
+
+  #game-subtitle {
+    font-size: 12px;
   }
 
   #leaderboard-panel,
