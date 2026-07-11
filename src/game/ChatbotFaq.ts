@@ -53,6 +53,14 @@ const FAQ_ENTRIES: FaqEntry[] = [
     keywords: ["beatmania", "iidx", "코나미", "konami"],
     answer: "beatmania IIDX 등 리듬게임에서 영감을 받아 만든 독자적인 팬 제작 게임이며, Konami나 beatmania IIDX와 공식 제휴 관계는 없어요.",
   },
+  // This entry only ever answers when the FQA path is actually active (Gemini answers this
+  // question itself via its system prompt when AI mode is running), so a flat "지금은 Local FQA
+  // 모드" is always accurate here.
+  {
+    keywords: ["모드", "mode", "제미나이", "gemini", "fqa", "faq", "ai야", "ai 모드"],
+    answer:
+      "지금은 Local FQA 모드(미리 준비된 고정 답변 모드)로 동작 중이에요. AI Gemini 모드는 무료 한도가 남아 있고 관리자가 AI 모드로 설정한 경우에 활성화됩니다. 현재 모드는 채팅창 상단에도 표시돼요.",
+  },
 ];
 
 /** Scores each entry by how many of its keywords appear in the question and returns the best
