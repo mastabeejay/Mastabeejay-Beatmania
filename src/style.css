@@ -1804,6 +1804,9 @@ body::before {
   justify-content: center;
   flex-wrap: wrap;
   gap: 10px;
+  /* Uniform body height across the three groups so every item (radios, pills, selects) sits
+     vertically centered on the same axis — the tallest item (the 자유 음원 pill) sets the bar. */
+  min-height: 38px;
 }
 
 .bgm-mode-select {
@@ -2637,7 +2640,8 @@ select option:disabled {
   .control-group-body {
     gap: 4px;
     flex-wrap: nowrap;
-    align-items: flex-start;
+    align-items: center;
+    min-height: 36px;
   }
 
   .bgm-mode-select {
@@ -2646,18 +2650,26 @@ select option:disabled {
     flex-wrap: nowrap;
   }
 
+  /* 50px leaves the text 33px beside the radio — exactly one word per line (무반주/연습);
+     narrower and 무반주 itself breaks, ballooning to three lines. */
   .bgm-mode-select label {
-    width: 46px;
+    width: 50px;
     text-align: center;
     justify-content: center;
   }
 
-  .song-file-label {
+  /* The Track pill only (the admin panel's 이미지 찾기 shares this class and must stay wide).
+     With the emoji hidden, 자유/음원 stack as two centered lines, 음원 directly under 자유. */
+  #song-file-label {
     font-size: 10px;
     padding: 4px 4px;
-    width: 52px;
+    width: 44px;
     white-space: normal;
     text-align: center;
+  }
+
+  #song-file-icon {
+    display: none;
   }
 
   .settings-select-label {
@@ -2713,5 +2725,16 @@ select option:disabled {
 
   #leaderboard-header {
     margin-top: -6px;
+  }
+
+  /* Vertical space is scarce sideways, and the bar swallows taps aimed at controls scrolling
+     past it — keep the strip as thin as possible. */
+  #footer-row {
+    padding: 3px 8px 4px;
+    gap: 1px 8px;
+  }
+
+  #game-subtitle {
+    font-size: 10px;
   }
 }
