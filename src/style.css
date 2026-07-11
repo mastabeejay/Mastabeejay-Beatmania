@@ -1544,13 +1544,13 @@ body::before {
    (not forced to equal thirds) since Track's radios+file-picker need more room than Option's single
    checkbox — space-between spreads them evenly across the shared width regardless. */
 #main-controls-row {
-  width: min(760px, 92vw);
+  width: min(860px, 94vw);
   margin: 0 auto;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 18px;
+  gap: 24px;
 }
 
 .control-group {
@@ -1566,7 +1566,7 @@ body::before {
   gap: 5px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 16px;
   letter-spacing: 0.14em;
   color: var(--color-cyber-cyan);
   text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
@@ -1606,8 +1606,8 @@ body::before {
 
 .settings-select-label {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  gap: 8px;
   align-items: center;
   font-family: var(--font-body);
   font-weight: 600;
