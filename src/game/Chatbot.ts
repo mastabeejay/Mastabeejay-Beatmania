@@ -4,9 +4,11 @@
 // never a bill, (b) it should be restricted to this site's domain via an HTTP referrer restriction
 // in Google AI Studio, and (c) quota exhaustion is already a handled state — see ChatbotFaq.ts.
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-// "gemini-2.5-flash-lite" 404s against this endpoint (that exact model id isn't resolvable on
-// v1beta generateContent) — 2.0-flash is confirmed current/stable for this specific endpoint.
-const GEMINI_MODEL = "gemini-2.0-flash";
+// Tested live against this site's actual key (2026-07): 2.5-era models 404 ("no longer available
+// to new users" — this project/account is new), and 2.0-flash 429s with a free-tier limit of 0.
+// 3.1-flash-lite and 3.5-flash both returned 200; the lite tier is plenty for FAQ answers and has
+// the roomier free-tier limits.
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 export interface ChatMessage {
