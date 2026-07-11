@@ -1,7 +1,7 @@
 import "./style.css";
 import { AudioEngine } from "./audio/AudioEngine";
 import { SfxEngine } from "./audio/SfxEngine";
-import { adminLogin, WrongAdminPasswordError } from "./game/Admin";
+import { adminChangePassword, adminLogin, WrongAdminPasswordError } from "./game/Admin";
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
@@ -146,6 +146,12 @@ const adminSocialLinksList = document.querySelector<HTMLDivElement>("#admin-soci
 const adminSocialLinkPlatformSelect = document.querySelector<HTMLSelectElement>("#admin-social-link-platform")!;
 const adminSocialLinkUrlInput = document.querySelector<HTMLInputElement>("#admin-social-link-url")!;
 const adminSocialLinkAddButton = document.querySelector<HTMLButtonElement>("#admin-social-link-add-button")!;
+const adminChangeCurrentPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-current-password")!;
+const adminChangeNewPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-new-password")!;
+const adminChangeConfirmPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-confirm-password")!;
+const adminChangePasswordError = document.querySelector<HTMLSpanElement>("#admin-change-password-error")!;
+const adminChangePasswordSuccess = document.querySelector<HTMLSpanElement>("#admin-change-password-success")!;
+const adminChangePasswordButton = document.querySelector<HTMLButtonElement>("#admin-change-password-button")!;
 const socialLinksContainer = document.querySelector<HTMLDivElement>("#social-links-container")!;
 const noticeBoard = document.querySelector<HTMLDivElement>("#notice-board")!;
 const noticeBoardLabel = document.querySelector<HTMLDivElement>("#notice-board-label")!;
@@ -671,6 +677,11 @@ adminPanelOpenButton.addEventListener("click", () => {
 
 adminPanelCloseButton.addEventListener("click", () => {
   adminPanelOverlay.style.display = "none";
+  adminChangeCurrentPasswordInput.value = "";
+  adminChangeNewPasswordInput.value = "";
+  adminChangeConfirmPasswordInput.value = "";
+  adminChangePasswordError.hidden = true;
+  adminChangePasswordSuccess.hidden = true;
 });
 
 adminBannerSaveButton.addEventListener("click", () => {
@@ -693,6 +704,40 @@ adminSocialLinkAddButton.addEventListener("click", () => {
       return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
     })
     .catch((err) => handleAdminPanelError(err, "링크 추가 실패:"));
+});
+
+adminChangePasswordButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const current = adminChangeCurrentPasswordInput.value;
+  const next = adminChangeNewPasswordInput.value;
+  const confirmNext = adminChangeConfirmPasswordInput.value;
+  adminChangePasswordError.hidden = true;
+  adminChangePasswordSuccess.hidden = true;
+  if (!current || !next) return;
+  if (next !== confirmNext) {
+    adminChangePasswordError.textContent = "새 비밀번호가 일치하지 않습니다.";
+    adminChangePasswordError.hidden = false;
+    return;
+  }
+  void adminChangePassword(current, next)
+    .then(() => {
+      // The just-changed password becomes the one every subsequent admin action re-sends —
+      // otherwise the very next delete/save this session would fail against the now-stale old one.
+      adminPassword = next;
+      sessionStorage.setItem("bdj-admin-password", next);
+      adminChangeCurrentPasswordInput.value = "";
+      adminChangeNewPasswordInput.value = "";
+      adminChangeConfirmPasswordInput.value = "";
+      adminChangePasswordSuccess.hidden = false;
+    })
+    .catch((err) => {
+      if (err instanceof WrongAdminPasswordError) {
+        adminChangePasswordError.textContent = "현재 비밀번호가 일치하지 않습니다.";
+        adminChangePasswordError.hidden = false;
+      } else {
+        console.error("비밀번호 변경 실패:", err);
+      }
+    });
 });
 
 adminSocialLinksList.addEventListener("click", (event) => {

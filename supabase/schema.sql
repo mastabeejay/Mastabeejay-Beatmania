@@ -264,6 +264,23 @@ begin
 end;
 $$;
 
+-- Requires the CURRENT password even though the client is already "logged in" for this session —
+-- an unattended, still-logged-in tab shouldn't be enough on its own to hijack the admin password.
+create or replace function admin_change_password(p_current_password text, p_new_password text)
+returns boolean
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_current_password) then
+    raise exception 'wrong_password';
+  end if;
+  if p_new_password is null or length(trim(p_new_password)) = 0 then
+    raise exception 'invalid_new_password';
+  end if;
+  update admin_settings set password_hash = crypt(p_new_password, gen_salt('bf')) where id = 1;
+  return true;
+end;
+$$;
+
 create or replace function admin_delete_guestbook_entries(p_ids bigint[], p_admin_password text)
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
@@ -351,6 +368,7 @@ grant execute on function edit_guestbook_entry(bigint, text, text) to anon, auth
 grant execute on function delete_guestbook_entry(bigint, text) to anon, authenticated;
 grant execute on function increment_visits() to anon, authenticated;
 grant execute on function admin_login(text) to anon, authenticated;
+grant execute on function admin_change_password(text, text) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_delete_leaderboard_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;

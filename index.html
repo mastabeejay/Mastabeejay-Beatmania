@@ -242,6 +242,16 @@
             </div>
           </div>
 
+          <div class="admin-panel-section">
+            <div class="admin-panel-section-title">비밀번호 변경</div>
+            <input type="password" id="admin-change-current-password" class="admin-panel-password-input" placeholder="현재 비밀번호" maxlength="60" />
+            <input type="password" id="admin-change-new-password" class="admin-panel-password-input" placeholder="새 비밀번호" maxlength="60" />
+            <input type="password" id="admin-change-confirm-password" class="admin-panel-password-input" placeholder="새 비밀번호 확인" maxlength="60" />
+            <span id="admin-change-password-error" class="admin-panel-inline-error" hidden></span>
+            <span id="admin-change-password-success" class="admin-panel-inline-success" hidden>비밀번호가 변경되었습니다.</span>
+            <button id="admin-change-password-button" type="button">변경</button>
+          </div>
+
           <button id="admin-panel-close-button" type="button">닫기</button>
         </div>
       </div>

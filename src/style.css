@@ -643,8 +643,39 @@ body::before {
   margin-bottom: 8px;
 }
 
+.admin-panel-password-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.06);
+  color: var(--color-cyber-silver);
+}
+
+.admin-panel-inline-error {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-cyber-magenta);
+  margin-bottom: 8px;
+}
+
+.admin-panel-inline-success {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: #6be08a;
+  margin-bottom: 8px;
+}
+
 #admin-banner-save-button,
 #admin-social-link-add-button,
+#admin-change-password-button,
 .admin-social-link-row button {
   font-family: var(--font-body);
   font-weight: 700;
@@ -660,6 +691,7 @@ body::before {
 
 #admin-banner-save-button:hover,
 #admin-social-link-add-button:hover,
+#admin-change-password-button:hover,
 .admin-social-link-row button:hover {
   background: rgba(0, 240, 255, 0.26);
 }
@@ -1063,9 +1095,12 @@ body::before {
   overflow: hidden;
   text-align: center;
   background: linear-gradient(135deg, rgba(24, 8, 32, 0.88), rgba(6, 10, 18, 0.92));
-  border: 1px solid rgba(255, 46, 224, 0.4);
+  /* Brushed-chrome edge — same light/dark/light gradient formula as .text-metallic and #start-button
+     — instead of the flat magenta border this used to have. */
+  border: 1px solid transparent;
+  border-image: linear-gradient(135deg, #eef4fa 0%, #9fb0c2 35%, #4c5a6c 50%, #9fb0c2 65%, #eef4fa 100%) 1;
   box-shadow:
-    0 0 24px rgba(255, 46, 224, 0.18),
+    0 0 22px rgba(201, 211, 222, 0.25),
     inset 0 0 24px rgba(0, 240, 255, 0.06);
   animation: notice-pulse 3.5s ease-in-out infinite;
 }
@@ -1094,12 +1129,12 @@ body::before {
   0%,
   100% {
     box-shadow:
-      0 0 24px rgba(255, 46, 224, 0.18),
+      0 0 22px rgba(201, 211, 222, 0.25),
       inset 0 0 24px rgba(0, 240, 255, 0.06);
   }
   50% {
     box-shadow:
-      0 0 34px rgba(255, 46, 224, 0.3),
+      0 0 32px rgba(201, 211, 222, 0.4),
       inset 0 0 30px rgba(0, 240, 255, 0.1);
   }
 }

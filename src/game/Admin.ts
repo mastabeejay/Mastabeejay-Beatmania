@@ -16,3 +16,17 @@ export async function adminLogin(password: string): Promise<boolean> {
   if (error) return false;
   return data === true;
 }
+
+/** Still requires the current password, even from an already-logged-in session — see the RPC's own
+ *  comment for why. Throws WrongAdminPasswordError if the current password doesn't match. */
+export async function adminChangePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const { data, error } = await supabase.rpc("admin_change_password", {
+    p_current_password: currentPassword,
+    p_new_password: newPassword,
+  });
+  if (error) {
+    if (error.message === "wrong_password") throw new WrongAdminPasswordError();
+    throw new Error(error.message);
+  }
+  if (data !== true) throw new Error("Failed to change admin password");
+}
