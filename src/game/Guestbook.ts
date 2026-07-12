@@ -1,4 +1,5 @@
 import { WrongAdminPasswordError } from "./Admin";
+import { WrongMemberPasswordError } from "./Membership";
 import { supabase } from "./supabaseClient";
 
 export type GuestbookAttachmentType = "image" | "video";
@@ -13,6 +14,9 @@ export interface GuestbookEntry {
   attachmentData: string | null;
   attachmentType: GuestbookAttachmentType | null;
   heartCount: number;
+  /** Set when a logged-in BDJ member posted this — lets that same member edit/delete it without a
+   *  password (see editGuestbookEntry/deleteGuestbookEntry's memberName/memberPassword params). */
+  memberId: number | null;
   dateIso: string;
 }
 
@@ -24,6 +28,7 @@ interface GuestbookRow {
   attachment_data: string | null;
   attachment_type: GuestbookAttachmentType | null;
   heart_count: number;
+  member_id: number | null;
   created_at: string;
 }
 
@@ -41,6 +46,15 @@ export class NoPasswordSetError extends Error {
   }
 }
 
+/** Thrown by a member-authenticated edit/delete when the verified member doesn't own this entry —
+ *  shouldn't normally surface (the client only offers password-less edit/delete for the logged-in
+ *  member's own entries), but the server checks regardless. */
+export class NotOwnerError extends Error {
+  constructor() {
+    super("You don't own this entry");
+  }
+}
+
 function toEntry(row: GuestbookRow): GuestbookEntry {
   return {
     id: row.id,
@@ -50,6 +64,7 @@ function toEntry(row: GuestbookRow): GuestbookEntry {
     attachmentData: row.attachment_data,
     attachmentType: row.attachment_type,
     heartCount: row.heart_count,
+    memberId: row.member_id,
     dateIso: row.created_at,
   };
 }
@@ -59,7 +74,7 @@ function toEntry(row: GuestbookRow): GuestbookEntry {
 export async function loadGuestbook(): Promise<GuestbookEntry[]> {
   const { data, error } = await supabase
     .from("guestbook_public")
-    .select("id, name, message, parent_id, attachment_data, attachment_type, heart_count, created_at")
+    .select("id, name, message, parent_id, attachment_data, attachment_type, heart_count, member_id, created_at")
     .order("id", { ascending: false });
   if (error || !data) return [];
   return data.map(toEntry);
@@ -72,6 +87,10 @@ export async function addGuestbookEntry(entry: {
   parentId?: number | null;
   attachmentData?: string | null;
   attachmentType?: GuestbookAttachmentType | null;
+  /** When both are given, the entry is attributed to that logged-in member (with no password) —
+   *  see add_guestbook_entry's member path in supabase/schema.sql. */
+  memberName?: string | null;
+  memberPassword?: string | null;
 }): Promise<GuestbookEntry[]> {
   const { data, error } = await supabase.rpc("add_guestbook_entry", {
     p_name: entry.name,
@@ -80,31 +99,45 @@ export async function addGuestbookEntry(entry: {
     p_parent_id: entry.parentId ?? null,
     p_attachment_data: entry.attachmentData ?? null,
     p_attachment_type: entry.attachmentType ?? null,
+    p_member_name: entry.memberName ?? null,
+    p_member_password: entry.memberPassword ?? null,
   });
-  if (error || !data) throw new Error(error?.message ?? "Failed to add guestbook entry");
+  if (error) {
+    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Failed to add guestbook entry");
   return (data as GuestbookRow[]).map(toEntry);
 }
 
 /** Password verification happens inside the Postgres function (submit the password, it never gets
  *  compared client-side), so a wrong password surfaces as the RPC raising `wrong_password`. Passing
- *  attachmentData replaces the existing attachment (if any); omitting it leaves it untouched. */
+ *  attachmentData replaces the existing attachment (if any); omitting it leaves it untouched.
+ *  Passing memberName/memberPassword instead skips the password_hash check entirely — the RPC just
+ *  verifies the member owns this entry (see edit_guestbook_entry's member path). */
 export async function editGuestbookEntry(
   id: number,
   message: string,
-  password: string,
+  password?: string | null,
   attachmentData?: string | null,
   attachmentType?: GuestbookAttachmentType | null,
+  memberName?: string | null,
+  memberPassword?: string | null,
 ): Promise<GuestbookEntry[]> {
   const { data, error } = await supabase.rpc("edit_guestbook_entry", {
     p_id: id,
     p_message: message,
-    p_password: password,
+    p_password: password ?? null,
     p_attachment_data: attachmentData ?? null,
     p_attachment_type: attachmentType ?? null,
+    p_member_name: memberName ?? null,
+    p_member_password: memberPassword ?? null,
   });
   if (error) {
     if (error.message === "wrong_password") throw new WrongPasswordError();
     if (error.message === "no_password") throw new NoPasswordSetError();
+    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+    if (error.message === "not_owner") throw new NotOwnerError();
     throw new Error(error.message);
   }
   return ((data as GuestbookRow[] | null) ?? []).map(toEntry);
@@ -126,11 +159,23 @@ export async function removeGuestbookHeart(id: number): Promise<number> {
   return data as number;
 }
 
-export async function deleteGuestbookEntry(id: number, password: string): Promise<GuestbookEntry[]> {
-  const { data, error } = await supabase.rpc("delete_guestbook_entry", { p_id: id, p_password: password });
+export async function deleteGuestbookEntry(
+  id: number,
+  password?: string | null,
+  memberName?: string | null,
+  memberPassword?: string | null,
+): Promise<GuestbookEntry[]> {
+  const { data, error } = await supabase.rpc("delete_guestbook_entry", {
+    p_id: id,
+    p_password: password ?? null,
+    p_member_name: memberName ?? null,
+    p_member_password: memberPassword ?? null,
+  });
   if (error) {
     if (error.message === "wrong_password") throw new WrongPasswordError();
     if (error.message === "no_password") throw new NoPasswordSetError();
+    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+    if (error.message === "not_owner") throw new NotOwnerError();
     throw new Error(error.message);
   }
   return ((data as GuestbookRow[] | null) ?? []).map(toEntry);

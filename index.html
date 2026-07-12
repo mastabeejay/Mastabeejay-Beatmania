@@ -96,6 +96,7 @@
                   <th>Step</th>
                   <th>BGM</th>
                   <th>기록일</th>
+                  <th>관리</th>
                 </tr>
               </thead>
               <tbody id="leaderboard-body"></tbody>
@@ -155,6 +156,15 @@
           <span class="start-button-deco start-button-deco-left"></span>
           <button id="start-button" type="button">Let's Start BDJ</button>
           <span class="start-button-deco start-button-deco-right"></span>
+        </div>
+        <div id="membership-row">
+          <div id="membership-avatar"></div>
+          <span id="membership-name-label">Guest</span>
+          <div id="membership-auth-actions">
+            <button id="membership-login-button" type="button">🔐 로그인</button>
+            <button id="membership-signup-button" type="button">가입</button>
+          </div>
+          <button id="membership-logout-button" type="button" hidden>로그아웃</button>
         </div>
         <div id="welcome-guestbook-row">
           <p id="visitor-welcome">Welcome to MastaBeejay World : <span id="visitor-count">-</span> Manias.</p>
@@ -310,6 +320,62 @@
           </div>
 
           <button id="admin-panel-close-button" type="button">닫기</button>
+        </div>
+      </div>
+      <div id="membership-login-overlay">
+        <div id="membership-login-panel">
+          <div id="membership-login-title" class="text-metallic-gold">BDJ Membership 로그인</div>
+          <input type="text" id="membership-login-name" placeholder="이름" maxlength="20" />
+          <input type="password" id="membership-login-password" placeholder="비밀번호" maxlength="60" />
+          <span id="membership-login-error" class="admin-panel-inline-error" hidden></span>
+          <div id="membership-login-actions">
+            <button type="button" id="membership-login-submit">로그인</button>
+            <button type="button" id="membership-login-cancel">취소</button>
+          </div>
+        </div>
+      </div>
+      <div id="membership-signup-overlay">
+        <div id="membership-signup-panel">
+          <div id="membership-signup-title" class="text-metallic-gold">BDJ Membership 가입</div>
+          <label class="admin-banner-field-label">
+            이름 (한글실명)
+            <input type="text" id="membership-signup-name" maxlength="20" placeholder="이름" />
+          </label>
+          <label class="admin-banner-field-label">
+            비밀번호
+            <input type="password" id="membership-signup-password" maxlength="60" placeholder="비밀번호" />
+          </label>
+          <label class="admin-banner-field-label">
+            비밀번호 확인
+            <input type="password" id="membership-signup-password-confirm" maxlength="60" placeholder="비밀번호 확인" />
+          </label>
+          <div id="membership-signup-photo-row">
+            <label id="membership-signup-photo-label" class="song-file-label" for="membership-signup-photo-input">📷 사진 등록 (선택)</label>
+            <input type="file" id="membership-signup-photo-input" accept="image/*" />
+            <span id="membership-signup-photo-filename"></span>
+          </div>
+          <div id="membership-signup-gender-row">
+            <span id="membership-signup-gender-label">성별 (선택)</span>
+            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-male" value="male" /> 남</label>
+            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-female" value="female" /> 여</label>
+          </div>
+          <label class="admin-banner-field-label">
+            생년월일 (선택)
+            <input type="date" id="membership-signup-birthdate" />
+          </label>
+          <label class="admin-banner-field-label">
+            전화번호 (선택)
+            <input type="tel" id="membership-signup-phone" maxlength="20" placeholder="전화번호" />
+          </label>
+          <label class="admin-banner-field-label">
+            Email (선택)
+            <input type="email" id="membership-signup-email" maxlength="100" placeholder="Email" />
+          </label>
+          <span id="membership-signup-error" class="admin-panel-inline-error" hidden></span>
+          <div id="membership-signup-actions">
+            <button type="button" id="membership-signup-submit">가입</button>
+            <button type="button" id="membership-signup-cancel">취소</button>
+          </div>
         </div>
       </div>
       <div id="install-guide-overlay">

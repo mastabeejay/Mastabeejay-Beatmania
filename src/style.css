@@ -1081,6 +1081,155 @@ body::before {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* --- BDJ Membership login/signup (mirrors the admin-login-* / admin-panel-* shape above) -------- */
+
+#membership-login-overlay,
+#membership-signup-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3, 5, 10, 0.9);
+  backdrop-filter: blur(3px);
+  color: var(--color-cyber-silver);
+  z-index: 15;
+}
+
+#membership-login-panel {
+  width: min(340px, 90vw);
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(6, 10, 18, 0.9);
+  box-shadow: 0 0 30px rgba(0, 240, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#membership-signup-panel {
+  width: min(420px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 22px 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(6, 10, 18, 0.92);
+  box-shadow: 0 0 30px rgba(0, 240, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#membership-login-title,
+#membership-signup-title {
+  font-size: 16px;
+  text-align: center;
+  margin-bottom: 6px;
+  letter-spacing: 0.08em;
+}
+
+#membership-login-name,
+#membership-login-password {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.06);
+  color: var(--color-cyber-silver);
+}
+
+#membership-login-actions,
+#membership-signup-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+#membership-login-submit,
+#membership-signup-submit,
+#membership-login-cancel,
+#membership-signup-cancel {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+#membership-login-submit,
+#membership-signup-submit {
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  background: rgba(0, 240, 255, 0.16);
+  color: var(--color-cyber-silver);
+}
+
+#membership-login-cancel,
+#membership-signup-cancel {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: rgba(201, 211, 222, 0.7);
+}
+
+/* Signup fields reuse .admin-banner-field-label's "label wraps input" shape (see the admin panel
+   above) — this generic descendant rule covers every text/password/date/tel/email input nested in
+   one, rather than repeating the same block per #id like the admin panel's notice/graffiti inputs
+   do (there are simply too many signup fields for that to stay readable). */
+.admin-banner-field-label input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.06);
+  color: var(--color-cyber-silver);
+}
+
+#membership-signup-photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+
+#membership-signup-photo-input {
+  display: none;
+}
+
+#membership-signup-photo-filename {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: rgba(201, 211, 222, 0.75);
+  word-break: break-all;
+}
+
+#membership-signup-gender-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: rgba(201, 211, 222, 0.85);
+}
+
+#membership-signup-gender-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: rgba(201, 211, 222, 0.7);
+}
+
 #leaderboard-admin-delete-button,
 #guestbook-admin-delete-button {
   font-family: var(--font-body);
@@ -1275,6 +1424,43 @@ body::before {
   font-style: italic;
 }
 
+/* 관리 (manage) column — only populated for the logged-in member's own rows (see renderLeaderboard
+   in main.ts); everyone else's row just shows the same "-" dash the 사진 column uses when empty. */
+#leaderboard-table td:nth-child(11) {
+  white-space: nowrap;
+}
+
+/* The inline edit/delete forms sit in their own full-width (colspan) row directly below the entry
+   they belong to, reusing .guestbook-inline-form's classes but laid out horizontally — a table row
+   has the width to spare that a guestbook card doesn't. */
+.leaderboard-inline-form-row td {
+  white-space: normal;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.leaderboard-inline-form-row .guestbook-inline-form {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.leaderboard-edit-message {
+  flex: 1 1 200px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.06);
+  color: var(--color-cyber-silver);
+}
+
 /* --- Start button row (with flanking cyber-deco lines) and welcome+guestbook row -------------- */
 
 #start-button-row {
@@ -1326,6 +1512,76 @@ body::before {
   50% {
     background-position: -100% 0;
   }
+}
+
+/* Always-visible SNS-style status widget — avatar+name show either the logged-in member or a
+   blank "Guest" placeholder, never just a bare login button. Sits right above the welcome/guest
+   board row (not fixed — it's part of the same scrollable start-screen column), so it needs no
+   bespoke mobile breakpoint beyond the flex-wrap this already shares with that row. */
+#membership-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+#membership-avatar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(201, 211, 222, 0.15) center / cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  border: 1px solid rgba(0, 240, 255, 0.25);
+}
+
+#membership-avatar::before {
+  content: "👤";
+  opacity: 0.5;
+}
+
+#membership-avatar.has-photo::before {
+  content: none;
+}
+
+#membership-name-label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: rgba(201, 211, 222, 0.85);
+}
+
+#membership-auth-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#membership-login-button,
+#membership-signup-button,
+#membership-logout-button {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.06);
+  color: rgba(201, 211, 222, 0.8);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+#membership-login-button:hover,
+#membership-signup-button:hover,
+#membership-logout-button:hover {
+  background: rgba(0, 240, 255, 0.16);
+  color: var(--color-cyber-silver);
 }
 
 #welcome-guestbook-row {

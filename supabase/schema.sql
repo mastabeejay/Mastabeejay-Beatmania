@@ -12,6 +12,24 @@ create extension if not exists pgcrypto;
 
 -- --- Tables -----------------------------------------------------------------------------------
 
+-- BDJ Membership accounts. Defined before leaderboard/guestbook since both reference it via
+-- member_id. `name` doubles as the login handle (no separate username), so it must be unique —
+-- signup rejects a name already taken. Every other profile field is optional. Same deny-all RLS
+-- (enabled below, zero policies) as admin_settings: nothing here is ever read except through the
+-- security definer functions further down, so password_hash/phone/email/birthdate never reach the
+-- client directly.
+create table if not exists members (
+  id bigint generated always as identity primary key,
+  name text not null unique,
+  password_hash text not null,
+  photo_data text,
+  gender text,
+  birthdate date,
+  phone text,
+  email text,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists leaderboard (
   id bigint generated always as identity primary key,
   name text not null,
@@ -29,6 +47,9 @@ create table if not exists leaderboard (
 -- predate the multi-step escalation feature, so they're all single-step runs.
 alter table leaderboard add column if not exists photo text;
 alter table leaderboard add column if not exists step integer not null default 1;
+-- Set only when a logged-in BDJ member submitted this score (see `members` above) — `on delete set
+-- null` so a removed member account never takes their historical scores down with it.
+alter table leaderboard add column if not exists member_id bigint references members(id) on delete set null;
 
 create table if not exists guestbook (
   id bigint generated always as identity primary key,
@@ -58,6 +79,10 @@ alter table guestbook add column if not exists attachment_type text;
 -- counter — add_guestbook_heart just increments it, and abuse is mitigated client-side only
 -- (main.ts hides the button after one heart per browser via localStorage).
 alter table guestbook add column if not exists heart_count integer not null default 0;
+-- Set only when a logged-in BDJ member posted this entry (see `members` above) — lets that member
+-- edit/delete it later without ever supplying password_hash (see edit/delete_guestbook_entry).
+-- `on delete set null` so a removed member account never takes their historical posts down with it.
+alter table guestbook add column if not exists member_id bigint references members(id) on delete set null;
 
 create table if not exists visits (
   id integer primary key default 1,
@@ -133,7 +158,9 @@ alter table admin_settings enable row level security;
 alter table social_links enable row level security;
 alter table site_notice enable row level security;
 alter table site_banner_images enable row level security;
--- `admin_settings` has no policies at all — not even select. Only admin_login() below can read it.
+alter table members enable row level security;
+-- `admin_settings` and `members` have no policies at all — not even select. Only the
+-- admin_login()/member_login()/member_signup() functions below can read them.
 
 drop policy if exists "public read leaderboard" on leaderboard;
 create policy "public read leaderboard" on leaderboard for select using (true);
@@ -163,25 +190,44 @@ grant select on site_banner_images to anon, authenticated;
 -- so they're untouched by this.
 drop view if exists guestbook_public cascade;
 create view guestbook_public as
-  select id, name, message, parent_id, attachment_data, attachment_type, heart_count, created_at from guestbook order by id desc;
+  select id, name, message, parent_id, attachment_data, attachment_type, heart_count, member_id, created_at from guestbook order by id desc;
 grant select on guestbook_public to anon, authenticated;
 
 -- `visits` has no policies at all — not even select. Only increment_visits() below can touch it.
 
 -- --- RPC functions (all security definer, all owned by postgres) --------------------------------
 
--- Signature changed (added p_photo, then p_step) — drop the older overloads so they don't linger
--- alongside the current one.
+-- Signature changed (added p_photo, then p_step, then membership) — drop the older overloads so
+-- they don't linger alongside the current one.
 drop function if exists submit_score(text, text, integer, text, text, text);
 drop function if exists submit_score(text, text, integer, text, text, text, text);
+drop function if exists submit_score(text, text, integer, text, text, text, text, integer);
 
+-- Member path (both p_member_name/p_member_password given) verifies via verify_member(), records
+-- member_id, and uses the member's own registered name — same rationale as add_guestbook_entry's
+-- member path. Guest path is unchanged except the saved name now gets "(Guest)" appended; the
+-- client is responsible for requiring a non-blank p_name from guests going forward (this function
+-- never silently defaulted a blank name here, that fallback lived client-side in main.ts).
 create or replace function submit_score(
-  p_name text, p_message text, p_score integer, p_speed text, p_difficulty text, p_bgm text, p_photo text default null, p_step integer default 1
+  p_name text, p_message text, p_score integer, p_speed text, p_difficulty text, p_bgm text,
+  p_photo text default null, p_step integer default 1,
+  p_member_name text default null, p_member_password text default null
 ) returns setof leaderboard
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_member_id bigint;
+  v_final_name text;
 begin
-  insert into leaderboard (name, message, score, speed, difficulty, step, bgm, photo)
-  values (left(p_name, 20), left(p_message, 80), p_score, left(p_speed, 10), left(p_difficulty, 10), greatest(p_step, 1), left(p_bgm, 10), left(p_photo, 500000));
+  if p_member_name is not null and p_member_password is not null then
+    v_member_id := verify_member(p_member_name, p_member_password);
+    v_final_name := p_member_name;
+  else
+    v_member_id := null;
+    v_final_name := left(p_name, 20) || '(Guest)';
+  end if;
+
+  insert into leaderboard (name, message, score, speed, difficulty, step, bgm, photo, member_id)
+  values (v_final_name, left(p_message, 80), p_score, left(p_speed, 10), left(p_difficulty, 10), greatest(p_step, 1), left(p_bgm, 10), left(p_photo, 500000), v_member_id);
 
   -- Keep only the current top 20 — mirrors the old server's trim-after-insert behavior.
   delete from leaderboard where id not in (
@@ -192,29 +238,86 @@ begin
 end;
 $$;
 
--- Signature changed each time a param was added (p_parent_id, then attachment) — drop every prior
--- overload so it doesn't linger alongside the current one.
+-- Leaderboard has never had per-row write access before — only admin bulk-delete. These two are
+-- member-only (no anonymous/password path exists for leaderboard rows at all): a valid member
+-- whose id matches the row's member_id can edit their own entry's message (never the score, so
+-- nobody can rewrite their way onto the board) or delete their own entry outright.
+create or replace function edit_leaderboard_entry(p_id bigint, p_message text, p_member_name text, p_member_password text)
+returns setof leaderboard
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_member_id bigint;
+begin
+  v_member_id := verify_member(p_member_name, p_member_password);
+  update leaderboard set message = left(p_message, 80) where id = p_id and member_id = v_member_id;
+  if not found then
+    raise exception 'not_owner';
+  end if;
+  return query select * from leaderboard order by score desc, id asc limit 20;
+end;
+$$;
+
+create or replace function delete_leaderboard_entry(p_id bigint, p_member_name text, p_member_password text)
+returns setof leaderboard
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_member_id bigint;
+begin
+  v_member_id := verify_member(p_member_name, p_member_password);
+  delete from leaderboard where id = p_id and member_id = v_member_id;
+  if not found then
+    raise exception 'not_owner';
+  end if;
+  return query select * from leaderboard order by score desc, id asc limit 20;
+end;
+$$;
+
+-- Signature changed each time a param was added (p_parent_id, then attachment, then membership) —
+-- drop every prior overload so it doesn't linger alongside the current one.
 drop function if exists add_guestbook_entry(text, text, text);
 drop function if exists add_guestbook_entry(text, text, text, bigint);
+drop function if exists add_guestbook_entry(text, text, text, bigint, text, text);
 
+-- Member path (both p_member_name/p_member_password given) verifies via verify_member(), records
+-- member_id, and uses the member's own registered name as-is (the raw p_name argument is ignored
+-- in that case, so a logged-in member can never post under a different display name) — no password
+-- is ever hashed for a member-owned row, since ownership going forward is member_id, not a per-row
+-- password. The guest path (member params absent) is unchanged except the saved name now gets
+-- "(Guest)" appended, so at-a-glance every listing shows who's a registered member and who isn't.
 create or replace function add_guestbook_entry(
-  p_name text, p_message text, p_password text, p_parent_id bigint default null,
-  p_attachment_data text default null, p_attachment_type text default null
+  p_name text, p_message text, p_password text default null, p_parent_id bigint default null,
+  p_attachment_data text default null, p_attachment_type text default null,
+  p_member_name text default null, p_member_password text default null
 )
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_member_id bigint;
+  v_final_name text;
+  v_password_hash text;
 begin
-  -- A blank/absent password stores a null hash (see the column's comment) rather than hashing an
-  -- empty string — otherwise anyone leaving the password field blank on a later edit/delete attempt
-  -- would match every other password-less entry too.
-  insert into guestbook (name, message, password_hash, parent_id, attachment_data, attachment_type)
+  if p_member_name is not null and p_member_password is not null then
+    v_member_id := verify_member(p_member_name, p_member_password);
+    v_final_name := p_member_name;
+    v_password_hash := null;
+  else
+    v_member_id := null;
+    v_final_name := left(p_name, 20) || '(Guest)';
+    -- A blank/absent password stores a null hash (see the column's comment) rather than hashing an
+    -- empty string — otherwise anyone leaving the password field blank on a later edit/delete
+    -- attempt would match every other password-less entry too.
+    v_password_hash := case when p_password is null or p_password = '' then null else crypt(p_password, gen_salt('bf')) end;
+  end if;
+
+  insert into guestbook (name, message, password_hash, parent_id, attachment_data, attachment_type, member_id)
   values (
-    left(p_name, 20),
+    v_final_name,
     left(p_message, 500),
-    case when p_password is null or p_password = '' then null else crypt(p_password, gen_salt('bf')) end,
+    v_password_hash,
     p_parent_id,
     p_attachment_data,
-    case when p_attachment_type in ('image', 'video') then p_attachment_type else null end
+    case when p_attachment_type in ('image', 'video') then p_attachment_type else null end,
+    v_member_id
   );
 
   -- Keep the guestbook bounded by top-level entry count, same as the old server's GUESTBOOK_LIMIT —
@@ -228,29 +331,44 @@ begin
 end;
 $$;
 
+drop function if exists edit_guestbook_entry(bigint, text, text);
+drop function if exists edit_guestbook_entry(bigint, text, text, text, text);
+
 -- p_attachment_data left null means "leave the existing attachment alone" (coalesce keeps it);
--- passing a new data: URL replaces both attachment_data and attachment_type together, since a
--- lone attachment_type with no matching data would be meaningless.
+-- passing a new data: URL replaces both attachment_data and attachment_type together, since a lone
+-- attachment_type with no matching data would be meaningless. Member path (both p_member_name/
+-- p_member_password given) bypasses password_hash entirely — it only requires that the verified
+-- member's id match this row's member_id — since a logged-in member never had a per-row password
+-- to begin with.
 create or replace function edit_guestbook_entry(
-  p_id bigint, p_message text, p_password text,
-  p_attachment_data text default null, p_attachment_type text default null
+  p_id bigint, p_message text, p_password text default null,
+  p_attachment_data text default null, p_attachment_type text default null,
+  p_member_name text default null, p_member_password text default null
 )
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_hash text;
+  v_member_id bigint;
 begin
-  select password_hash into v_hash from guestbook where id = p_id;
-  if not found then
-    raise exception 'not_found';
-  end if;
-  -- Distinct from wrong_password: this entry was posted with no password at all, so no password
-  -- (blank or otherwise) can ever match it — only admin moderation can touch it from here on.
-  if v_hash is null then
-    raise exception 'no_password';
-  end if;
-  if v_hash <> crypt(p_password, v_hash) then
-    raise exception 'wrong_password';
+  if p_member_name is not null and p_member_password is not null then
+    v_member_id := verify_member(p_member_name, p_member_password);
+    if not exists (select 1 from guestbook where id = p_id and member_id = v_member_id) then
+      raise exception 'not_owner';
+    end if;
+  else
+    select password_hash into v_hash from guestbook where id = p_id;
+    if not found then
+      raise exception 'not_found';
+    end if;
+    -- Distinct from wrong_password: this entry was posted with no password at all, so no password
+    -- (blank or otherwise) can ever match it — only admin moderation can touch it from here on.
+    if v_hash is null then
+      raise exception 'no_password';
+    end if;
+    if v_hash <> crypt(p_password, v_hash) then
+      raise exception 'wrong_password';
+    end if;
   end if;
 
   update guestbook
@@ -266,21 +384,36 @@ begin
 end;
 $$;
 
-create or replace function delete_guestbook_entry(p_id bigint, p_password text)
+drop function if exists delete_guestbook_entry(bigint, text);
+
+-- Member path bypasses password_hash entirely — same ownership-by-member_id rationale as
+-- edit_guestbook_entry above.
+create or replace function delete_guestbook_entry(
+  p_id bigint, p_password text default null,
+  p_member_name text default null, p_member_password text default null
+)
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_hash text;
+  v_member_id bigint;
 begin
-  select password_hash into v_hash from guestbook where id = p_id;
-  if not found then
-    raise exception 'not_found';
-  end if;
-  if v_hash is null then
-    raise exception 'no_password';
-  end if;
-  if v_hash <> crypt(p_password, v_hash) then
-    raise exception 'wrong_password';
+  if p_member_name is not null and p_member_password is not null then
+    v_member_id := verify_member(p_member_name, p_member_password);
+    if not exists (select 1 from guestbook where id = p_id and member_id = v_member_id) then
+      raise exception 'not_owner';
+    end if;
+  else
+    select password_hash into v_hash from guestbook where id = p_id;
+    if not found then
+      raise exception 'not_found';
+    end if;
+    if v_hash is null then
+      raise exception 'no_password';
+    end if;
+    if v_hash <> crypt(p_password, v_hash) then
+      raise exception 'wrong_password';
+    end if;
   end if;
 
   delete from guestbook where id = p_id;
@@ -331,6 +464,75 @@ begin
   end if;
   update admin_settings set password_hash = crypt(p_new_password, gen_salt('bf')) where id = 1;
   return true;
+end;
+$$;
+
+-- BDJ Membership: same stateless "resend the password every call, verify server-side" model as
+-- admin above — there's no Supabase Auth session, just a members row and a bcrypt hash. This
+-- helper is NOT granted to anon/authenticated (see the grants section) — it only exists to be
+-- called from inside the other security definer functions below, so it can't be hit directly as a
+-- password-guessing oracle of its own.
+create or replace function verify_member(p_name text, p_password text)
+returns bigint
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id bigint;
+  v_hash text;
+begin
+  select id, password_hash into v_id, v_hash from members where name = p_name;
+  if not found or v_hash <> crypt(p_password, v_hash) then
+    raise exception 'wrong_member_password';
+  end if;
+  return v_id;
+end;
+$$;
+
+-- `name` is the login handle, so it must be unique — raises name_taken rather than silently
+-- colliding with an existing account (two real people can share a Korean name; the second one just
+-- has to pick a distinguishing variation).
+create or replace function member_signup(
+  p_name text, p_password text, p_photo_data text default null,
+  p_gender text default null, p_birthdate date default null,
+  p_phone text default null, p_email text default null
+)
+returns table(id bigint, name text, photo_data text)
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_name text := left(trim(p_name), 20);
+begin
+  if v_name is null or length(v_name) = 0 then
+    raise exception 'invalid_name';
+  end if;
+  if p_password is null or length(p_password) = 0 then
+    raise exception 'invalid_password';
+  end if;
+  if exists (select 1 from members m where m.name = v_name) then
+    raise exception 'name_taken';
+  end if;
+
+  insert into members (name, password_hash, photo_data, gender, birthdate, phone, email)
+  values (
+    v_name,
+    crypt(p_password, gen_salt('bf')),
+    p_photo_data,
+    case when p_gender in ('male', 'female') then p_gender else null end,
+    p_birthdate,
+    nullif(trim(p_phone), ''),
+    nullif(trim(p_email), '')
+  );
+
+  return query select m.id, m.name, m.photo_data from members m where m.name = v_name;
+end;
+$$;
+
+create or replace function member_login(p_name text, p_password text)
+returns table(id bigint, name text, photo_data text)
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id bigint;
+begin
+  v_id := verify_member(p_name, p_password);
+  return query select m.id, m.name, m.photo_data from members m where m.id = v_id;
 end;
 $$;
 
@@ -519,15 +721,21 @@ begin
 end;
 $$;
 
-grant execute on function submit_score(text, text, integer, text, text, text, text, integer) to anon, authenticated;
-grant execute on function add_guestbook_entry(text, text, text, bigint, text, text) to anon, authenticated;
-grant execute on function edit_guestbook_entry(bigint, text, text, text, text) to anon, authenticated;
-grant execute on function delete_guestbook_entry(bigint, text) to anon, authenticated;
+grant execute on function submit_score(text, text, integer, text, text, text, text, integer, text, text) to anon, authenticated;
+grant execute on function edit_leaderboard_entry(bigint, text, text, text) to anon, authenticated;
+grant execute on function delete_leaderboard_entry(bigint, text, text) to anon, authenticated;
+grant execute on function add_guestbook_entry(text, text, text, bigint, text, text, text, text) to anon, authenticated;
+grant execute on function edit_guestbook_entry(bigint, text, text, text, text, text, text) to anon, authenticated;
+grant execute on function delete_guestbook_entry(bigint, text, text, text) to anon, authenticated;
 grant execute on function add_guestbook_heart(bigint) to anon, authenticated;
 grant execute on function remove_guestbook_heart(bigint) to anon, authenticated;
 grant execute on function increment_visits() to anon, authenticated;
 grant execute on function admin_login(text) to anon, authenticated;
 grant execute on function admin_change_password(text, text) to anon, authenticated;
+-- verify_member is intentionally NOT granted — see its own comment above, it's an internal-only
+-- helper called from within these other security definer functions, not something the client calls.
+grant execute on function member_signup(text, text, text, text, date, text, text) to anon, authenticated;
+grant execute on function member_login(text, text) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_delete_leaderboard_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;

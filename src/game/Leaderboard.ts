@@ -1,4 +1,5 @@
 import { WrongAdminPasswordError } from "./Admin";
+import { WrongMemberPasswordError } from "./Membership";
 import { supabase } from "./supabaseClient";
 
 export interface LeaderboardEntry {
@@ -15,6 +16,10 @@ export interface LeaderboardEntry {
   /** Base64 data URL of the top-10 celebration photo — null for older rows migrated before this
    *  existed, or if the player's camera wasn't available at capture time. */
   photo: string | null;
+  /** Set when a logged-in BDJ member submitted this — lets that same member edit the message or
+   *  delete the entry without a password (see editLeaderboardEntry/deleteLeaderboardEntry). The
+   *  score itself is never editable, by anyone. */
+  memberId: number | null;
   dateIso: string;
 }
 
@@ -27,6 +32,10 @@ export interface NewLeaderboardEntry {
   step: number;
   bgm: string;
   photo: string | null;
+  /** When both are given, the entry is attributed to that logged-in member (with no "(Guest)"
+   *  suffix) — see submit_score's member path in supabase/schema.sql. */
+  memberName?: string | null;
+  memberPassword?: string | null;
 }
 
 interface LeaderboardRow {
@@ -39,10 +48,20 @@ interface LeaderboardRow {
   step: number;
   bgm: string;
   photo: string | null;
+  member_id: number | null;
   created_at: string;
 }
 
 const MAX_ENTRIES = 20;
+
+/** Thrown by a member-authenticated edit/delete when the verified member doesn't own this entry —
+ *  shouldn't normally surface (the client only offers this for the logged-in member's own rows),
+ *  but the server checks regardless. */
+export class NotOwnerError extends Error {
+  constructor() {
+    super("You don't own this entry");
+  }
+}
 
 function toEntry(row: LeaderboardRow): LeaderboardEntry {
   return {
@@ -55,6 +74,7 @@ function toEntry(row: LeaderboardRow): LeaderboardEntry {
     step: row.step,
     bgm: row.bgm,
     photo: row.photo,
+    memberId: row.member_id,
     dateIso: row.created_at,
   };
 }
@@ -64,7 +84,7 @@ function toEntry(row: LeaderboardRow): LeaderboardEntry {
 export async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
   const { data, error } = await supabase
     .from("leaderboard")
-    .select("id, name, message, score, speed, difficulty, step, bgm, photo, created_at")
+    .select("id, name, message, score, speed, difficulty, step, bgm, photo, member_id, created_at")
     .order("score", { ascending: false })
     .order("id", { ascending: true })
     .limit(MAX_ENTRIES);
@@ -98,8 +118,14 @@ export async function addLeaderboardEntry(entry: NewLeaderboardEntry): Promise<L
     p_step: entry.step,
     p_bgm: entry.bgm,
     p_photo: entry.photo,
+    p_member_name: entry.memberName ?? null,
+    p_member_password: entry.memberPassword ?? null,
   });
-  if (error || !data) throw new Error(error?.message ?? "Failed to save leaderboard entry");
+  if (error) {
+    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Failed to save leaderboard entry");
   return (data as LeaderboardRow[]).map(toEntry);
 }
 
@@ -109,6 +135,38 @@ export async function adminDeleteLeaderboardEntries(ids: number[], adminPassword
   const { data, error } = await supabase.rpc("admin_delete_leaderboard_entries", { p_ids: ids, p_admin_password: adminPassword });
   if (error) {
     if (error.message === "wrong_password") throw new WrongAdminPasswordError();
+    throw new Error(error.message);
+  }
+  return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
+}
+
+/** Member-only — leaderboard rows have never had a per-row password, so this is the only way for a
+ *  regular (non-admin) user to touch their own entry, and only the message is editable (never the
+ *  score, so nobody can rewrite their way onto the board). */
+export async function editLeaderboardEntry(id: number, message: string, memberName: string, memberPassword: string): Promise<LeaderboardEntry[]> {
+  const { data, error } = await supabase.rpc("edit_leaderboard_entry", {
+    p_id: id,
+    p_message: message,
+    p_member_name: memberName,
+    p_member_password: memberPassword,
+  });
+  if (error) {
+    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+    if (error.message === "not_owner") throw new NotOwnerError();
+    throw new Error(error.message);
+  }
+  return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
+}
+
+export async function deleteLeaderboardEntry(id: number, memberName: string, memberPassword: string): Promise<LeaderboardEntry[]> {
+  const { data, error } = await supabase.rpc("delete_leaderboard_entry", {
+    p_id: id,
+    p_member_name: memberName,
+    p_member_password: memberPassword,
+  });
+  if (error) {
+    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+    if (error.message === "not_owner") throw new NotOwnerError();
     throw new Error(error.message);
   }
   return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
