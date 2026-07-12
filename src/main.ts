@@ -32,7 +32,17 @@ import {
   NotOwnerError as LeaderboardNotOwnerError,
   qualifiesForTop20,
 } from "./game/Leaderboard";
-import { memberLogin, memberSignup, NameTakenError, WrongMemberPasswordError, type Member } from "./game/Membership";
+import {
+  loadMembers,
+  memberLogin,
+  memberSignup,
+  NameTakenError,
+  updateMemberProfile,
+  WrongMemberPasswordError,
+  type Member,
+  type MemberDirectoryEntry,
+  type MemberGender,
+} from "./game/Membership";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
 import { adminAddBannerImages, adminDeleteBannerImage, loadBannerImages, type BannerImage } from "./game/BannerImages";
 import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
@@ -163,6 +173,22 @@ const membershipSignupEmailInput = document.querySelector<HTMLInputElement>("#me
 const membershipSignupError = document.querySelector<HTMLSpanElement>("#membership-signup-error")!;
 const membershipSignupSubmit = document.querySelector<HTMLButtonElement>("#membership-signup-submit")!;
 const membershipSignupCancel = document.querySelector<HTMLButtonElement>("#membership-signup-cancel")!;
+const membershipProfileOverlay = document.querySelector<HTMLDivElement>("#membership-profile-overlay")!;
+const membershipProfilePhotoInput = document.querySelector<HTMLInputElement>("#membership-profile-photo-input")!;
+const membershipProfilePhotoFilename = document.querySelector<HTMLSpanElement>("#membership-profile-photo-filename")!;
+const membershipProfileGenderMale = document.querySelector<HTMLInputElement>("#membership-profile-gender-male")!;
+const membershipProfileGenderFemale = document.querySelector<HTMLInputElement>("#membership-profile-gender-female")!;
+const membershipProfileBirthdateInput = document.querySelector<HTMLInputElement>("#membership-profile-birthdate")!;
+const membershipProfilePhoneInput = document.querySelector<HTMLInputElement>("#membership-profile-phone")!;
+const membershipProfileEmailInput = document.querySelector<HTMLInputElement>("#membership-profile-email")!;
+const membershipProfilePasswordInput = document.querySelector<HTMLInputElement>("#membership-profile-password")!;
+const membershipProfileError = document.querySelector<HTMLSpanElement>("#membership-profile-error")!;
+const membershipProfileSubmit = document.querySelector<HTMLButtonElement>("#membership-profile-submit")!;
+const membershipProfileCancel = document.querySelector<HTMLButtonElement>("#membership-profile-cancel")!;
+const membersDirectoryOpenCard = document.querySelector<HTMLButtonElement>("#members-directory-open-card")!;
+const membersDirectoryOverlay = document.querySelector<HTMLDivElement>("#members-directory-overlay")!;
+const membersDirectoryCloseButton = document.querySelector<HTMLButtonElement>("#members-directory-close-button")!;
+const membersDirectoryList = document.querySelector<HTMLDivElement>("#members-directory-list")!;
 const guestbookOpenCard = document.querySelector<HTMLButtonElement>("#guestbook-open-card")!;
 const guestbookOverlay = document.querySelector<HTMLDivElement>("#guestbook-overlay")!;
 const guestbookCloseButton = document.querySelector<HTMLButtonElement>("#guestbook-close-button")!;
@@ -253,13 +279,17 @@ function setMembershipUI(): void {
   if (member) {
     membershipAvatar.style.backgroundImage = member.photoData ? `url(${member.photoData})` : "";
     membershipAvatar.classList.toggle("has-photo", !!member.photoData);
+    membershipAvatar.title = member.photoData ? "사진 크게 보기" : "";
     membershipNameLabel.textContent = member.name;
+    membershipNameLabel.title = "내 정보 보기/수정";
     membershipAuthActions.hidden = true;
     membershipLogoutButton.hidden = false;
   } else {
     membershipAvatar.style.backgroundImage = "";
     membershipAvatar.classList.remove("has-photo");
+    membershipAvatar.title = "";
     membershipNameLabel.textContent = "Guest";
+    membershipNameLabel.title = "";
     membershipAuthActions.hidden = false;
     membershipLogoutButton.hidden = true;
   }
@@ -581,7 +611,15 @@ function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): stri
       ${
         isReply
           ? ""
-          : `<div class="guestbook-inline-form" data-mode="reply" data-id="${entry.id}" hidden>
+          : member
+            ? `<div class="guestbook-inline-form" data-mode="reply" data-id="${entry.id}" hidden>
+        <input type="text" class="guestbook-reply-message" placeholder="답글을 남겨주세요" maxlength="80" />
+        <div class="guestbook-inline-actions">
+          <button type="button" class="guestbook-confirm-btn" data-action="submit-reply" data-id="${entry.id}">등록</button>
+          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
+        </div>
+      </div>`
+            : `<div class="guestbook-inline-form" data-mode="reply" data-id="${entry.id}" hidden>
         <input type="text" class="guestbook-reply-name" placeholder="이름" maxlength="12" />
         <input type="text" class="guestbook-reply-message" placeholder="답글을 남겨주세요" maxlength="80" />
         <input type="password" class="guestbook-reply-password" placeholder="비밀번호 (수정/삭제용)" maxlength="20" />
@@ -821,11 +859,17 @@ guestbookList.addEventListener("click", (event) => {
 
   if (action === "submit-reply") {
     const form = entry.querySelector<HTMLDivElement>(`.guestbook-inline-form[data-mode="reply"][data-id="${id}"]`)!;
-    const name = form.querySelector<HTMLInputElement>(".guestbook-reply-name")!.value.trim();
     const message = form.querySelector<HTMLInputElement>(".guestbook-reply-message")!.value.trim();
-    const password = form.querySelector<HTMLInputElement>(".guestbook-reply-password")!.value;
-    if (!name || !message) return;
-    void addGuestbookEntry({ name, message, password, parentId: id })
+    if (!message) return;
+
+    // Logged-in members skip the name/password fields entirely (they don't exist in this form's
+    // markup, see renderGuestbookEntryHtml) — same auto-fill/no-password treatment as the main
+    // compose form.
+    const name = member ? member.name : form.querySelector<HTMLInputElement>(".guestbook-reply-name")!.value.trim();
+    const password = member ? "" : form.querySelector<HTMLInputElement>(".guestbook-reply-password")!.value;
+    if (!name) return;
+
+    void addGuestbookEntry({ name, message, password, parentId: id, memberName: member?.name, memberPassword: memberPassword ?? undefined })
       .then(() => renderGuestbook())
       .catch((err) => console.error("답글 등록 실패:", err));
   }
@@ -1284,6 +1328,11 @@ membershipSignupSubmit.addEventListener("click", () => {
     membershipSignupError.hidden = false;
     return;
   }
+  if (!membershipSignupGenderMale.checked && !membershipSignupGenderFemale.checked) {
+    membershipSignupError.textContent = "성별을 선택해주세요.";
+    membershipSignupError.hidden = false;
+    return;
+  }
 
   const file = membershipSignupPhotoInput.files?.[0] ?? null;
   if (file) {
@@ -1299,7 +1348,8 @@ membershipSignupSubmit.addEventListener("click", () => {
     }
   }
 
-  const gender = membershipSignupGenderMale.checked ? "male" : membershipSignupGenderFemale.checked ? "female" : null;
+  // At least one of the two is checked — validated by the guard above.
+  const gender: MemberGender = membershipSignupGenderMale.checked ? "male" : "female";
   const birthdate = membershipSignupBirthdateInput.value || null;
   const phone = membershipSignupPhoneInput.value.trim() || null;
   const email = membershipSignupEmailInput.value.trim() || null;
@@ -1324,6 +1374,132 @@ membershipSignupSubmit.addEventListener("click", () => {
       }
       membershipSignupError.hidden = false;
     });
+});
+
+membershipAvatar.addEventListener("click", () => {
+  if (!member || !member.photoData) return;
+  photoLightboxImage.src = member.photoData;
+  photoLightboxImage.alt = `${member.name} 프로필 사진`;
+  photoLightboxOverlay.style.display = "flex";
+});
+
+membershipNameLabel.addEventListener("click", () => {
+  if (!member) return;
+  membershipProfilePhotoInput.value = "";
+  membershipProfilePhotoFilename.textContent = "";
+  membershipProfileGenderMale.checked = member.gender === "male";
+  membershipProfileGenderFemale.checked = member.gender === "female";
+  membershipProfileBirthdateInput.value = member.birthdate ?? "";
+  membershipProfilePhoneInput.value = member.phone ?? "";
+  membershipProfileEmailInput.value = member.email ?? "";
+  membershipProfilePasswordInput.value = "";
+  membershipProfileError.hidden = true;
+  membershipProfileOverlay.style.display = "flex";
+});
+
+membershipProfileCancel.addEventListener("click", () => {
+  membershipProfileOverlay.style.display = "none";
+});
+
+membershipProfilePhotoInput.addEventListener("change", () => {
+  const file = membershipProfilePhotoInput.files?.[0];
+  membershipProfilePhotoFilename.textContent = file ? file.name : "";
+  membershipProfileError.hidden = true;
+});
+
+membershipProfileSubmit.addEventListener("click", () => {
+  if (!member) return;
+  const password = membershipProfilePasswordInput.value;
+  membershipProfileError.hidden = true;
+
+  if (!password) {
+    membershipProfileError.textContent = "비밀번호를 입력해주세요.";
+    membershipProfileError.hidden = false;
+    return;
+  }
+  if (!membershipProfileGenderMale.checked && !membershipProfileGenderFemale.checked) {
+    membershipProfileError.textContent = "성별을 선택해주세요.";
+    membershipProfileError.hidden = false;
+    return;
+  }
+
+  const file = membershipProfilePhotoInput.files?.[0] ?? null;
+  if (file) {
+    if (!GUESTBOOK_IMAGE_TYPES.includes(file.type)) {
+      membershipProfileError.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
+      membershipProfileError.hidden = false;
+      return;
+    }
+    if (file.size > GUESTBOOK_IMAGE_MAX_BYTES) {
+      membershipProfileError.textContent = `파일이 너무 큽니다 (최대 ${GUESTBOOK_IMAGE_MAX_BYTES / (1024 * 1024)}MB): ${file.name}`;
+      membershipProfileError.hidden = false;
+      return;
+    }
+  }
+
+  const currentName = member.name;
+  const gender: MemberGender = membershipProfileGenderMale.checked ? "male" : "female";
+  const birthdate = membershipProfileBirthdateInput.value || null;
+  const phone = membershipProfilePhoneInput.value.trim() || null;
+  const email = membershipProfileEmailInput.value.trim() || null;
+
+  void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
+    .then((photoData) => updateMemberProfile(currentName, password, { gender, birthdate, phone, email, photoData }))
+    .then((updatedMember) => {
+      member = updatedMember;
+      memberPassword = password;
+      localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name: currentName, password }));
+      membershipProfileOverlay.style.display = "none";
+      setMembershipUI();
+      void renderGuestbook();
+      void renderLeaderboard();
+    })
+    .catch((err) => {
+      if (err instanceof WrongMemberPasswordError) {
+        membershipProfileError.textContent = "비밀번호가 일치하지 않습니다.";
+        membershipProfileError.hidden = false;
+      } else {
+        console.error("내 정보 수정 실패:", err);
+        membershipProfileError.textContent = "수정에 실패했습니다. 잠시 후 다시 시도해주세요.";
+        membershipProfileError.hidden = false;
+      }
+    });
+});
+
+function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry): string {
+  return `
+    <div class="members-directory-entry">
+      <div class="members-directory-avatar${entry.photoData ? " has-photo" : ""}" data-member-id="${entry.id}"></div>
+      <div class="members-directory-info">
+        <span class="members-directory-name">${escapeHtml(entry.name)}</span>
+        <span class="members-directory-meta">${entry.gender === "male" ? "남" : entry.gender === "female" ? "여" : "-"} · 가입일 ${formatLocalDate(entry.dateIso)}</span>
+      </div>
+    </div>`;
+}
+
+async function renderMembersDirectory(): Promise<void> {
+  const members = await loadMembers();
+  if (members.length === 0) {
+    membersDirectoryList.innerHTML = `<p id="members-directory-empty">아직 가입한 회원이 없습니다.</p>`;
+    return;
+  }
+  membersDirectoryList.innerHTML = members.map(renderMembersDirectoryEntryHtml).join("");
+  // Set via the DOM property, not interpolated into the HTML above — same reasoning as every other
+  // base64 photo in this codebase (guestbook attachments, leaderboard photos).
+  for (const entry of members) {
+    if (!entry.photoData) continue;
+    const avatar = membersDirectoryList.querySelector<HTMLDivElement>(`.members-directory-avatar[data-member-id="${entry.id}"]`);
+    if (avatar) avatar.style.backgroundImage = `url(${entry.photoData})`;
+  }
+}
+
+membersDirectoryOpenCard.addEventListener("click", () => {
+  membersDirectoryOverlay.style.display = "flex";
+  void renderMembersDirectory();
+});
+
+membersDirectoryCloseButton.addEventListener("click", () => {
+  membersDirectoryOverlay.style.display = "none";
 });
 
 /** Shared by every admin-panel action below — a rejected password means the stored one no longer

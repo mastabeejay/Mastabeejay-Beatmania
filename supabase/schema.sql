@@ -159,8 +159,10 @@ alter table social_links enable row level security;
 alter table site_notice enable row level security;
 alter table site_banner_images enable row level security;
 alter table members enable row level security;
--- `admin_settings` and `members` have no policies at all — not even select. Only the
--- admin_login()/member_login()/member_signup() functions below can read them.
+-- `admin_settings` has no policies at all — not even select. `members` is the same (only the
+-- admin_login()/member_login()/member_signup()/member_update_profile() functions below can read
+-- the base table directly), except for the members_public view further down, which deliberately
+-- exposes only the columns safe for a public "BDJ Members" directory listing.
 
 drop policy if exists "public read leaderboard" on leaderboard;
 create policy "public read leaderboard" on leaderboard for select using (true);
@@ -192,6 +194,14 @@ drop view if exists guestbook_public cascade;
 create view guestbook_public as
   select id, name, message, parent_id, attachment_data, attachment_type, heart_count, member_id, created_at from guestbook order by id desc;
 grant select on guestbook_public to anon, authenticated;
+
+-- Backs the public "BDJ Members" directory listing — signup order (oldest first), and
+-- deliberately narrow: no password_hash, birthdate, phone, or email, only what's meant to be shown
+-- to any visitor. No functions depend on this view's row type, so it needs no CASCADE.
+drop view if exists members_public;
+create view members_public as
+  select id, name, gender, photo_data, created_at from members order by id asc;
+grant select on members_public to anon, authenticated;
 
 -- `visits` has no policies at all — not even select. Only increment_visits() below can touch it.
 
@@ -487,6 +497,13 @@ begin
 end;
 $$;
 
+-- Signature is unchanged from the first version, but the return type gained columns (gender/
+-- birthdate/phone/email) so the client has the member's full profile in hand right after signup/
+-- login without a separate fetch — CREATE OR REPLACE can't change a return type, so this needs an
+-- explicit drop first.
+drop function if exists member_signup(text, text, text, text, date, text, text);
+drop function if exists member_login(text, text);
+
 -- `name` is the login handle, so it must be unique — raises name_taken rather than silently
 -- colliding with an existing account (two real people can share a Korean name; the second one just
 -- has to pick a distinguishing variation).
@@ -495,7 +512,7 @@ create or replace function member_signup(
   p_gender text default null, p_birthdate date default null,
   p_phone text default null, p_email text default null
 )
-returns table(id bigint, name text, photo_data text)
+returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text)
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_name text := left(trim(p_name), 20);
@@ -506,6 +523,9 @@ begin
   if p_password is null or length(p_password) = 0 then
     raise exception 'invalid_password';
   end if;
+  if p_gender not in ('male', 'female') then
+    raise exception 'invalid_gender';
+  end if;
   if exists (select 1 from members m where m.name = v_name) then
     raise exception 'name_taken';
   end if;
@@ -515,24 +535,58 @@ begin
     v_name,
     crypt(p_password, gen_salt('bf')),
     p_photo_data,
-    case when p_gender in ('male', 'female') then p_gender else null end,
+    p_gender,
     p_birthdate,
     nullif(trim(p_phone), ''),
     nullif(trim(p_email), '')
   );
 
-  return query select m.id, m.name, m.photo_data from members m where m.name = v_name;
+  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email from members m where m.name = v_name;
 end;
 $$;
 
 create or replace function member_login(p_name text, p_password text)
-returns table(id bigint, name text, photo_data text)
+returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text)
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_id bigint;
 begin
   v_id := verify_member(p_name, p_password);
-  return query select m.id, m.name, m.photo_data from members m where m.id = v_id;
+  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email from members m where m.id = v_id;
+end;
+$$;
+
+-- Profile edit: re-verifies the password fresh (typed into the profile modal, not silently reused
+-- from the cached login credentials) — same "re-enter the current password even though already
+-- logged in" caution as admin_change_password. Gender stays required (can't be cleared back to
+-- null); birthdate/phone/email are directly set from the form (blank clears them, unlike
+-- add/edit_guestbook_entry's coalesce-on-null pattern, since this form always shows the current
+-- value and resubmits it as-is when unchanged); a skipped photo re-upload (p_new_photo_data null)
+-- keeps the existing one via coalesce.
+create or replace function member_update_profile(
+  p_name text, p_password text, p_gender text,
+  p_birthdate date default null, p_phone text default null, p_email text default null,
+  p_new_photo_data text default null
+)
+returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text)
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id bigint;
+begin
+  v_id := verify_member(p_name, p_password);
+  if p_gender not in ('male', 'female') then
+    raise exception 'invalid_gender';
+  end if;
+
+  update members
+  set photo_data = coalesce(p_new_photo_data, photo_data),
+      gender = p_gender,
+      birthdate = p_birthdate,
+      phone = nullif(trim(p_phone), ''),
+      email = nullif(trim(p_email), '')
+  where id = v_id;
+
+  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email from members m where m.id = v_id;
 end;
 $$;
 
@@ -736,6 +790,7 @@ grant execute on function admin_change_password(text, text) to anon, authenticat
 -- helper called from within these other security definer functions, not something the client calls.
 grant execute on function member_signup(text, text, text, text, date, text, text) to anon, authenticated;
 grant execute on function member_login(text, text) to anon, authenticated;
+grant execute on function member_update_profile(text, text, text, date, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_delete_leaderboard_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;

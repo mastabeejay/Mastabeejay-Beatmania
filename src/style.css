@@ -592,6 +592,13 @@ body::before {
   background: rgba(0, 240, 255, 0.26);
 }
 
+/* Wraps the Jaybot launcher and the membership status widget purely so mobile can turn them into
+   one flex row (see the mobile breakpoints) — on desktop this is inert (display:contents removes
+   it from layout entirely) since both children already position themselves via fixed top:14px. */
+#top-status-row {
+  display: contents;
+}
+
 /* Jaybot launcher — the circularly-cropped IMG_1141 artwork with the name under it and an invite
    line to its right, pinned to the top-left of the start screen (top-left is free there: the
    refresh/social buttons live top-right, and the gameplay HUD that also uses top-left sits
@@ -1084,7 +1091,8 @@ body::before {
 /* --- BDJ Membership login/signup (mirrors the admin-login-* / admin-panel-* shape above) -------- */
 
 #membership-login-overlay,
-#membership-signup-overlay {
+#membership-signup-overlay,
+#membership-profile-overlay {
   display: none;
   position: fixed;
   inset: 0;
@@ -1108,7 +1116,8 @@ body::before {
   gap: 10px;
 }
 
-#membership-signup-panel {
+#membership-signup-panel,
+#membership-profile-panel {
   width: min(420px, 92vw);
   max-height: 86vh;
   overflow-y: auto;
@@ -1123,7 +1132,8 @@ body::before {
 }
 
 #membership-login-title,
-#membership-signup-title {
+#membership-signup-title,
+#membership-profile-title {
   font-size: 16px;
   text-align: center;
   margin-bottom: 6px;
@@ -1144,7 +1154,8 @@ body::before {
 }
 
 #membership-login-actions,
-#membership-signup-actions {
+#membership-signup-actions,
+#membership-profile-actions {
   display: flex;
   gap: 10px;
   margin-top: 6px;
@@ -1152,8 +1163,10 @@ body::before {
 
 #membership-login-submit,
 #membership-signup-submit,
+#membership-profile-submit,
 #membership-login-cancel,
-#membership-signup-cancel {
+#membership-signup-cancel,
+#membership-profile-cancel {
   font-family: var(--font-body);
   font-weight: 700;
   font-size: 13px;
@@ -1163,14 +1176,16 @@ body::before {
 }
 
 #membership-login-submit,
-#membership-signup-submit {
+#membership-signup-submit,
+#membership-profile-submit {
   border: 1px solid rgba(0, 240, 255, 0.4);
   background: rgba(0, 240, 255, 0.16);
   color: var(--color-cyber-silver);
 }
 
 #membership-login-cancel,
-#membership-signup-cancel {
+#membership-signup-cancel,
+#membership-profile-cancel {
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: transparent;
   color: rgba(201, 211, 222, 0.7);
@@ -1194,7 +1209,8 @@ body::before {
   color: var(--color-cyber-silver);
 }
 
-#membership-signup-photo-row {
+#membership-signup-photo-row,
+#membership-profile-photo-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1202,18 +1218,21 @@ body::before {
   margin: 4px 0 12px;
 }
 
-#membership-signup-photo-input {
+#membership-signup-photo-input,
+#membership-profile-photo-input {
   display: none;
 }
 
-#membership-signup-photo-filename {
+#membership-signup-photo-filename,
+#membership-profile-photo-filename {
   font-family: var(--font-body);
   font-size: 12px;
   color: rgba(201, 211, 222, 0.75);
   word-break: break-all;
 }
 
-#membership-signup-gender-row {
+#membership-signup-gender-row,
+#membership-profile-gender-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1224,7 +1243,8 @@ body::before {
   color: rgba(201, 211, 222, 0.85);
 }
 
-#membership-signup-gender-label {
+#membership-signup-gender-label,
+#membership-profile-gender-label {
   font-weight: 600;
   font-size: 12px;
   color: rgba(201, 211, 222, 0.7);
@@ -1515,29 +1535,43 @@ body::before {
 }
 
 /* Always-visible SNS-style status widget — avatar+name show either the logged-in member or a
-   blank "Guest" placeholder, never just a bare login button. Sits right above the welcome/guest
-   board row (not fixed — it's part of the same scrollable start-screen column), so it needs no
-   bespoke mobile breakpoint beyond the flex-wrap this already shares with that row. */
+   blank "Guest" placeholder, never just a bare login button. Fixed at the same top offset as the
+   Jaybot launcher (top:14px) and styled identically (circular photo, font size/family/glow) —
+   sits in the gap between the title and the (PWA-only) refresh button, which stays to its right.
+   #top-status-row is the shared wrapper with #chatbot-toggle-button; see its own rule for how the
+   pairing changes on mobile. */
 #membership-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  position: fixed;
+  top: 14px;
+  right: 130px;
+  z-index: 12;
 }
 
 #membership-avatar {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: rgba(201, 211, 222, 0.15) center / cover no-repeat;
+  background-color: rgba(201, 211, 222, 0.15);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  border: 1px solid rgba(0, 240, 255, 0.25);
+  font-size: 22px;
+  border: 2px solid rgba(0, 240, 255, 0.5);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+#membership-avatar:hover {
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.55);
+  transform: scale(1.05);
 }
 
 #membership-avatar::before {
@@ -1549,39 +1583,54 @@ body::before {
   content: none;
 }
 
+/* Capped and ellipsized — a member's real name can run up to 20 characters, and this whole widget
+   has to fit in a fairly narrow gap between the title and the refresh button (see #membership-row's
+   own comment), so an unusually long name can't be allowed to blow the layout out. */
 #membership-name-label {
-  font-family: var(--font-body);
-  font-weight: 600;
-  font-size: 13px;
-  color: rgba(201, 211, 222, 0.85);
+  display: inline-block;
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--color-cyber-cyan);
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+  cursor: pointer;
 }
 
+/* Stacked rather than side-by-side — "Log in"/"Join Crew" together are wider than this corner
+   widget has horizontal room for; stacking trades that for a couple more px of height instead. */
 #membership-auth-actions {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 #membership-login-button,
 #membership-signup-button,
 #membership-logout-button {
-  font-family: var(--font-body);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 700;
   font-size: 11px;
-  letter-spacing: 0.02em;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  background: rgba(0, 240, 255, 0.06);
-  color: rgba(201, 211, 222, 0.8);
+  letter-spacing: 0.08em;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-cyber-cyan);
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: opacity 0.2s ease;
 }
 
 #membership-login-button:hover,
 #membership-signup-button:hover,
 #membership-logout-button:hover {
-  background: rgba(0, 240, 255, 0.16);
-  color: var(--color-cyber-silver);
+  opacity: 0.7;
 }
 
 #welcome-guestbook-row {
@@ -1592,7 +1641,8 @@ body::before {
   gap: 16px;
 }
 
-#guestbook-open-card {
+#guestbook-open-card,
+#members-directory-open-card {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1607,17 +1657,20 @@ body::before {
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-#guestbook-open-card:hover {
+#guestbook-open-card:hover,
+#members-directory-open-card:hover {
   background: rgba(0, 240, 255, 0.18);
   transform: scale(1.05);
   box-shadow: 0 0 26px rgba(0, 240, 255, 0.3);
 }
 
-#guestbook-open-card:active {
+#guestbook-open-card:active,
+#members-directory-open-card:active {
   transform: scale(0.98);
 }
 
-#guestbook-card-title {
+#guestbook-card-title,
+#members-directory-card-title {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 13px;
@@ -1626,7 +1679,8 @@ body::before {
   white-space: nowrap;
 }
 
-#guestbook-card-sub {
+#guestbook-card-sub,
+#members-directory-card-sub {
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 11px;
@@ -1796,7 +1850,8 @@ body::before {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-#guestbook-overlay {
+#guestbook-overlay,
+#members-directory-overlay {
   display: none;
   position: fixed;
   inset: 0;
@@ -1812,7 +1867,8 @@ body::before {
 /* Header (title + close) is a normal flex child that never scrolls; #guestbook-scroll-body is the
    only part that does, via its own overflow-y — like Excel's frozen top row, the header can't be
    dragged out of view no matter how far the entry list is scrolled. */
-#guestbook-overlay-panel {
+#guestbook-overlay-panel,
+#members-directory-panel {
   width: min(640px, 90vw);
   max-height: 70vh;
   display: flex;
@@ -1827,7 +1883,8 @@ body::before {
 /* Title + the return-to-main button share a header row at the very top of the panel — a close
    button buried below a long list of entries is easy to miss, so it sits where a modal's close
    control is conventionally expected instead. */
-#guestbook-header-row {
+#guestbook-header-row,
+#members-directory-header-row {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -1836,13 +1893,15 @@ body::before {
   padding: 20px 24px 10px;
 }
 
-#guestbook-scroll-body {
+#guestbook-scroll-body,
+#members-directory-scroll-body {
   flex: 1 1 auto;
   overflow-y: auto;
   padding: 0 24px 20px;
 }
 
-#guestbook-close-button {
+#guestbook-close-button,
+#members-directory-close-button {
   flex: 0 0 auto;
   font-family: var(--font-body);
   font-weight: 700;
@@ -1857,11 +1916,13 @@ body::before {
   transition: background 0.2s ease;
 }
 
-#guestbook-close-button:hover {
+#guestbook-close-button:hover,
+#members-directory-close-button:hover {
   background: rgba(255, 46, 224, 0.26);
 }
 
-#guestbook-title {
+#guestbook-title,
+#members-directory-title {
   font-size: 16px;
   letter-spacing: 0.12em;
 }
@@ -1873,13 +1934,79 @@ body::before {
   margin-bottom: 10px;
 }
 
-#guestbook-empty {
+#guestbook-empty,
+#members-directory-empty {
   font-family: var(--font-body);
   font-size: 13px;
   font-style: italic;
   color: rgba(201, 211, 222, 0.5);
   text-align: center;
   margin: 0;
+}
+
+#members-directory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.members-directory-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 240, 255, 0.04);
+  border: 1px solid rgba(0, 240, 255, 0.12);
+}
+
+.members-directory-avatar {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(201, 211, 222, 0.15);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+}
+
+.members-directory-avatar::before {
+  content: "👤";
+  opacity: 0.5;
+}
+
+.members-directory-avatar.has-photo::before {
+  content: none;
+}
+
+.members-directory-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.members-directory-name {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--color-cyber-cyan);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.members-directory-meta {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: rgba(201, 211, 222, 0.6);
 }
 
 .guestbook-entry {
@@ -2071,11 +2198,16 @@ body::before {
 
 /* Squared-off layout, same on every screen size (PC, mobile portrait/landscape all get identical
    markup — no breakpoint override here): row 1 is name+password, row 2 is the message, row 3 is
-   attachment+submit. Each .guestbook-form-row just pins its two children to opposite ends. */
+   attachment+submit. Each .guestbook-form-row just pins its two children to opposite ends.
+   Sits at the top of the scroll body (not the bottom) so writing a new entry never requires
+   scrolling past the whole list first — the border-bottom is a clear divider from what follows. */
 #guestbook-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.15);
 }
 
 .guestbook-form-row {
@@ -2774,14 +2906,29 @@ select option:disabled {
   }
 
   /* On a phone there's no free margin for floating elements — the fixed-position Jaybot launcher
-     sat right on top of the tagline/badge. It joins the scrollable column as its first row
-     instead (position:static turns it into a flex item; order:-1 hoists it above the header). */
+     (and the membership widget beside it) sat right on top of the tagline/badge. The shared
+     wrapper joins the scrollable column as its first row instead (order:-1 hoists it above the
+     header); both children go position:static so they lay out side by side inside it. Portrait
+     hugs this row to the left edge, landscape leaves it centered (see those breakpoints below). */
+  #top-status-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    order: -1;
+    gap: 12px;
+  }
+
   #chatbot-toggle-button {
     position: static;
-    order: -1;
-    /* Hug the left edge — the column's align-items:center would otherwise center it. */
-    align-self: flex-start;
-    margin-left: 12px;
+  }
+
+  #membership-row {
+    position: static;
+  }
+
+  #membership-avatar {
+    width: 44px;
+    height: 44px;
   }
 
   #chatbot-toggle-icon {
@@ -2847,11 +2994,13 @@ select option:disabled {
     overflow-x: auto;
   }
 
-  #guestbook-header-row {
+  #guestbook-header-row,
+  #members-directory-header-row {
     padding: 10px 12px 6px;
   }
 
-  #guestbook-scroll-body {
+  #guestbook-scroll-body,
+  #members-directory-scroll-body {
     padding: 0 12px 10px;
   }
 
@@ -2868,11 +3017,13 @@ select option:disabled {
   }
 
   #leaderboard-title,
-  #guestbook-title {
+  #guestbook-title,
+  #members-directory-title {
     font-size: 14px;
   }
 
-  #guestbook-title {
+  #guestbook-title,
+  #members-directory-title {
     margin-bottom: 6px;
   }
 
@@ -2969,7 +3120,8 @@ select option:disabled {
     width: 100%;
   }
 
-  #guestbook-open-card {
+  #guestbook-open-card,
+  #members-directory-open-card {
     padding: 8px 14px;
   }
 
@@ -3024,6 +3176,19 @@ select option:disabled {
 /* --- Phone portrait only (narrow AND tall — excludes landscape phones, which match the shared
    block via max-height instead) ------------------------------------------------------------- */
 @media (max-width: 640px) and (min-height: 481px) {
+  /* Hug the left edge here — the column's align-items:center would otherwise center the row (that
+     centered default is exactly what landscape below wants instead, so this override is portrait-
+     only). The invite tagline is dropped entirely in portrait — there's no room for a second line
+     of text once Jaybot shares its row with the membership widget. */
+  #top-status-row {
+    align-self: flex-start;
+    margin-left: 12px;
+  }
+
+  #chatbot-toggle-tagline {
+    display: none;
+  }
+
   /* Portrait only — landscape has plenty of horizontal room per item, so "YBJ 힙합"/"자유 음원"
      read fine as one line there and shouldn't split. Forces an exact break ("YBJ"/"힙합",
      "자유"/"음원") instead of relying on the browser's natural word-wrap, which — with just
@@ -3119,15 +3284,18 @@ select option:disabled {
     max-width: 185px;
   }
 
-  #guestbook-open-card {
+  #guestbook-open-card,
+  #members-directory-open-card {
     padding: 6px 10px;
   }
 
-  #guestbook-card-title {
+  #guestbook-card-title,
+  #members-directory-card-title {
     font-size: 12px;
   }
 
-  #guestbook-card-sub {
+  #guestbook-card-sub,
+  #members-directory-card-sub {
     font-size: 10px;
   }
 }

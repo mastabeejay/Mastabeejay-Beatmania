@@ -53,6 +53,24 @@
       <button id="stop-button" type="button">⏹ 중단</button>
       <div id="calibration-status"></div>
       <div id="start-overlay">
+        <div id="top-status-row">
+          <button id="chatbot-toggle-button" type="button" aria-label="제이봇 열기">
+            <span id="chatbot-toggle-main">
+              <img id="chatbot-toggle-icon" src="/icons/jaybot.png" alt="" />
+              <span id="chatbot-toggle-label">Jaybot</span>
+            </span>
+            <span id="chatbot-toggle-tagline">BDJ에 대한 궁금증은<br />저 Jaybot에게 물어봐 주세요.</span>
+          </button>
+          <div id="membership-row">
+            <div id="membership-avatar" title="사진 크게 보기"></div>
+            <span id="membership-name-label" title="내 가입정보 보기/수정">Guest</span>
+            <div id="membership-auth-actions">
+              <button id="membership-login-button" type="button">Log in</button>
+              <button id="membership-signup-button" type="button">Join Crew</button>
+            </div>
+            <button id="membership-logout-button" type="button" hidden>로그아웃</button>
+          </div>
+        </div>
         <button id="pwa-refresh-button" type="button" title="새로고침">🔄 새로고침</button>
         <div id="social-links-container"></div>
         <div id="leaderboard-header">
@@ -157,20 +175,15 @@
           <button id="start-button" type="button">Let's Start BDJ</button>
           <span class="start-button-deco start-button-deco-right"></span>
         </div>
-        <div id="membership-row">
-          <div id="membership-avatar"></div>
-          <span id="membership-name-label">Guest</span>
-          <div id="membership-auth-actions">
-            <button id="membership-login-button" type="button">🔐 로그인</button>
-            <button id="membership-signup-button" type="button">가입</button>
-          </div>
-          <button id="membership-logout-button" type="button" hidden>로그아웃</button>
-        </div>
         <div id="welcome-guestbook-row">
           <p id="visitor-welcome">Welcome to MastaBeejay World : <span id="visitor-count">-</span> Manias.</p>
           <button id="guestbook-open-card" type="button">
             <span id="guestbook-card-title">Beejay's Guest Board</span>
             <span id="guestbook-card-sub">방명록 보러가기</span>
+          </button>
+          <button id="members-directory-open-card" type="button">
+            <span id="members-directory-card-title">BDJ Members</span>
+            <span id="members-directory-card-sub">회원 명부 보기</span>
           </button>
         </div>
         <div id="notice-board" hidden>
@@ -222,13 +235,6 @@
             <button id="chatbot-send-button" type="button">전송</button>
           </div>
         </div>
-        <button id="chatbot-toggle-button" type="button" aria-label="제이봇 열기">
-          <span id="chatbot-toggle-main">
-            <img id="chatbot-toggle-icon" src="/icons/jaybot.png" alt="" />
-            <span id="chatbot-toggle-label">Jaybot</span>
-          </span>
-          <span id="chatbot-toggle-tagline">BDJ에 대한 궁금증은<br />저 Jaybot에게 물어봐 주세요.</span>
-        </button>
       </div>
       <div id="admin-login-overlay">
         <div id="admin-login-panel">
@@ -355,9 +361,9 @@
             <span id="membership-signup-photo-filename"></span>
           </div>
           <div id="membership-signup-gender-row">
-            <span id="membership-signup-gender-label">성별 (선택)</span>
-            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-male" value="male" /> 남</label>
-            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-female" value="female" /> 여</label>
+            <span id="membership-signup-gender-label">성별 (필수)</span>
+            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-male" value="male" required /> 남</label>
+            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-female" value="female" required /> 여</label>
           </div>
           <label class="admin-banner-field-label">
             생년월일 (선택)
@@ -378,6 +384,53 @@
           </div>
         </div>
       </div>
+      <div id="membership-profile-overlay">
+        <div id="membership-profile-panel">
+          <div id="membership-profile-title" class="text-metallic-gold">내 정보</div>
+          <div id="membership-profile-photo-row">
+            <label id="membership-profile-photo-label" class="song-file-label" for="membership-profile-photo-input">📷 사진 변경</label>
+            <input type="file" id="membership-profile-photo-input" accept="image/*" />
+            <span id="membership-profile-photo-filename"></span>
+          </div>
+          <div id="membership-profile-gender-row">
+            <span id="membership-profile-gender-label">성별 (필수)</span>
+            <label><input type="radio" name="membership-profile-gender" id="membership-profile-gender-male" value="male" required /> 남</label>
+            <label><input type="radio" name="membership-profile-gender" id="membership-profile-gender-female" value="female" required /> 여</label>
+          </div>
+          <label class="admin-banner-field-label">
+            생년월일 (선택)
+            <input type="date" id="membership-profile-birthdate" />
+          </label>
+          <label class="admin-banner-field-label">
+            전화번호 (선택)
+            <input type="tel" id="membership-profile-phone" maxlength="20" placeholder="전화번호" />
+          </label>
+          <label class="admin-banner-field-label">
+            Email (선택)
+            <input type="email" id="membership-profile-email" maxlength="100" placeholder="Email" />
+          </label>
+          <label class="admin-banner-field-label">
+            비밀번호 확인 (저장하려면 입력)
+            <input type="password" id="membership-profile-password" maxlength="60" placeholder="비밀번호" />
+          </label>
+          <span id="membership-profile-error" class="admin-panel-inline-error" hidden></span>
+          <div id="membership-profile-actions">
+            <button type="button" id="membership-profile-submit">저장</button>
+            <button type="button" id="membership-profile-cancel">취소</button>
+          </div>
+        </div>
+      </div>
+      <div id="members-directory-overlay">
+        <div id="members-directory-panel">
+          <div id="members-directory-header-row">
+            <div id="members-directory-title" class="text-metallic-gold">BDJ Members</div>
+            <button id="members-directory-close-button" type="button">✕ 닫기</button>
+          </div>
+          <div id="members-directory-scroll-body">
+            <div id="members-directory-list"></div>
+          </div>
+        </div>
+      </div>
       <div id="install-guide-overlay">
         <div id="install-guide-overlay-panel">
           <div id="install-guide-modal-title" class="text-metallic-gold"></div>
@@ -395,8 +448,6 @@
             <button id="guestbook-close-button" type="button">✕ 닫기</button>
           </div>
           <div id="guestbook-scroll-body">
-            <button id="guestbook-admin-delete-button" type="button" hidden>🗑️ 선택 삭제</button>
-            <div id="guestbook-list"></div>
             <form id="guestbook-form">
               <div class="guestbook-form-row">
                 <input type="text" id="guestbook-name" placeholder="이름" maxlength="12" required />
@@ -413,6 +464,8 @@
               </div>
               <span id="guestbook-attachment-error" class="guestbook-inline-error" hidden></span>
             </form>
+            <button id="guestbook-admin-delete-button" type="button" hidden>🗑️ 선택 삭제</button>
+            <div id="guestbook-list"></div>
           </div>
         </div>
       </div>
