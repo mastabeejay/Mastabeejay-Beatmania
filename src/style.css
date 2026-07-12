@@ -17,7 +17,14 @@
 
 body {
   margin: 0;
+  /* 100vh is measured against mobile browsers' "large viewport" (address bar hidden) even while
+     it's actually showing — right after a portrait->landscape rotation this goes stale until the
+     browser's chrome finishes settling, so the page is laid out (and, critically, touch-hit-
+     tested) against a taller viewport than what's really on screen. That mismatch reads as "taps
+     land ~1cm below the visible button." 100dvh tracks the *current* visible viewport instead.
+     Kept 100vh first as a fallback for the handful of browsers that don't support dvh yet. */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background:
     radial-gradient(ellipse at 50% 0%, rgba(0, 240, 255, 0.08), transparent 60%),
@@ -2345,6 +2352,15 @@ select option:disabled {
    landscape phones on the desktop layout with all its floating-element overlaps). Real desktop
    windows are practically never under 480px tall, so this never triggers there. */
 @media (max-width: 640px), (max-height: 480px) {
+  /* Forces an exact break ("YBJ"/"힙합", "자유"/"음원") instead of relying on the browser's
+     natural word-wrap — which, with just enough width for one more glyph after the first word,
+     free-wrapped mid-word instead ("힙 / 합", "음 / 원") since CJK text has no wrap-blocking rule
+     between characters the way Latin text does between letters. Plain inline on desktop, where
+     these already read fine as a single line. */
+  .mobile-stack-line2 {
+    display: block;
+  }
+
   /* flex-start, not the desktop's center: once the column grows taller than the phone screen,
      justify-content:center clips the overflowing top rows unreachably (a scroll container can't
      scroll above its content-box start). Bottom padding keeps the last rows clear of the fixed
