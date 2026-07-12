@@ -16,6 +16,7 @@ import {
   editGuestbookEntry,
   loadGuestbook,
   NoPasswordSetError,
+  removeGuestbookHeart,
   WrongPasswordError,
   type GuestbookAttachmentType,
   type GuestbookEntry,
@@ -317,6 +318,12 @@ function markGuestbookHearted(id: number): void {
   localStorage.setItem(GUESTBOOK_HEARTED_STORAGE_KEY, JSON.stringify(Array.from(ids)));
 }
 
+function unmarkGuestbookHearted(id: number): void {
+  const ids = getHeartedIds();
+  ids.delete(id);
+  localStorage.setItem(GUESTBOOK_HEARTED_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+}
+
 /** Replies skip the reply button (only one level of nesting) and get a subtler card via the
  *  .guestbook-reply class, but are otherwise identical — same edit/delete inline forms, same
  *  admin checkbox when logged in, same heart button. */
@@ -338,7 +345,7 @@ function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): stri
             : ""
       }
       <div class="guestbook-entry-actions">
-        <button type="button" class="guestbook-action-btn guestbook-heart-btn${hearted ? " guestbook-hearted" : ""}" data-action="heart" data-id="${entry.id}" ${hearted ? "disabled" : ""}>${hearted ? "❤️" : "🤍"} <span class="guestbook-heart-count">${entry.heartCount}</span></button>
+        <button type="button" class="guestbook-action-btn guestbook-heart-btn${hearted ? " guestbook-hearted" : ""}" data-action="heart" data-id="${entry.id}" title="${hearted ? "하트 취소" : "하트"}"><span class="guestbook-heart-icon">${hearted ? "❤️" : "🤍"}</span> <span class="guestbook-heart-count">${entry.heartCount}</span></button>
         ${isReply ? "" : `<button type="button" class="guestbook-action-btn" data-action="reply" data-id="${entry.id}">답글쓰기</button>`}
         <button type="button" class="guestbook-action-btn" data-action="edit" data-id="${entry.id}">수정</button>
         <button type="button" class="guestbook-action-btn" data-action="delete" data-id="${entry.id}">삭제</button>
@@ -551,11 +558,19 @@ guestbookList.addEventListener("click", (event) => {
   }
 
   if (action === "heart") {
-    if (getHeartedIds().has(id)) return;
-    void addGuestbookHeart(id)
-      .then(() => {
-        markGuestbookHearted(id);
-        return renderGuestbook();
+    const hearted = getHeartedIds().has(id);
+    const iconEl = button.querySelector<HTMLSpanElement>(".guestbook-heart-icon")!;
+    const countEl = button.querySelector<HTMLSpanElement>(".guestbook-heart-count")!;
+    // Patches just this button instead of calling renderGuestbook() — a full re-fetch would pull
+    // down every other entry's data (including any multi-MB attachments) just to update one count.
+    void (hearted ? removeGuestbookHeart(id) : addGuestbookHeart(id))
+      .then((newCount) => {
+        if (hearted) unmarkGuestbookHearted(id);
+        else markGuestbookHearted(id);
+        iconEl.textContent = hearted ? "🤍" : "❤️";
+        countEl.textContent = String(newCount);
+        button.title = hearted ? "하트" : "하트 취소";
+        button.classList.toggle("guestbook-hearted", !hearted);
       })
       .catch((err) => console.error("방명록 하트 실패:", err));
     return;

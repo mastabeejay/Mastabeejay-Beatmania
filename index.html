@@ -328,24 +328,26 @@
             <div id="guestbook-title" class="text-metallic-gold">Beejay's Guest Board</div>
             <button id="guestbook-close-button" type="button">✕ 닫기</button>
           </div>
-          <button id="guestbook-admin-delete-button" type="button" hidden>🗑️ 선택 삭제</button>
-          <div id="guestbook-list"></div>
-          <form id="guestbook-form">
-            <div class="guestbook-form-row">
-              <input type="text" id="guestbook-name" placeholder="이름" maxlength="12" required />
-              <input type="password" id="guestbook-password" placeholder="비밀번호 (선택-수정/삭제 목적)" maxlength="20" />
-            </div>
-            <textarea id="guestbook-message" placeholder="메세지를 남겨주세요" maxlength="500" required></textarea>
-            <div class="guestbook-form-row">
-              <div id="guestbook-attachment-row">
-                <label id="guestbook-attachment-label" class="song-file-label" for="guestbook-attachment-input">📎 사진/동영상 첨부</label>
-                <input type="file" id="guestbook-attachment-input" accept="image/*,video/*" />
-                <span id="guestbook-attachment-filename"></span>
+          <div id="guestbook-scroll-body">
+            <button id="guestbook-admin-delete-button" type="button" hidden>🗑️ 선택 삭제</button>
+            <div id="guestbook-list"></div>
+            <form id="guestbook-form">
+              <div class="guestbook-form-row">
+                <input type="text" id="guestbook-name" placeholder="이름" maxlength="12" required />
+                <input type="password" id="guestbook-password" placeholder="비밀번호 (선택-수정/삭제 목적)" maxlength="20" />
               </div>
-              <button type="submit" id="guestbook-submit">등록</button>
-            </div>
-            <span id="guestbook-attachment-error" class="guestbook-inline-error" hidden></span>
-          </form>
+              <textarea id="guestbook-message" placeholder="메세지를 남겨주세요" maxlength="500" required></textarea>
+              <div class="guestbook-form-row">
+                <div id="guestbook-attachment-row">
+                  <label id="guestbook-attachment-label" class="song-file-label" for="guestbook-attachment-input">📎 파일첨부</label>
+                  <input type="file" id="guestbook-attachment-input" accept="image/*,video/*" />
+                  <span id="guestbook-attachment-filename"></span>
+                </div>
+                <button type="submit" id="guestbook-submit">등록</button>
+              </div>
+              <span id="guestbook-attachment-error" class="guestbook-inline-error" hidden></span>
+            </form>
+          </div>
         </div>
       </div>
       <div id="results-overlay">

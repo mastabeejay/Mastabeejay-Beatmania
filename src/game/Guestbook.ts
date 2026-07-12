@@ -110,12 +110,20 @@ export async function editGuestbookEntry(
   return ((data as GuestbookRow[] | null) ?? []).map(toEntry);
 }
 
-/** No password required — anyone can heart any entry or reply. Abuse is mitigated client-side only
- *  (main.ts remembers hearted ids in localStorage and hides the button after one heart per browser). */
-export async function addGuestbookHeart(id: number): Promise<GuestbookEntry[]> {
+/** No password required — anyone can heart any entry or reply, and toggle it back off. Abuse
+ *  (repeat-clicking) is mitigated client-side only, via main.ts remembering hearted ids in
+ *  localStorage. Both return just the new count, not the full guestbook — a heart click shouldn't
+ *  pull down every other entry's (possibly multi-MB) attachment along with it. */
+export async function addGuestbookHeart(id: number): Promise<number> {
   const { data, error } = await supabase.rpc("add_guestbook_heart", { p_id: id });
-  if (error || !data) throw new Error(error?.message ?? "Failed to add heart");
-  return (data as GuestbookRow[]).map(toEntry);
+  if (error || data == null) throw new Error(error?.message ?? "Failed to add heart");
+  return data as number;
+}
+
+export async function removeGuestbookHeart(id: number): Promise<number> {
+  const { data, error } = await supabase.rpc("remove_guestbook_heart", { p_id: id });
+  if (error || data == null) throw new Error(error?.message ?? "Failed to remove heart");
+  return data as number;
 }
 
 export async function deleteGuestbookEntry(id: number, password: string): Promise<GuestbookEntry[]> {

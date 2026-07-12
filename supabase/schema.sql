@@ -155,11 +155,12 @@ grant select on site_banner_images to anon, authenticated;
 -- the underlying table with the view owner's privileges and bypasses the deny-all RLS on the base
 -- table while still only exposing the columns listed here.
 --
--- CASCADE because add/edit/delete_guestbook_entry (+ admin_delete_guestbook_entries,
--- add_guestbook_heart) all declare `returns setof guestbook_public`, which makes them depend on
--- the view's row type — plain DROP fails once those functions exist (as they will on any re-run
--- after the first). Every function this cascades away is redefined later in this same script, so
--- re-running the whole file stays safe.
+-- CASCADE because add/edit/delete_guestbook_entry (+ admin_delete_guestbook_entries) all declare
+-- `returns setof guestbook_public`, which makes them depend on the view's row type — plain DROP
+-- fails once those functions exist (as they will on any re-run after the first). Every function
+-- this cascades away is redefined later in this same script, so re-running the whole file stays
+-- safe. add_guestbook_heart/remove_guestbook_heart return a bare integer, not the view's row type,
+-- so they're untouched by this.
 drop view if exists guestbook_public cascade;
 create view guestbook_public as
   select id, name, message, parent_id, attachment_data, attachment_type, heart_count, created_at from guestbook order by id desc;
@@ -345,17 +346,41 @@ begin
 end;
 $$;
 
--- No password/identity check — anyone can heart any entry or reply. One-heart-per-browser is
--- enforced client-side only (main.ts, via localStorage), not here.
+-- No password/identity check — anyone can heart any entry or reply. One-heart-per-browser-per-entry
+-- is enforced client-side only (main.ts, via localStorage), which is also what lets a second click
+-- toggle it back off via remove_guestbook_heart below.
+--
+-- Returns just the new count (not setof guestbook_public) so a click doesn't pull down every other
+-- entry's data along with it — guestbook_public rows can carry multi-MB base64 attachments, and the
+-- client only ever needs this one number to update the clicked button in place. This also means
+-- these two functions no longer depend on the view, so they survive its CASCADE drop/recreate.
+drop function if exists add_guestbook_heart(bigint);
+
 create or replace function add_guestbook_heart(p_id bigint)
-returns setof guestbook_public
-language plpgsql security definer set search_path = public, extensions as $$
+returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_count integer;
 begin
-  update guestbook set heart_count = heart_count + 1 where id = p_id;
+  update guestbook set heart_count = heart_count + 1 where id = p_id returning heart_count into v_count;
   if not found then
     raise exception 'not_found';
   end if;
-  return query select * from guestbook_public order by id desc limit 50;
+  return v_count;
+end;
+$$;
+
+create or replace function remove_guestbook_heart(p_id bigint)
+returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_count integer;
+begin
+  update guestbook set heart_count = greatest(heart_count - 1, 0) where id = p_id returning heart_count into v_count;
+  if not found then
+    raise exception 'not_found';
+  end if;
+  return v_count;
 end;
 $$;
 
@@ -499,6 +524,7 @@ grant execute on function add_guestbook_entry(text, text, text, bigint, text, te
 grant execute on function edit_guestbook_entry(bigint, text, text, text, text) to anon, authenticated;
 grant execute on function delete_guestbook_entry(bigint, text) to anon, authenticated;
 grant execute on function add_guestbook_heart(bigint) to anon, authenticated;
+grant execute on function remove_guestbook_heart(bigint) to anon, authenticated;
 grant execute on function increment_visits() to anon, authenticated;
 grant execute on function admin_login(text) to anon, authenticated;
 grant execute on function admin_change_password(text, text) to anon, authenticated;
