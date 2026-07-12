@@ -43,6 +43,10 @@ const TEST_BPM = 120;
 const DEFAULT_GAME_DURATION_MS = 120000; // 2 minutes — default test-track game length when no song file is selected
 const TEST_BEAT_COUNT = Math.round(DEFAULT_GAME_DURATION_MS / (60000 / TEST_BPM)); // 240 beats at 120 BPM
 
+// Must mirror style.css's mobile breakpoint exactly (width for portrait, height for landscape
+// phones) — shared so the two can't quietly drift out of sync with each other.
+const MOBILE_MEDIA_QUERY = "(max-width: 640px), (max-height: 480px)";
+
 // Scroll speed (ms from spawn to hit line) is a separate axis from note density/difficulty —
 // conflating the two was why doubling one alone didn't fix "the game feels too fast". "extreme"
 // (개빠름) is fast's time divided by 1.5 — 1.5x the on-screen scroll speed.
@@ -663,9 +667,8 @@ function fitNoticeBoardHeight(showImages: boolean): void {
   // stop above the fixed footer. On a phone the board sits mid-scroll-column: its measured top is
   // scroll-dependent and often already at/below the footer, which collapsed the cap to its 60px
   // floor and visibly clipped the graffiti text. There the column scrolls, so natural height
-  // (plus the stylesheet's own mobile fallback for the images row) is correct. Must mirror the
-  // stylesheet's mobile breakpoint exactly — width for portrait, height for landscape phones.
-  if (window.matchMedia("(max-width: 640px), (max-height: 480px)").matches) return;
+  // (plus the stylesheet's own mobile fallback for the images row) is correct.
+  if (window.matchMedia(MOBILE_MEDIA_QUERY).matches) return;
   const footerTop = footerRow.getBoundingClientRect().top;
 
   if (showImages) {
@@ -1104,7 +1107,7 @@ chatbotToggleButton.addEventListener("click", () => {
   // Desktop nicety only: on phones, focusing here pops the soft keyboard the instant the panel
   // opens (covering most of a landscape screen) and used to trigger iOS's focus auto-zoom — the
   // keyboard should appear only when the user actually taps the input field.
-  if (opened && !window.matchMedia("(max-width: 640px), (max-height: 480px)").matches) chatbotInput.focus();
+  if (opened && !window.matchMedia(MOBILE_MEDIA_QUERY).matches) chatbotInput.focus();
 });
 chatbotCloseButton.addEventListener("click", () => chatbotPanel.classList.remove("chatbot-open"));
 

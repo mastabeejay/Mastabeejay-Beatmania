@@ -2416,6 +2416,7 @@ select option:disabled {
 
   #install-guide-cards {
     flex-direction: row;
+    gap: 4px;
   }
 
   /* A real bottom bar: full-width with its own background, so the (always-scrolling on a phone)
@@ -2567,16 +2568,6 @@ select option:disabled {
   #visitor-welcome {
     font-size: 13px;
     text-align: center;
-  }
-
-  #install-guide-section {
-    bottom: 8px;
-    right: 8px;
-    gap: 4px;
-  }
-
-  #install-guide-cards {
-    gap: 4px;
   }
 
   .install-guide-card {
