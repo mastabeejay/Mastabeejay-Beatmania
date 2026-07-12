@@ -2352,15 +2352,6 @@ select option:disabled {
    landscape phones on the desktop layout with all its floating-element overlaps). Real desktop
    windows are practically never under 480px tall, so this never triggers there. */
 @media (max-width: 640px), (max-height: 480px) {
-  /* Forces an exact break ("YBJ"/"힙합", "자유"/"음원") instead of relying on the browser's
-     natural word-wrap — which, with just enough width for one more glyph after the first word,
-     free-wrapped mid-word instead ("힙 / 합", "음 / 원") since CJK text has no wrap-blocking rule
-     between characters the way Latin text does between letters. Plain inline on desktop, where
-     these already read fine as a single line. */
-  .mobile-stack-line2 {
-    display: block;
-  }
-
   /* flex-start, not the desktop's center: once the column grows taller than the phone screen,
      justify-content:center clips the overflowing top rows unreachably (a scroll container can't
      scroll above its content-box start). Bottom padding keeps the last rows clear of the fixed
@@ -2634,6 +2625,16 @@ select option:disabled {
 /* --- Phone portrait only (narrow AND tall — excludes landscape phones, which match the shared
    block via max-height instead) ------------------------------------------------------------- */
 @media (max-width: 640px) and (min-height: 481px) {
+  /* Portrait only — landscape has plenty of horizontal room per item, so "YBJ 힙합"/"자유 음원"
+     read fine as one line there and shouldn't split. Forces an exact break ("YBJ"/"힙합",
+     "자유"/"음원") instead of relying on the browser's natural word-wrap, which — with just
+     enough width for one more glyph after the first word — free-wrapped mid-word instead
+     ("힙 / 합", "음 / 원") since CJK text has no wrap-blocking rule between characters the way
+     Latin text does between letters. Plain inline on desktop and landscape. */
+  .mobile-stack-line2 {
+    display: block;
+  }
+
   #leaderboard-tagline {
     font-size: 22px;
   }
