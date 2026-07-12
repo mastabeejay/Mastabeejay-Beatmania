@@ -1122,6 +1122,36 @@ pwaRefreshButton.addEventListener("click", () => {
   window.location.reload();
 });
 
+/** Standalone (home-screen icon) launch runs in WKWebView, not MobileSafari — and WKWebView has a
+ *  long-standing WebKit bug (bugs.webkit.org #170595) where its internal touch-hit-testing
+ *  geometry goes stale after an orientation change: the page visually re-renders to the new
+ *  orientation, but taps keep resolving against the pre-rotation frame (reported as "have to tap
+ *  ~1cm below the real target after portrait->landscape"), until something forces a full
+ *  recompute — a manual reload does it instantly, which is exactly why that "fixes" it. Regular
+ *  Safari tabs use MobileSafari and don't have this bug at all (confirmed by testing), so this is
+ *  scoped to standalone only. iOS 17+'s rotation animation runs long enough that dimensions can
+ *  still be settling well past a typical resize-event delay, hence the generous 500ms wait. The
+ *  nudge itself — a 1px scroll and back — is the community-established way to force WKWebView to
+ *  resync its hit-testing regions without a disruptive full reload; body normally has
+ *  overflow:hidden (see above), so it's briefly relaxed just long enough for the nudge to take. */
+if (isStandaloneApp) {
+  let orientationNudgeTimer = 0;
+  const nudgeTouchHitTestingAfterRotation = () => {
+    window.clearTimeout(orientationNudgeTimer);
+    orientationNudgeTimer = window.setTimeout(() => {
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "auto";
+      window.scrollTo(0, 1);
+      requestAnimationFrame(() => {
+        window.scrollTo(0, 0);
+        document.body.style.overflow = previousOverflow;
+      });
+    }, 500);
+  };
+  window.addEventListener("orientationchange", nudgeTouchHitTestingAfterRotation);
+  window.visualViewport?.addEventListener("resize", nudgeTouchHitTestingAfterRotation);
+}
+
 /** Grabs the current camera frame as a JPEG data URL. Mirrored horizontally to match what the
  *  player actually saw on screen while posing — the live <video> is only mirrored via a CSS
  *  transform, the underlying frame data is not, so an unmirrored capture would look flipped. */
