@@ -10,6 +10,7 @@ import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
 import {
   addGuestbookEntry,
+  addGuestbookHeart,
   adminDeleteGuestbookEntries,
   deleteGuestbookEntry,
   editGuestbookEntry,
@@ -296,10 +297,31 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+const GUESTBOOK_HEARTED_STORAGE_KEY = "bdj-guestbook-hearted-ids";
+
+/** There's no visitor identity to key a server-side "already hearted" check off of, so one heart
+ *  per browser is enforced here via localStorage instead — the button just disables itself once
+ *  hearted, remembered across reloads on the same device. */
+function getHeartedIds(): Set<number> {
+  try {
+    const raw = localStorage.getItem(GUESTBOOK_HEARTED_STORAGE_KEY);
+    return new Set(raw ? (JSON.parse(raw) as number[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markGuestbookHearted(id: number): void {
+  const ids = getHeartedIds();
+  ids.add(id);
+  localStorage.setItem(GUESTBOOK_HEARTED_STORAGE_KEY, JSON.stringify(Array.from(ids)));
+}
+
 /** Replies skip the reply button (only one level of nesting) and get a subtler card via the
  *  .guestbook-reply class, but are otherwise identical — same edit/delete inline forms, same
- *  admin checkbox when logged in. */
+ *  admin checkbox when logged in, same heart button. */
 function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): string {
+  const hearted = getHeartedIds().has(entry.id);
   return `
     <div class="guestbook-entry${isReply ? " guestbook-reply" : ""}" data-id="${entry.id}">
       <div class="guestbook-entry-top">
@@ -316,12 +338,18 @@ function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): stri
             : ""
       }
       <div class="guestbook-entry-actions">
+        <button type="button" class="guestbook-action-btn guestbook-heart-btn${hearted ? " guestbook-hearted" : ""}" data-action="heart" data-id="${entry.id}" ${hearted ? "disabled" : ""}>${hearted ? "❤️" : "🤍"} <span class="guestbook-heart-count">${entry.heartCount}</span></button>
         ${isReply ? "" : `<button type="button" class="guestbook-action-btn" data-action="reply" data-id="${entry.id}">답글쓰기</button>`}
         <button type="button" class="guestbook-action-btn" data-action="edit" data-id="${entry.id}">수정</button>
         <button type="button" class="guestbook-action-btn" data-action="delete" data-id="${entry.id}">삭제</button>
       </div>
       <div class="guestbook-inline-form" data-mode="edit" data-id="${entry.id}" hidden>
-        <input type="text" class="guestbook-edit-message" maxlength="80" />
+        <input type="text" class="guestbook-edit-message" maxlength="500" />
+        <div class="guestbook-inline-attachment-row">
+          <label class="song-file-label guestbook-inline-attachment-label" for="guestbook-edit-attachment-${entry.id}">📎 사진/동영상 변경</label>
+          <input type="file" id="guestbook-edit-attachment-${entry.id}" class="guestbook-edit-attachment-input" accept="image/*,video/*" />
+          <span class="guestbook-edit-attachment-filename"></span>
+        </div>
         <input type="password" class="guestbook-inline-password" placeholder="비밀번호" maxlength="20" />
         <span class="guestbook-inline-error" hidden>비밀번호가 일치하지 않습니다</span>
         <div class="guestbook-inline-actions">
@@ -406,15 +434,29 @@ function hideAllGuestbookForms(): void {
     form.querySelectorAll<HTMLInputElement>('input[type="password"], .guestbook-reply-name, .guestbook-reply-message').forEach((input) => {
       input.value = "";
     });
+    const attachmentInput = form.querySelector<HTMLInputElement>(".guestbook-edit-attachment-input");
+    if (attachmentInput) attachmentInput.value = "";
+    const attachmentFilename = form.querySelector<HTMLSpanElement>(".guestbook-edit-attachment-filename");
+    if (attachmentFilename) attachmentFilename.textContent = "";
   });
 }
 
 guestbookList.addEventListener("change", (event) => {
-  const checkbox = event.target as HTMLInputElement;
-  if (!checkbox.classList.contains("guestbook-select-checkbox")) return;
-  const id = Number(checkbox.dataset.id);
-  if (checkbox.checked) selectedGuestbookIds.add(id);
-  else selectedGuestbookIds.delete(id);
+  const target = event.target as HTMLInputElement;
+  if (target.classList.contains("guestbook-select-checkbox")) {
+    const id = Number(target.dataset.id);
+    if (target.checked) selectedGuestbookIds.add(id);
+    else selectedGuestbookIds.delete(id);
+    return;
+  }
+  if (target.classList.contains("guestbook-edit-attachment-input")) {
+    const form = target.closest<HTMLDivElement>(".guestbook-inline-form")!;
+    const filenameEl = form.querySelector<HTMLSpanElement>(".guestbook-edit-attachment-filename")!;
+    const file = target.files?.[0];
+    filenameEl.textContent = file ? file.name : "";
+    const errorEl = form.querySelector<HTMLSpanElement>(".guestbook-inline-error")!;
+    errorEl.hidden = true;
+  }
 });
 
 guestbookList.addEventListener("click", (event) => {
@@ -466,8 +508,33 @@ guestbookList.addEventListener("click", (event) => {
     const message = form.querySelector<HTMLInputElement>(".guestbook-edit-message")!.value.trim();
     const password = form.querySelector<HTMLInputElement>(".guestbook-inline-password")!.value;
     const errorEl = form.querySelector<HTMLSpanElement>(".guestbook-inline-error")!;
-    if (!message || !password) return;
-    void editGuestbookEntry(id, message, password)
+    if (!message) return;
+    if (!password) {
+      window.alert("비밀번호가 일치하여야 수정이 가능합니다.");
+      return;
+    }
+
+    const attachmentInput = form.querySelector<HTMLInputElement>(".guestbook-edit-attachment-input")!;
+    const file = attachmentInput.files?.[0] ?? null;
+    let attachmentType: GuestbookAttachmentType | null = null;
+    if (file) {
+      if (GUESTBOOK_IMAGE_TYPES.includes(file.type)) attachmentType = "image";
+      else if (GUESTBOOK_VIDEO_TYPES.includes(file.type)) attachmentType = "video";
+      else {
+        errorEl.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
+        errorEl.hidden = false;
+        return;
+      }
+      const maxBytes = attachmentType === "image" ? GUESTBOOK_IMAGE_MAX_BYTES : GUESTBOOK_VIDEO_MAX_BYTES;
+      if (file.size > maxBytes) {
+        errorEl.textContent = `파일이 너무 큽니다 (최대 ${maxBytes / (1024 * 1024)}MB): ${file.name}`;
+        errorEl.hidden = false;
+        return;
+      }
+    }
+
+    void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
+      .then((attachmentData) => editGuestbookEntry(id, message, password, attachmentData, attachmentType))
       .then(() => renderGuestbook())
       .catch((err) => {
         if (err instanceof WrongPasswordError) {
@@ -480,6 +547,17 @@ guestbookList.addEventListener("click", (event) => {
           console.error("방명록 수정 실패:", err);
         }
       });
+    return;
+  }
+
+  if (action === "heart") {
+    if (getHeartedIds().has(id)) return;
+    void addGuestbookHeart(id)
+      .then(() => {
+        markGuestbookHearted(id);
+        return renderGuestbook();
+      })
+      .catch((err) => console.error("방명록 하트 실패:", err));
     return;
   }
 

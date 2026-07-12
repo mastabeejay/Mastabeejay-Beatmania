@@ -51,10 +51,13 @@ alter table guestbook add column if not exists parent_id bigint references guest
 alter table guestbook alter column password_hash drop not null;
 -- Optional image/video attached when posting (data: URL, like the leaderboard's celebration photo
 -- and the banner images — same base64-in-Postgres pattern, no Supabase Storage bucket needed).
--- attachment_type is 'image' or 'video', set by add_guestbook_entry below; only ever written at
--- post time, never changed by edit_guestbook_entry.
+-- attachment_type is 'image' or 'video'; both can also be replaced later via edit_guestbook_entry.
 alter table guestbook add column if not exists attachment_data text;
 alter table guestbook add column if not exists attachment_type text;
+-- No per-visitor identity to key a "who already hearted this" table off of, so this is a bare
+-- counter — add_guestbook_heart just increments it, and abuse is mitigated client-side only
+-- (main.ts hides the button after one heart per browser via localStorage).
+alter table guestbook add column if not exists heart_count integer not null default 0;
 
 create table if not exists visits (
   id integer primary key default 1,
@@ -152,13 +155,14 @@ grant select on site_banner_images to anon, authenticated;
 -- the underlying table with the view owner's privileges and bypasses the deny-all RLS on the base
 -- table while still only exposing the columns listed here.
 --
--- CASCADE because add/edit/delete_guestbook_entry all declare `returns setof guestbook_public`,
--- which makes them depend on the view's row type — plain DROP fails once those functions exist
--- (as they will on any re-run after the first). Every function this cascades away is redefined
--- later in this same script, so re-running the whole file stays safe.
+-- CASCADE because add/edit/delete_guestbook_entry (+ admin_delete_guestbook_entries,
+-- add_guestbook_heart) all declare `returns setof guestbook_public`, which makes them depend on
+-- the view's row type — plain DROP fails once those functions exist (as they will on any re-run
+-- after the first). Every function this cascades away is redefined later in this same script, so
+-- re-running the whole file stays safe.
 drop view if exists guestbook_public cascade;
 create view guestbook_public as
-  select id, name, message, parent_id, attachment_data, attachment_type, created_at from guestbook order by id desc;
+  select id, name, message, parent_id, attachment_data, attachment_type, heart_count, created_at from guestbook order by id desc;
 grant select on guestbook_public to anon, authenticated;
 
 -- `visits` has no policies at all — not even select. Only increment_visits() below can touch it.
@@ -223,7 +227,13 @@ begin
 end;
 $$;
 
-create or replace function edit_guestbook_entry(p_id bigint, p_message text, p_password text)
+-- p_attachment_data left null means "leave the existing attachment alone" (coalesce keeps it);
+-- passing a new data: URL replaces both attachment_data and attachment_type together, since a
+-- lone attachment_type with no matching data would be meaningless.
+create or replace function edit_guestbook_entry(
+  p_id bigint, p_message text, p_password text,
+  p_attachment_data text default null, p_attachment_type text default null
+)
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
 declare
@@ -242,7 +252,15 @@ begin
     raise exception 'wrong_password';
   end if;
 
-  update guestbook set message = left(p_message, 500) where id = p_id;
+  update guestbook
+  set message = left(p_message, 500),
+      attachment_data = coalesce(p_attachment_data, attachment_data),
+      attachment_type = case
+        when p_attachment_data is not null then case when p_attachment_type in ('image', 'video') then p_attachment_type else null end
+        else attachment_type
+      end
+  where id = p_id;
+
   return query select * from guestbook_public order by id desc limit 50;
 end;
 $$;
@@ -323,6 +341,20 @@ begin
     raise exception 'wrong_password';
   end if;
   delete from guestbook where id = any(p_ids);
+  return query select * from guestbook_public order by id desc limit 50;
+end;
+$$;
+
+-- No password/identity check — anyone can heart any entry or reply. One-heart-per-browser is
+-- enforced client-side only (main.ts, via localStorage), not here.
+create or replace function add_guestbook_heart(p_id bigint)
+returns setof guestbook_public
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  update guestbook set heart_count = heart_count + 1 where id = p_id;
+  if not found then
+    raise exception 'not_found';
+  end if;
   return query select * from guestbook_public order by id desc limit 50;
 end;
 $$;
@@ -464,8 +496,9 @@ $$;
 
 grant execute on function submit_score(text, text, integer, text, text, text, text, integer) to anon, authenticated;
 grant execute on function add_guestbook_entry(text, text, text, bigint, text, text) to anon, authenticated;
-grant execute on function edit_guestbook_entry(bigint, text, text) to anon, authenticated;
+grant execute on function edit_guestbook_entry(bigint, text, text, text, text) to anon, authenticated;
 grant execute on function delete_guestbook_entry(bigint, text) to anon, authenticated;
+grant execute on function add_guestbook_heart(bigint) to anon, authenticated;
 grant execute on function increment_visits() to anon, authenticated;
 grant execute on function admin_login(text) to anon, authenticated;
 grant execute on function admin_change_password(text, text) to anon, authenticated;

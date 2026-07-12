@@ -9,9 +9,10 @@ export interface GuestbookEntry {
   message: string;
   /** Null for a top-level entry; the parent's id for a reply. Only one level deep. */
   parentId: number | null;
-  /** Base64 data: URL of an optional photo/video attached at post time — never editable after. */
+  /** Base64 data: URL of an optional photo/video attached at post time; replaceable via edit. */
   attachmentData: string | null;
   attachmentType: GuestbookAttachmentType | null;
+  heartCount: number;
   dateIso: string;
 }
 
@@ -22,6 +23,7 @@ interface GuestbookRow {
   parent_id: number | null;
   attachment_data: string | null;
   attachment_type: GuestbookAttachmentType | null;
+  heart_count: number;
   created_at: string;
 }
 
@@ -47,6 +49,7 @@ function toEntry(row: GuestbookRow): GuestbookEntry {
     parentId: row.parent_id,
     attachmentData: row.attachment_data,
     attachmentType: row.attachment_type,
+    heartCount: row.heart_count,
     dateIso: row.created_at,
   };
 }
@@ -56,7 +59,7 @@ function toEntry(row: GuestbookRow): GuestbookEntry {
 export async function loadGuestbook(): Promise<GuestbookEntry[]> {
   const { data, error } = await supabase
     .from("guestbook_public")
-    .select("id, name, message, parent_id, attachment_data, attachment_type, created_at")
+    .select("id, name, message, parent_id, attachment_data, attachment_type, heart_count, created_at")
     .order("id", { ascending: false });
   if (error || !data) return [];
   return data.map(toEntry);
@@ -83,15 +86,36 @@ export async function addGuestbookEntry(entry: {
 }
 
 /** Password verification happens inside the Postgres function (submit the password, it never gets
- *  compared client-side), so a wrong password surfaces as the RPC raising `wrong_password`. */
-export async function editGuestbookEntry(id: number, message: string, password: string): Promise<GuestbookEntry[]> {
-  const { data, error } = await supabase.rpc("edit_guestbook_entry", { p_id: id, p_message: message, p_password: password });
+ *  compared client-side), so a wrong password surfaces as the RPC raising `wrong_password`. Passing
+ *  attachmentData replaces the existing attachment (if any); omitting it leaves it untouched. */
+export async function editGuestbookEntry(
+  id: number,
+  message: string,
+  password: string,
+  attachmentData?: string | null,
+  attachmentType?: GuestbookAttachmentType | null,
+): Promise<GuestbookEntry[]> {
+  const { data, error } = await supabase.rpc("edit_guestbook_entry", {
+    p_id: id,
+    p_message: message,
+    p_password: password,
+    p_attachment_data: attachmentData ?? null,
+    p_attachment_type: attachmentType ?? null,
+  });
   if (error) {
     if (error.message === "wrong_password") throw new WrongPasswordError();
     if (error.message === "no_password") throw new NoPasswordSetError();
     throw new Error(error.message);
   }
   return ((data as GuestbookRow[] | null) ?? []).map(toEntry);
+}
+
+/** No password required — anyone can heart any entry or reply. Abuse is mitigated client-side only
+ *  (main.ts remembers hearted ids in localStorage and hides the button after one heart per browser). */
+export async function addGuestbookHeart(id: number): Promise<GuestbookEntry[]> {
+  const { data, error } = await supabase.rpc("add_guestbook_heart", { p_id: id });
+  if (error || !data) throw new Error(error?.message ?? "Failed to add heart");
+  return (data as GuestbookRow[]).map(toEntry);
 }
 
 export async function deleteGuestbookEntry(id: number, password: string): Promise<GuestbookEntry[]> {

@@ -1564,30 +1564,38 @@ body::before {
   box-shadow: 0 0 30px rgba(0, 240, 255, 0.15);
 }
 
+/* Title + the return-to-main button share a header row at the very top of the panel — a close
+   button buried below a long list of entries is easy to miss, so it sits where a modal's close
+   control is conventionally expected instead. */
+#guestbook-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
 #guestbook-close-button {
-  display: block;
-  margin: 14px auto 0;
+  flex: 0 0 auto;
   font-family: var(--font-body);
   font-weight: 700;
-  letter-spacing: 0.04em;
-  font-size: 13px;
-  padding: 8px 24px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: transparent;
-  color: rgba(201, 211, 222, 0.7);
+  letter-spacing: 0.02em;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 46, 224, 0.45);
+  background: rgba(255, 46, 224, 0.14);
+  color: var(--color-cyber-magenta);
   cursor: pointer;
   transition: background 0.2s ease;
 }
 
 #guestbook-close-button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 46, 224, 0.26);
 }
 
 #guestbook-title {
   font-size: 16px;
-  text-align: center;
-  margin-bottom: 10px;
   letter-spacing: 0.12em;
 }
 
@@ -1687,6 +1695,23 @@ body::before {
   color: var(--color-cyber-silver);
 }
 
+.guestbook-heart-count {
+  font-weight: 700;
+}
+
+/* Once hearted (tracked per-browser via localStorage, see main.ts), the button just goes inert —
+   there's no unheart, so a hover state on a disabled control would be misleading. */
+.guestbook-heart-btn.guestbook-hearted {
+  border-color: rgba(255, 46, 224, 0.4);
+  background: rgba(255, 46, 224, 0.12);
+  color: var(--color-cyber-magenta);
+  cursor: default;
+}
+
+.guestbook-heart-btn.guestbook-hearted:hover {
+  background: rgba(255, 46, 224, 0.12);
+}
+
 .guestbook-replies {
   display: flex;
   flex-direction: column;
@@ -1725,6 +1750,30 @@ body::before {
   color: var(--color-cyber-magenta);
 }
 
+.guestbook-inline-attachment-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.guestbook-inline-attachment-label {
+  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+
+.guestbook-edit-attachment-input {
+  display: none;
+}
+
+.guestbook-edit-attachment-filename {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: rgba(201, 211, 222, 0.75);
+  word-break: break-all;
+}
+
 .guestbook-inline-actions {
   display: flex;
   gap: 6px;
@@ -1752,11 +1801,20 @@ body::before {
   color: rgba(201, 211, 222, 0.6);
 }
 
+/* Squared-off layout, same on every screen size (PC, mobile portrait/landscape all get identical
+   markup — no breakpoint override here): row 1 is name+password, row 2 is the message, row 3 is
+   attachment+submit. Each .guestbook-form-row just pins its two children to opposite ends. */
 #guestbook-form {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guestbook-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 #guestbook-form input,
@@ -1764,44 +1822,46 @@ body::before {
   font-family: var(--font-body);
   font-size: 12px;
   padding: 7px 12px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid rgba(0, 240, 255, 0.3);
   background: rgba(0, 240, 255, 0.06);
   color: var(--color-cyber-silver);
 }
 
 #guestbook-name {
+  flex: 0 0 80px;
   width: 80px;
 }
 
-/* Full-width own row (flex-basis 100%) so there's real room to write more than one line, unlike
-   the pill-shaped single-line inputs beside it. resize: vertical lets a visitor grow it further. */
-#guestbook-message {
-  flex: 1 1 100%;
-  min-height: 56px;
-  max-height: 200px;
-  border-radius: 14px;
-  line-height: 1.4;
-  resize: vertical;
+/* Fills the rest of row 1 up to a cap — flexible on narrow phones (where it needs the room for
+   its placeholder text to show in full) without stretching edge-to-edge on wide desktop panels. */
+#guestbook-password {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 260px;
 }
 
-/* Wide enough that the "비밀번호 (선택-수정/삭제 목적)" placeholder shows in full, not clipped. */
-#guestbook-password {
-  width: 220px;
+/* Own full-width row so there's real room to write more than one line. resize: vertical lets a
+   visitor grow it further. */
+#guestbook-message {
+  width: 100%;
+  min-height: 56px;
+  max-height: 200px;
+  line-height: 1.4;
+  resize: vertical;
 }
 
 #guestbook-attachment-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  flex: 1 1 100%;
 }
 
 #guestbook-attachment-label {
   font-size: 12px;
   padding: 6px 14px;
+  border-radius: 6px;
 }
 
 #guestbook-attachment-input {
@@ -1816,11 +1876,12 @@ body::before {
 }
 
 #guestbook-submit {
+  flex: 0 0 auto;
   font-family: var(--font-body);
   font-weight: 700;
   font-size: 12px;
   padding: 7px 18px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid rgba(0, 240, 255, 0.4);
   background: rgba(0, 240, 255, 0.16);
   color: var(--color-cyber-silver);
