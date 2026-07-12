@@ -686,6 +686,42 @@ function fitNoticeBoardHeight(showImages: boolean): void {
   }
 }
 
+/** Long graffiti text (up to the input's 60-char cap) can overflow the notice-board's capped box —
+ *  its font-size is a CSS clamp() tuned for typical short tags, not worst-case length, and the
+ *  board clips overflow rather than growing past the footer. Shrinks the font, one px at a time
+ *  down to a readable floor, only as far as actually needed to make the wrapped text's own layout
+ *  height fit the board's padded interior; short text is untouched (stays at the CSS clamp value).
+ *  Desktop only, as asked.
+ *
+ *  Measures via offsetHeight, not getBoundingClientRect() — the graffiti span carries a
+ *  rotate+skew transform, and skewing a *wide* box (it's a full-width block regardless of how
+ *  little text it holds — width isn't a useful fit signal here since word-break just wraps any
+ *  excess into more lines) inflates the transformed bounding box's height substantially beyond
+ *  the text's real rendered height. Caught empirically: a single short line measured ~78px via
+ *  getBoundingClientRect() vs its actual ~53px layout height, so the old width+height check
+ *  against the transformed rect was shrinking even text that already fit fine. offsetHeight
+ *  reflects the plain (pre-transform) layout box — exactly what determines how many lines the
+ *  text wraps into, which is what actually governs whether it fits.
+ *
+ *  Assumes the font-size has already been reset to "" and fitNoticeBoardHeight() has already run
+ *  — both callers do this in that order, since the board's height cap must itself be computed
+ *  from the *natural* font size, not from whatever this function shrunk it to on a previous pass
+ *  (that ordering bug was caught empirically too: repeated calls ratcheted the font smaller every
+ *  time since each pass's height measurement was tainted by the previous pass's shrink). */
+function fitGraffitiFontSize(): void {
+  if (window.matchMedia(MOBILE_MEDIA_QUERY).matches) return;
+
+  const boardStyle = getComputedStyle(noticeBoard);
+  const availableHeight = noticeBoard.clientHeight - parseFloat(boardStyle.paddingTop) - parseFloat(boardStyle.paddingBottom);
+  const MIN_FONT_PX = 14;
+
+  let fontSize = parseFloat(getComputedStyle(noticeBoardGraffiti).fontSize);
+  while (fontSize > MIN_FONT_PX && noticeBoardGraffiti.offsetHeight > availableHeight) {
+    fontSize -= 1;
+    noticeBoardGraffiti.style.fontSize = `${fontSize}px`;
+  }
+}
+
 async function renderBanner(): Promise<void> {
   const banner = await loadBanner();
   const showNotice = banner.displayMode === "notice" && !!banner.message;
@@ -715,11 +751,20 @@ async function renderBanner(): Promise<void> {
   noticeBoardImages.hidden = !showImages;
 
   noticeBoard.hidden = !showNotice && !showGraffiti && !showImages;
+  // Reset the graffiti font back to its natural CSS size *before* fitNoticeBoardHeight measures
+  // anything — otherwise, on a second render (e.g. the resize listener below firing again), it
+  // would measure the board's height using whatever *already-shrunk* font size a previous
+  // fitGraffitiFontSize() pass left in place, computing a too-small cap that then forces the next
+  // shrink pass to shrink even further — a ratchet that only ever gets tighter, never recovers.
+  if (showGraffiti) noticeBoardGraffiti.style.fontSize = "";
   if (!noticeBoard.hidden) fitNoticeBoardHeight(showImages);
+  if (showGraffiti) fitGraffitiFontSize();
 }
 
 window.addEventListener("resize", () => {
+  if (!noticeBoardGraffiti.hidden) noticeBoardGraffiti.style.fontSize = "";
   if (!noticeBoard.hidden) fitNoticeBoardHeight(!noticeBoardImages.hidden);
+  if (!noticeBoardGraffiti.hidden) fitGraffitiFontSize();
 });
 
 /** Clears admin state everywhere (memory + sessionStorage) and drops back to the logged-out view.

@@ -1128,6 +1128,18 @@ body::before {
   gap: 18px;
   padding: 24px 0;
   overflow-y: auto;
+  /* A position:fixed element with overflow-y:auto is exactly the shape iOS (Safari and especially
+     standalone/home-screen WKWebView) is known to sometimes fail to recognize as a touch-scrollable
+     region — reported as "long content just won't scroll, the last rows are stuck off-screen"
+     even though the box's own scrollHeight/scrollTop work fine programmatically. touch-action
+     tells the browser up front that vertical panning here is intentional (not ambiguous with a
+     parent gesture), -webkit-overflow-scrolling restores iOS's native momentum-scroll behavior for
+     this box specifically, and overscroll-behavior stops an at-the-edge pan from being rejected
+     outward instead of starting a fresh scroll. All three are inert elsewhere (desktop, non-WebKit
+     browsers), so this can't affect anything already working. */
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   background: rgba(3, 5, 10, 0.85);
   backdrop-filter: blur(2px);
   color: var(--color-cyber-silver);
