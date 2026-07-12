@@ -16,6 +16,7 @@ import {
   loadGuestbook,
   NoPasswordSetError,
   WrongPasswordError,
+  type GuestbookAttachmentType,
   type GuestbookEntry,
 } from "./game/Guestbook";
 import { addLeaderboardEntry, adminDeleteLeaderboardEntries, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
@@ -118,8 +119,11 @@ const visitorCountEl = document.querySelector<HTMLSpanElement>("#visitor-count")
 const guestbookList = document.querySelector<HTMLDivElement>("#guestbook-list")!;
 const guestbookForm = document.querySelector<HTMLFormElement>("#guestbook-form")!;
 const guestbookNameInput = document.querySelector<HTMLInputElement>("#guestbook-name")!;
-const guestbookMessageInput = document.querySelector<HTMLInputElement>("#guestbook-message")!;
+const guestbookMessageInput = document.querySelector<HTMLTextAreaElement>("#guestbook-message")!;
 const guestbookPasswordInput = document.querySelector<HTMLInputElement>("#guestbook-password")!;
+const guestbookAttachmentInput = document.querySelector<HTMLInputElement>("#guestbook-attachment-input")!;
+const guestbookAttachmentFilename = document.querySelector<HTMLSpanElement>("#guestbook-attachment-filename")!;
+const guestbookAttachmentError = document.querySelector<HTMLSpanElement>("#guestbook-attachment-error")!;
 const guestbookOpenCard = document.querySelector<HTMLButtonElement>("#guestbook-open-card")!;
 const guestbookOverlay = document.querySelector<HTMLDivElement>("#guestbook-overlay")!;
 const guestbookCloseButton = document.querySelector<HTMLButtonElement>("#guestbook-close-button")!;
@@ -243,6 +247,7 @@ leaderboardBody.addEventListener("click", (event) => {
   const img = (event.target as HTMLElement).closest<HTMLImageElement>(".leaderboard-photo-thumb");
   if (!img) return;
   photoLightboxImage.src = img.src;
+  photoLightboxImage.alt = img.alt;
   photoLightboxOverlay.style.display = "flex";
 });
 
@@ -303,6 +308,13 @@ function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): stri
         <span class="guestbook-entry-date">${formatLocalDate(entry.dateIso)}</span>
       </div>
       <div class="guestbook-entry-message">${escapeHtml(entry.message)}</div>
+      ${
+        entry.attachmentType === "image"
+          ? `<img class="guestbook-attachment-thumb" data-attachment-id="${entry.id}" alt="${escapeHtml(entry.name)} 첨부 사진" />`
+          : entry.attachmentType === "video"
+            ? `<video class="guestbook-attachment-video" data-attachment-id="${entry.id}" controls></video>`
+            : ""
+      }
       <div class="guestbook-entry-actions">
         ${isReply ? "" : `<button type="button" class="guestbook-action-btn" data-action="reply" data-id="${entry.id}">답글쓰기</button>`}
         <button type="button" class="guestbook-action-btn" data-action="edit" data-id="${entry.id}">수정</button>
@@ -375,6 +387,14 @@ async function renderGuestbook(): Promise<void> {
   for (const entry of entries) {
     const editInput = guestbookList.querySelector<HTMLInputElement>(`.guestbook-inline-form[data-mode="edit"][data-id="${entry.id}"] .guestbook-edit-message`);
     if (editInput) editInput.value = entry.message;
+    if (!entry.attachmentData) continue;
+    if (entry.attachmentType === "image") {
+      const img = guestbookList.querySelector<HTMLImageElement>(`img.guestbook-attachment-thumb[data-attachment-id="${entry.id}"]`);
+      if (img) img.src = entry.attachmentData;
+    } else if (entry.attachmentType === "video") {
+      const video = guestbookList.querySelector<HTMLVideoElement>(`video.guestbook-attachment-video[data-attachment-id="${entry.id}"]`);
+      if (video) video.src = entry.attachmentData;
+    }
   }
 }
 
@@ -395,6 +415,14 @@ guestbookList.addEventListener("change", (event) => {
   const id = Number(checkbox.dataset.id);
   if (checkbox.checked) selectedGuestbookIds.add(id);
   else selectedGuestbookIds.delete(id);
+});
+
+guestbookList.addEventListener("click", (event) => {
+  const img = (event.target as HTMLElement).closest<HTMLImageElement>(".guestbook-attachment-thumb");
+  if (!img) return;
+  photoLightboxImage.src = img.src;
+  photoLightboxImage.alt = img.alt;
+  photoLightboxOverlay.style.display = "flex";
 });
 
 guestbookAdminDeleteButton.addEventListener("click", () => {
@@ -488,17 +516,51 @@ guestbookList.addEventListener("click", (event) => {
   }
 });
 
+const GUESTBOOK_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/bmp", "image/webp"];
+const GUESTBOOK_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime", "video/ogg"];
+const GUESTBOOK_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const GUESTBOOK_VIDEO_MAX_BYTES = 15 * 1024 * 1024;
+
+guestbookAttachmentInput.addEventListener("change", () => {
+  const file = guestbookAttachmentInput.files?.[0];
+  guestbookAttachmentFilename.textContent = file ? file.name : "";
+  guestbookAttachmentError.hidden = true;
+});
+
 guestbookForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const name = guestbookNameInput.value.trim();
   const message = guestbookMessageInput.value.trim();
   const password = guestbookPasswordInput.value;
   if (!name || !message) return;
-  void addGuestbookEntry({ name, message, password })
+  guestbookAttachmentError.hidden = true;
+
+  const file = guestbookAttachmentInput.files?.[0] ?? null;
+  let attachmentType: GuestbookAttachmentType | null = null;
+  if (file) {
+    if (GUESTBOOK_IMAGE_TYPES.includes(file.type)) attachmentType = "image";
+    else if (GUESTBOOK_VIDEO_TYPES.includes(file.type)) attachmentType = "video";
+    else {
+      guestbookAttachmentError.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
+      guestbookAttachmentError.hidden = false;
+      return;
+    }
+    const maxBytes = attachmentType === "image" ? GUESTBOOK_IMAGE_MAX_BYTES : GUESTBOOK_VIDEO_MAX_BYTES;
+    if (file.size > maxBytes) {
+      guestbookAttachmentError.textContent = `파일이 너무 큽니다 (최대 ${maxBytes / (1024 * 1024)}MB): ${file.name}`;
+      guestbookAttachmentError.hidden = false;
+      return;
+    }
+  }
+
+  void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
+    .then((attachmentData) => addGuestbookEntry({ name, message, password, attachmentData, attachmentType }))
     .then(() => {
       guestbookNameInput.value = "";
       guestbookMessageInput.value = "";
       guestbookPasswordInput.value = "";
+      guestbookAttachmentInput.value = "";
+      guestbookAttachmentFilename.textContent = "";
       return renderGuestbook();
     })
     .catch((err) => console.error("방명록 등록 실패:", err));

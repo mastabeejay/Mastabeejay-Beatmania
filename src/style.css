@@ -1640,6 +1640,27 @@ body::before {
   color: rgba(201, 211, 222, 0.9);
   margin: 4px 0;
   word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.guestbook-attachment-thumb {
+  display: block;
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 8px;
+  margin: 6px 0;
+  cursor: pointer;
+  object-fit: cover;
+}
+
+.guestbook-attachment-video {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  max-height: 280px;
+  border-radius: 8px;
+  margin: 6px 0;
+  background: #000;
 }
 
 .guestbook-entry-actions {
@@ -1738,7 +1759,8 @@ body::before {
   justify-content: center;
 }
 
-#guestbook-form input {
+#guestbook-form input,
+#guestbook-form textarea {
   font-family: var(--font-body);
   font-size: 12px;
   padding: 7px 12px;
@@ -1752,12 +1774,45 @@ body::before {
   width: 80px;
 }
 
+/* Full-width own row (flex-basis 100%) so there's real room to write more than one line, unlike
+   the pill-shaped single-line inputs beside it. resize: vertical lets a visitor grow it further. */
 #guestbook-message {
-  flex: 1 1 200px;
+  flex: 1 1 100%;
+  min-height: 56px;
+  max-height: 200px;
+  border-radius: 14px;
+  line-height: 1.4;
+  resize: vertical;
 }
 
+/* Wide enough that the "비밀번호 (선택-수정/삭제 목적)" placeholder shows in full, not clipped. */
 #guestbook-password {
-  width: 140px;
+  width: 220px;
+}
+
+#guestbook-attachment-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 1 100%;
+}
+
+#guestbook-attachment-label {
+  font-size: 12px;
+  padding: 6px 14px;
+}
+
+#guestbook-attachment-input {
+  display: none;
+}
+
+#guestbook-attachment-filename {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: rgba(201, 211, 222, 0.75);
+  word-break: break-all;
 }
 
 #guestbook-submit {

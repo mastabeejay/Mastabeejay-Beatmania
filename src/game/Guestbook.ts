@@ -1,12 +1,17 @@
 import { WrongAdminPasswordError } from "./Admin";
 import { supabase } from "./supabaseClient";
 
+export type GuestbookAttachmentType = "image" | "video";
+
 export interface GuestbookEntry {
   id: number;
   name: string;
   message: string;
   /** Null for a top-level entry; the parent's id for a reply. Only one level deep. */
   parentId: number | null;
+  /** Base64 data: URL of an optional photo/video attached at post time — never editable after. */
+  attachmentData: string | null;
+  attachmentType: GuestbookAttachmentType | null;
   dateIso: string;
 }
 
@@ -15,6 +20,8 @@ interface GuestbookRow {
   name: string;
   message: string;
   parent_id: number | null;
+  attachment_data: string | null;
+  attachment_type: GuestbookAttachmentType | null;
   created_at: string;
 }
 
@@ -33,7 +40,15 @@ export class NoPasswordSetError extends Error {
 }
 
 function toEntry(row: GuestbookRow): GuestbookEntry {
-  return { id: row.id, name: row.name, message: row.message, parentId: row.parent_id, dateIso: row.created_at };
+  return {
+    id: row.id,
+    name: row.name,
+    message: row.message,
+    parentId: row.parent_id,
+    attachmentData: row.attachment_data,
+    attachmentType: row.attachment_type,
+    dateIso: row.created_at,
+  };
 }
 
 /** Reads go straight to the `guestbook_public` view (see supabase/schema.sql) — it exposes every
@@ -41,7 +56,7 @@ function toEntry(row: GuestbookRow): GuestbookEntry {
 export async function loadGuestbook(): Promise<GuestbookEntry[]> {
   const { data, error } = await supabase
     .from("guestbook_public")
-    .select("id, name, message, parent_id, created_at")
+    .select("id, name, message, parent_id, attachment_data, attachment_type, created_at")
     .order("id", { ascending: false });
   if (error || !data) return [];
   return data.map(toEntry);
@@ -52,12 +67,16 @@ export async function addGuestbookEntry(entry: {
   message: string;
   password: string;
   parentId?: number | null;
+  attachmentData?: string | null;
+  attachmentType?: GuestbookAttachmentType | null;
 }): Promise<GuestbookEntry[]> {
   const { data, error } = await supabase.rpc("add_guestbook_entry", {
     p_name: entry.name,
     p_message: entry.message,
     p_password: entry.password,
     p_parent_id: entry.parentId ?? null,
+    p_attachment_data: entry.attachmentData ?? null,
+    p_attachment_type: entry.attachmentType ?? null,
   });
   if (error || !data) throw new Error(error?.message ?? "Failed to add guestbook entry");
   return (data as GuestbookRow[]).map(toEntry);

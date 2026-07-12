@@ -329,8 +329,14 @@
           <div id="guestbook-list"></div>
           <form id="guestbook-form">
             <input type="text" id="guestbook-name" placeholder="이름" maxlength="12" required />
-            <input type="text" id="guestbook-message" placeholder="메세지를 남겨주세요" maxlength="80" required />
-            <input type="password" id="guestbook-password" placeholder="비밀번호 (선택 — 수정/삭제하려면 필요)" maxlength="20" />
+            <textarea id="guestbook-message" placeholder="메세지를 남겨주세요" maxlength="500" required></textarea>
+            <input type="password" id="guestbook-password" placeholder="비밀번호 (선택-수정/삭제 목적)" maxlength="20" />
+            <div id="guestbook-attachment-row">
+              <label id="guestbook-attachment-label" class="song-file-label" for="guestbook-attachment-input">📎 사진/동영상 첨부</label>
+              <input type="file" id="guestbook-attachment-input" accept="image/*,video/*" />
+              <span id="guestbook-attachment-filename"></span>
+            </div>
+            <span id="guestbook-attachment-error" class="guestbook-inline-error" hidden></span>
             <button type="submit" id="guestbook-submit">등록</button>
           </form>
           <button id="guestbook-close-button" type="button">닫기</button>

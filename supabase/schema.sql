@@ -49,6 +49,12 @@ create table if not exists guestbook (
 alter table guestbook add column if not exists parent_id bigint references guestbook(id) on delete cascade;
 -- Migrate a database where this was still NOT NULL — lets posting without a password insert NULL.
 alter table guestbook alter column password_hash drop not null;
+-- Optional image/video attached when posting (data: URL, like the leaderboard's celebration photo
+-- and the banner images — same base64-in-Postgres pattern, no Supabase Storage bucket needed).
+-- attachment_type is 'image' or 'video', set by add_guestbook_entry below; only ever written at
+-- post time, never changed by edit_guestbook_entry.
+alter table guestbook add column if not exists attachment_data text;
+alter table guestbook add column if not exists attachment_type text;
 
 create table if not exists visits (
   id integer primary key default 1,
@@ -152,7 +158,7 @@ grant select on site_banner_images to anon, authenticated;
 -- later in this same script, so re-running the whole file stays safe.
 drop view if exists guestbook_public cascade;
 create view guestbook_public as
-  select id, name, message, parent_id, created_at from guestbook order by id desc;
+  select id, name, message, parent_id, attachment_data, attachment_type, created_at from guestbook order by id desc;
 grant select on guestbook_public to anon, authenticated;
 
 -- `visits` has no policies at all — not even select. Only increment_visits() below can touch it.
@@ -181,23 +187,29 @@ begin
 end;
 $$;
 
--- Signature changed (added p_parent_id) — drop the old 3-arg overload so it doesn't linger
--- alongside the current one.
+-- Signature changed each time a param was added (p_parent_id, then attachment) — drop every prior
+-- overload so it doesn't linger alongside the current one.
 drop function if exists add_guestbook_entry(text, text, text);
+drop function if exists add_guestbook_entry(text, text, text, bigint);
 
-create or replace function add_guestbook_entry(p_name text, p_message text, p_password text, p_parent_id bigint default null)
+create or replace function add_guestbook_entry(
+  p_name text, p_message text, p_password text, p_parent_id bigint default null,
+  p_attachment_data text default null, p_attachment_type text default null
+)
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   -- A blank/absent password stores a null hash (see the column's comment) rather than hashing an
   -- empty string — otherwise anyone leaving the password field blank on a later edit/delete attempt
   -- would match every other password-less entry too.
-  insert into guestbook (name, message, password_hash, parent_id)
+  insert into guestbook (name, message, password_hash, parent_id, attachment_data, attachment_type)
   values (
     left(p_name, 20),
-    left(p_message, 200),
+    left(p_message, 500),
     case when p_password is null or p_password = '' then null else crypt(p_password, gen_salt('bf')) end,
-    p_parent_id
+    p_parent_id,
+    p_attachment_data,
+    case when p_attachment_type in ('image', 'video') then p_attachment_type else null end
   );
 
   -- Keep the guestbook bounded by top-level entry count, same as the old server's GUESTBOOK_LIMIT —
@@ -230,7 +242,7 @@ begin
     raise exception 'wrong_password';
   end if;
 
-  update guestbook set message = left(p_message, 200) where id = p_id;
+  update guestbook set message = left(p_message, 500) where id = p_id;
   return query select * from guestbook_public order by id desc limit 50;
 end;
 $$;
@@ -451,7 +463,7 @@ end;
 $$;
 
 grant execute on function submit_score(text, text, integer, text, text, text, text, integer) to anon, authenticated;
-grant execute on function add_guestbook_entry(text, text, text, bigint) to anon, authenticated;
+grant execute on function add_guestbook_entry(text, text, text, bigint, text, text) to anon, authenticated;
 grant execute on function edit_guestbook_entry(bigint, text, text) to anon, authenticated;
 grant execute on function delete_guestbook_entry(bigint, text) to anon, authenticated;
 grant execute on function increment_visits() to anon, authenticated;
