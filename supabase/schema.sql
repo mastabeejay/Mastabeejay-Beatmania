@@ -159,10 +159,11 @@ alter table social_links enable row level security;
 alter table site_notice enable row level security;
 alter table site_banner_images enable row level security;
 alter table members enable row level security;
--- `admin_settings` has no policies at all — not even select. `members` is the same (only the
--- admin_login()/member_login()/member_signup()/member_update_profile() functions below can read
--- the base table directly), except for the members_public view further down, which deliberately
--- exposes only the columns safe for a public "BDJ Members" directory listing.
+-- `admin_settings` has no policies at all — not even select. `members` is the same — every read
+-- and write goes through a security definer function below (admin_login()/member_login()/
+-- member_signup()/member_update_profile()/list_members()), including the members_public view
+-- further down, which is deliberately NOT granted to anon/authenticated directly (the "BDJ Crews"
+-- directory is crew-only, gated by list_members() requiring valid member credentials).
 
 drop policy if exists "public read leaderboard" on leaderboard;
 create policy "public read leaderboard" on leaderboard for select using (true);
@@ -195,15 +196,16 @@ create view guestbook_public as
   select id, name, message, parent_id, attachment_data, attachment_type, heart_count, member_id, created_at from guestbook order by id desc;
 grant select on guestbook_public to anon, authenticated;
 
--- Backs the public "BDJ Crews" directory listing — signup order (oldest first). Now includes
--- birthdate/phone/email at the site owner's explicit request (the directory is meant to double as
--- a contact list for the crew); still excludes password_hash, the one column that can never leave
--- this table under any circumstance. No functions depend on this view's row type, so it needs no
--- CASCADE.
-drop view if exists members_public;
+-- Backs the "BDJ Crews" directory listing — signup order (oldest first). Includes birthdate/phone/
+-- email at the site owner's explicit request (the directory doubles as a crew contact list); still
+-- excludes password_hash, the one column that can never leave this table under any circumstance.
+--
+-- NOT granted to anon/authenticated directly — unlike guestbook_public/leaderboard, this view is
+-- crew-only, not public. list_members() below is the only way to read it, and it requires valid
+-- member credentials first. CASCADE because list_members declares `returns setof members_public`.
+drop view if exists members_public cascade;
 create view members_public as
   select id, name, gender, birthdate, phone, email, photo_data, created_at from members order by id asc;
-grant select on members_public to anon, authenticated;
 
 -- `visits` has no policies at all — not even select. Only increment_visits() below can touch it.
 
@@ -613,6 +615,18 @@ begin
 end;
 $$;
 
+-- Crew-only directory read: verify_member() raises wrong_member_password if the caller isn't a
+-- real logged-in member, and only then is the roster (including birthdate/phone/email) returned —
+-- see members_public's own comment for why that view isn't public on its own.
+create or replace function list_members(p_name text, p_password text)
+returns setof members_public
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform verify_member(p_name, p_password);
+  return query select * from members_public;
+end;
+$$;
+
 create or replace function admin_delete_guestbook_entries(p_ids bigint[], p_admin_password text)
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
@@ -815,6 +829,7 @@ grant execute on function member_signup(text, text, text, text, date, text, text
 grant execute on function member_login(text, text) to anon, authenticated;
 grant execute on function member_update_profile(text, text, text, date, text, text, text) to anon, authenticated;
 grant execute on function member_withdraw(text, text) to anon, authenticated;
+grant execute on function list_members(text, text) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_delete_leaderboard_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;

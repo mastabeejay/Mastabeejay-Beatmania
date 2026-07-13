@@ -63,6 +63,13 @@ export class NameTakenError extends Error {
   }
 }
 
+/** Shared by every member-credentialed call below except memberSignup (which maps a different
+ *  error code, name_taken, instead). */
+function throwMemberError(error: { message: string }): never {
+  if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+  throw new Error(error.message);
+}
+
 function toMember(row: MemberRow): Member {
   return {
     id: row.id,
@@ -111,10 +118,7 @@ export async function memberSignup(params: MemberSignupParams): Promise<Member> 
 
 export async function memberLogin(name: string, password: string): Promise<Member> {
   const { data, error } = await supabase.rpc("member_login", { p_name: name, p_password: password });
-  if (error) {
-    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
-    throw new Error(error.message);
-  }
+  if (error) throwMemberError(error);
   const row = (data as MemberRow[] | null)?.[0];
   if (!row) throw new Error("Failed to log in");
   return toMember(row);
@@ -142,10 +146,7 @@ export async function updateMemberProfile(name: string, password: string, params
     p_email: params.email ?? null,
     p_new_photo_data: params.photoData ?? null,
   });
-  if (error) {
-    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
-    throw new Error(error.message);
-  }
+  if (error) throwMemberError(error);
   const row = (data as MemberRow[] | null)?.[0];
   if (!row) throw new Error("Failed to update profile");
   return toMember(row);
@@ -156,22 +157,17 @@ export async function updateMemberProfile(name: string, password: string, params
  *  they just become ordinary unowned rows rather than disappearing. */
 export async function withdrawMember(name: string, password: string): Promise<void> {
   const { error } = await supabase.rpc("member_withdraw", { p_name: name, p_password: password });
-  if (error) {
-    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
-    throw new Error(error.message);
-  }
+  if (error) throwMemberError(error);
 }
 
-/** Public read, no login required — same view-backed pattern as loadGuestbook/loadLeaderboard,
- *  except this THROWS on error instead of returning [] — the directory popup needs to tell "no
- *  members yet" apart from "the members_public view doesn't exist / couldn't be reached", since
- *  an empty-looking directory with registered members hides a real problem. */
-export async function loadMembers(): Promise<MemberDirectoryEntry[]> {
-  const { data, error } = await supabase
-    .from("members_public")
-    .select("id, name, gender, birthdate, phone, email, photo_data, created_at")
-    .order("id", { ascending: true });
-  if (error) throw new Error(error.message);
+/** Crew-only — requires the caller's own member credentials (verified server-side by
+ *  list_members(), same re-verify-every-time pattern as every other member action), so a guest
+ *  can never read this directly, even via the raw Supabase REST API. THROWS on error instead of
+ *  returning [] — the directory popup needs to tell "no members yet" apart from "couldn't be
+ *  reached", since an empty-looking directory with registered members hides a real problem. */
+export async function loadMembers(name: string, password: string): Promise<MemberDirectoryEntry[]> {
+  const { data, error } = await supabase.rpc("list_members", { p_name: name, p_password: password });
+  if (error) throwMemberError(error);
   return ((data as MemberDirectoryRow[] | null) ?? []).map((row) => ({
     id: row.id,
     name: row.name,

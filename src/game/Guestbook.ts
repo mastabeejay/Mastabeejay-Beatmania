@@ -55,6 +55,16 @@ export class NotOwnerError extends Error {
   }
 }
 
+/** Shared by editGuestbookEntry/deleteGuestbookEntry — both map the same set of RPC error codes to
+ *  the same typed exceptions. */
+function throwGuestbookError(error: { message: string }): never {
+  if (error.message === "wrong_password") throw new WrongPasswordError();
+  if (error.message === "no_password") throw new NoPasswordSetError();
+  if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+  if (error.message === "not_owner") throw new NotOwnerError();
+  throw new Error(error.message);
+}
+
 function toEntry(row: GuestbookRow): GuestbookEntry {
   return {
     id: row.id,
@@ -133,13 +143,7 @@ export async function editGuestbookEntry(
     p_member_name: memberName ?? null,
     p_member_password: memberPassword ?? null,
   });
-  if (error) {
-    if (error.message === "wrong_password") throw new WrongPasswordError();
-    if (error.message === "no_password") throw new NoPasswordSetError();
-    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
-    if (error.message === "not_owner") throw new NotOwnerError();
-    throw new Error(error.message);
-  }
+  if (error) throwGuestbookError(error);
   return ((data as GuestbookRow[] | null) ?? []).map(toEntry);
 }
 
@@ -171,13 +175,7 @@ export async function deleteGuestbookEntry(
     p_member_name: memberName ?? null,
     p_member_password: memberPassword ?? null,
   });
-  if (error) {
-    if (error.message === "wrong_password") throw new WrongPasswordError();
-    if (error.message === "no_password") throw new NoPasswordSetError();
-    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
-    if (error.message === "not_owner") throw new NotOwnerError();
-    throw new Error(error.message);
-  }
+  if (error) throwGuestbookError(error);
   return ((data as GuestbookRow[] | null) ?? []).map(toEntry);
 }
 

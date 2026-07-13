@@ -63,6 +63,14 @@ export class NotOwnerError extends Error {
   }
 }
 
+/** Shared by editLeaderboardEntry/deleteLeaderboardEntry — both map the same set of RPC error
+ *  codes to the same typed exceptions. */
+function throwLeaderboardError(error: { message: string }): never {
+  if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+  if (error.message === "not_owner") throw new NotOwnerError();
+  throw new Error(error.message);
+}
+
 function toEntry(row: LeaderboardRow): LeaderboardEntry {
   return {
     id: row.id,
@@ -150,11 +158,7 @@ export async function editLeaderboardEntry(id: number, message: string, memberNa
     p_member_name: memberName,
     p_member_password: memberPassword,
   });
-  if (error) {
-    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
-    if (error.message === "not_owner") throw new NotOwnerError();
-    throw new Error(error.message);
-  }
+  if (error) throwLeaderboardError(error);
   return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
 }
 
@@ -164,10 +168,6 @@ export async function deleteLeaderboardEntry(id: number, memberName: string, mem
     p_member_name: memberName,
     p_member_password: memberPassword,
   });
-  if (error) {
-    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
-    if (error.message === "not_owner") throw new NotOwnerError();
-    throw new Error(error.message);
-  }
+  if (error) throwLeaderboardError(error);
   return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
 }

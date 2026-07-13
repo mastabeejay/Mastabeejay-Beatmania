@@ -660,22 +660,9 @@ guestbookList.addEventListener("click", (event) => {
 
     const attachmentInput = form.querySelector<HTMLInputElement>(".guestbook-edit-attachment-input")!;
     const file = attachmentInput.files?.[0] ?? null;
-    let attachmentType: GuestbookAttachmentType | null = null;
-    if (file) {
-      if (GUESTBOOK_IMAGE_TYPES.includes(file.type)) attachmentType = "image";
-      else if (GUESTBOOK_VIDEO_TYPES.includes(file.type)) attachmentType = "video";
-      else {
-        errorEl.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
-        errorEl.hidden = false;
-        return;
-      }
-      const maxBytes = attachmentType === "image" ? GUESTBOOK_IMAGE_MAX_BYTES : GUESTBOOK_VIDEO_MAX_BYTES;
-      if (file.size > maxBytes) {
-        errorEl.textContent = `파일이 너무 큽니다 (최대 ${maxBytes / (1024 * 1024)}MB): ${file.name}`;
-        errorEl.hidden = false;
-        return;
-      }
-    }
+    const attachmentValidation = validateAttachmentFile(file, errorEl, true);
+    if (!attachmentValidation.valid) return;
+    const attachmentType = attachmentValidation.type;
 
     void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
       .then((attachmentData) =>
@@ -771,6 +758,31 @@ const GUESTBOOK_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime", "vi
 const GUESTBOOK_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const GUESTBOOK_VIDEO_MAX_BYTES = 15 * 1024 * 1024;
 
+type AttachmentValidation = { valid: true; type: GuestbookAttachmentType | null } | { valid: false };
+
+/** Shared by every file picker that accepts an image (guestbook attachments, membership signup/
+ *  profile photos) — same MIME whitelist and size caps, same inline-error text. allowVideo is false
+ *  for the membership photo fields (image only); guestbook attachments allow both. On failure, the
+ *  error is already written into errorEl — the caller just needs to bail out on `!valid`. */
+function validateAttachmentFile(file: File | null, errorEl: HTMLSpanElement, allowVideo: boolean): AttachmentValidation {
+  if (!file) return { valid: true, type: null };
+  let type: GuestbookAttachmentType;
+  if (GUESTBOOK_IMAGE_TYPES.includes(file.type)) type = "image";
+  else if (allowVideo && GUESTBOOK_VIDEO_TYPES.includes(file.type)) type = "video";
+  else {
+    errorEl.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
+    errorEl.hidden = false;
+    return { valid: false };
+  }
+  const maxBytes = type === "image" ? GUESTBOOK_IMAGE_MAX_BYTES : GUESTBOOK_VIDEO_MAX_BYTES;
+  if (file.size > maxBytes) {
+    errorEl.textContent = `파일이 너무 큽니다 (최대 ${maxBytes / (1024 * 1024)}MB): ${file.name}`;
+    errorEl.hidden = false;
+    return { valid: false };
+  }
+  return { valid: true, type };
+}
+
 guestbookAttachmentInput.addEventListener("change", () => {
   const file = guestbookAttachmentInput.files?.[0];
   guestbookAttachmentFilename.textContent = file ? file.name : "";
@@ -786,22 +798,9 @@ guestbookForm.addEventListener("submit", (event) => {
   guestbookAttachmentError.hidden = true;
 
   const file = guestbookAttachmentInput.files?.[0] ?? null;
-  let attachmentType: GuestbookAttachmentType | null = null;
-  if (file) {
-    if (GUESTBOOK_IMAGE_TYPES.includes(file.type)) attachmentType = "image";
-    else if (GUESTBOOK_VIDEO_TYPES.includes(file.type)) attachmentType = "video";
-    else {
-      guestbookAttachmentError.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
-      guestbookAttachmentError.hidden = false;
-      return;
-    }
-    const maxBytes = attachmentType === "image" ? GUESTBOOK_IMAGE_MAX_BYTES : GUESTBOOK_VIDEO_MAX_BYTES;
-    if (file.size > maxBytes) {
-      guestbookAttachmentError.textContent = `파일이 너무 큽니다 (최대 ${maxBytes / (1024 * 1024)}MB): ${file.name}`;
-      guestbookAttachmentError.hidden = false;
-      return;
-    }
-  }
+  const attachmentValidation = validateAttachmentFile(file, guestbookAttachmentError, true);
+  if (!attachmentValidation.valid) return;
+  const attachmentType = attachmentValidation.type;
 
   void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
     .then((attachmentData) =>
@@ -1239,18 +1238,7 @@ membershipSignupSubmit.addEventListener("click", () => {
   }
 
   const file = membershipSignupPhotoInput.files?.[0] ?? null;
-  if (file) {
-    if (!GUESTBOOK_IMAGE_TYPES.includes(file.type)) {
-      membershipSignupError.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
-      membershipSignupError.hidden = false;
-      return;
-    }
-    if (file.size > GUESTBOOK_IMAGE_MAX_BYTES) {
-      membershipSignupError.textContent = `파일이 너무 큽니다 (최대 ${GUESTBOOK_IMAGE_MAX_BYTES / (1024 * 1024)}MB): ${file.name}`;
-      membershipSignupError.hidden = false;
-      return;
-    }
-  }
+  if (!validateAttachmentFile(file, membershipSignupError, false).valid) return;
 
   // At least one of the two is checked — validated by the guard above.
   const gender: MemberGender = membershipSignupGenderMale.checked ? "male" : "female";
@@ -1330,18 +1318,7 @@ membershipProfileSubmit.addEventListener("click", () => {
   }
 
   const file = membershipProfilePhotoInput.files?.[0] ?? null;
-  if (file) {
-    if (!GUESTBOOK_IMAGE_TYPES.includes(file.type)) {
-      membershipProfileError.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
-      membershipProfileError.hidden = false;
-      return;
-    }
-    if (file.size > GUESTBOOK_IMAGE_MAX_BYTES) {
-      membershipProfileError.textContent = `파일이 너무 큽니다 (최대 ${GUESTBOOK_IMAGE_MAX_BYTES / (1024 * 1024)}MB): ${file.name}`;
-      membershipProfileError.hidden = false;
-      return;
-    }
-  }
+  if (!validateAttachmentFile(file, membershipProfileError, false).valid) return;
 
   const currentName = member.name;
   const gender: MemberGender = membershipProfileGenderMale.checked ? "male" : "female";
@@ -1434,12 +1411,26 @@ function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, index: num
 }
 
 async function renderMembersDirectory(): Promise<void> {
+  // Crew-only — same login requirement as every other member action, just checked client-side
+  // first so a guest sees an explanatory message instead of a request that's just going to be
+  // rejected server-side anyway (list_members() also enforces this — see its own comment).
+  if (!member || !memberPassword) {
+    membersDirectoryList.innerHTML = `<p id="members-directory-empty">로그인한 회원만 볼 수 있습니다.</p>`;
+    return;
+  }
+
   let members: MemberDirectoryEntry[];
   try {
-    members = await loadMembers();
+    members = await loadMembers(member.name, memberPassword);
   } catch (err) {
+    if (err instanceof WrongMemberPasswordError) {
+      membersDirectoryList.innerHTML = `<p id="members-directory-empty">회원 인증이 만료되었습니다. 다시 로그인해주세요.</p>`;
+      clearMemberSession();
+      return;
+    }
     // Distinct from the empty state below — "no members yet" when the view can't even be read
-    // would hide a real problem (most likely the members_public migration not having been run).
+    // would hide a real problem (most likely the members_public/list_members migration not having
+    // been run yet).
     console.error("회원 명부 조회 실패:", err);
     membersDirectoryList.innerHTML = `<p id="members-directory-empty">명부를 불러오지 못했습니다.</p>`;
     return;
