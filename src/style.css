@@ -331,8 +331,13 @@ body::before {
 
 /* One label for the whole card row instead of every card repeating "설치 방법 보기" — sits directly
    above the Windows card on desktop (both #install-guide-section and #install-guide-cards are
-   columns there), and to its immediate left on mobile (see that breakpoint). */
+   columns there), and to its immediate left on mobile (see that breakpoint). Matches
+   .install-guide-card's own width so text-align:center actually centers it over that card column
+   instead of just flush-aligning to the column's right edge (#install-guide-section's
+   align-items:flex-end) — mobile resets this back to auto width, since there the label sits beside
+   a narrower row of cards instead of above a column of them. */
 #install-guide-label {
+  width: 74px;
   font-size: 12px;
   letter-spacing: 0.04em;
   text-align: center;
@@ -1940,6 +1945,35 @@ body::before {
   background: rgba(255, 46, 224, 0.26);
 }
 
+#members-directory-header-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Presence (see src/game/Presence.ts) is a snapshot taken when the directory opens, not a live
+   subscription — this is the only way to update it afterward, deliberately not on a timer/socket
+   push, since the user asked for on-demand refresh rather than continuous updates. */
+#members-directory-refresh-button {
+  flex: 0 0 auto;
+  font-family: var(--font-body);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  background: rgba(0, 240, 255, 0.12);
+  color: var(--color-cyber-cyan);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+#members-directory-refresh-button:hover {
+  background: rgba(0, 240, 255, 0.24);
+}
+
 #guestbook-title,
 #members-directory-title {
   font-size: 16px;
@@ -3011,6 +3045,13 @@ select option:disabled {
     position: static;
     flex-direction: row;
     align-items: center;
+  }
+
+  /* Desktop's fixed 74px (matching .install-guide-card, for centering above the Windows card in a
+     column) would just add dead space between the label and that same card here, where they sit
+     side by side in a row instead. */
+  #install-guide-label {
+    width: auto;
   }
 
   #install-guide-cards {

@@ -182,6 +182,7 @@ const membershipProfileCancel = document.querySelector<HTMLButtonElement>("#memb
 const membershipProfileWithdrawButton = document.querySelector<HTMLButtonElement>("#membership-profile-withdraw-button")!;
 const membersDirectoryOpenCard = document.querySelector<HTMLButtonElement>("#members-directory-open-card")!;
 const membersDirectoryOverlay = document.querySelector<HTMLDivElement>("#members-directory-overlay")!;
+const membersDirectoryRefreshButton = document.querySelector<HTMLButtonElement>("#members-directory-refresh-button")!;
 const membersDirectoryCloseButton = document.querySelector<HTMLButtonElement>("#members-directory-close-button")!;
 const membersDirectoryList = document.querySelector<HTMLTableSectionElement>("#members-directory-list")!;
 const guestbookOpenCard = document.querySelector<HTMLButtonElement>("#guestbook-open-card")!;
@@ -1456,6 +1457,10 @@ async function renderMembersDirectory(): Promise<void> {
 
 membersDirectoryOpenCard.addEventListener("click", () => {
   membersDirectoryOverlay.style.display = "flex";
+  void renderMembersDirectory();
+});
+
+membersDirectoryRefreshButton.addEventListener("click", () => {
   void renderMembersDirectory();
 });
 

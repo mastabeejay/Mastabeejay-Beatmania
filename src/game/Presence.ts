@@ -12,6 +12,11 @@ let channel: RealtimeChannel | null = null;
 export function trackMemberOnline(memberId: number): void {
   if (!channel) {
     channel = supabase.channel("bdj-online-members", { config: { presence: { key: crypto.randomUUID() } } });
+    // Registering a presence listener isn't just for reacting to changes — without at least one
+    // .on('presence', ...) callback, this client never wires up its own presenceState() tracking
+    // at all, so it stays permanently empty even though track() genuinely reaches the server (a
+    // no-op callback is enough; getOnlineMemberIds() reads presenceState() directly instead).
+    channel.on("presence", { event: "sync" }, () => {});
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") void channel?.track({ member_id: memberId });
     });
