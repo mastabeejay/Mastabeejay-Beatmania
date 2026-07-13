@@ -1191,6 +1191,28 @@ body::before {
   color: rgba(201, 211, 222, 0.7);
 }
 
+/* Set apart from 저장/취소 above (its own row, smaller, muted-until-hovered) — a destructive,
+   irreversible action shouldn't share visual weight with routine save/cancel buttons. */
+#membership-profile-withdraw-button {
+  display: block;
+  margin: 14px auto 0;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 46, 224, 0.3);
+  background: transparent;
+  color: rgba(255, 46, 224, 0.7);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+#membership-profile-withdraw-button:hover {
+  background: rgba(255, 46, 224, 0.14);
+  color: var(--color-cyber-magenta);
+}
+
 /* Signup fields reuse .admin-banner-field-label's "label wraps input" shape (see the admin panel
    above) — this generic descendant rule covers every text/password/date/tel/email input nested in
    one, rather than repeating the same block per #id like the admin panel's notice/graffiti inputs
@@ -1450,37 +1472,6 @@ body::before {
   white-space: nowrap;
 }
 
-/* The inline edit/delete forms sit in their own full-width (colspan) row directly below the entry
-   they belong to, reusing .guestbook-inline-form's classes but laid out horizontally — a table row
-   has the width to spare that a guestbook card doesn't. */
-.leaderboard-inline-form-row td {
-  white-space: normal;
-  text-align: left;
-  padding: 8px 10px;
-}
-
-.leaderboard-inline-form-row .guestbook-inline-form {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
-
-.leaderboard-edit-message {
-  flex: 1 1 200px;
-  font-family: var(--font-body);
-  font-size: 12px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  background: rgba(0, 240, 255, 0.06);
-  color: var(--color-cyber-silver);
-}
-
 /* --- Start button row (with flanking cyber-deco lines) and welcome+guestbook row -------------- */
 
 #start-button-row {
@@ -1637,10 +1628,11 @@ body::before {
   transition: opacity 0.2s ease;
 }
 
-/* Gold instead of the cyan everything else up here wears — these two are calls to action, not
-   status, so they get a color of their own. Logout keeps the shared cyan above. */
+/* Gold instead of the cyan everything else up here wears — all three are actions the visitor
+   takes (log in, join, or leave), not passive status like the name/avatar next to them. */
 #membership-login-button,
-#membership-signup-button {
+#membership-signup-button,
+#membership-logout-button {
   color: var(--color-cyber-gold);
   text-shadow: 0 0 8px rgba(255, 210, 0, 0.4);
 }
@@ -1979,6 +1971,17 @@ body::before {
   border: 1px solid rgba(0, 240, 255, 0.12);
 }
 
+/* Signup order, 1-indexed (see renderMembersDirectoryEntryHtml) — a fixed-width column so names
+   below it stay aligned regardless of how many digits the number runs to. */
+.members-directory-number {
+  flex: 0 0 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  color: rgba(201, 211, 222, 0.5);
+  text-align: right;
+}
+
 .members-directory-avatar {
   flex: 0 0 auto;
   width: 40px;
@@ -2022,9 +2025,19 @@ body::before {
 }
 
 .members-directory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+
+/* Each optional field keeps its label even when the value is blank (a member who skipped
+   birthdate/phone/email at signup) — a bare label with nothing after it reads as "not provided"
+   rather than the row silently missing a column. */
+.members-directory-field {
   font-family: var(--font-body);
   font-size: 11px;
   color: rgba(201, 211, 222, 0.6);
+  white-space: nowrap;
 }
 
 .guestbook-entry {
@@ -3302,19 +3315,36 @@ select option:disabled {
     max-width: 185px;
   }
 
+  /* Tighter than the shared mobile row gap above — with the welcome text, both buttons, and their
+     gaps all fighting for one 375px-ish row, every trimmed pixel here is what keeps the three from
+     wrapping onto two lines (an actual measured overflow at the standard 12px/8px padding). */
+  #welcome-guestbook-row {
+    gap: 8px;
+  }
+
+  /* Narrower than the shared mobile padding above — dropping the Korean subtitle (see
+     #guestbook-card-sub below) and stacking the title onto two short lines already frees up most
+     of the width these buttons used to need, so the leftover horizontal padding gets trimmed too. */
   #guestbook-open-card,
   #members-directory-open-card {
-    padding: 6px 10px;
+    padding: 6px 4px;
+    gap: 0;
   }
 
   #guestbook-card-title,
   #members-directory-card-title {
     font-size: 12px;
+    line-height: 1.25;
+    text-align: center;
   }
 
+  /* Korean subtitle ("방명록 보러가기"/"회원 명부 보기") is dropped here only — desktop and
+     landscape still show it. Two short title lines plus the icon-less button chrome already say
+     enough on a 375px screen; keeping the subtitle too made these buttons the widest thing in the
+     row. */
   #guestbook-card-sub,
   #members-directory-card-sub {
-    font-size: 10px;
+    display: none;
   }
 }
 

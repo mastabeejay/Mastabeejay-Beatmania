@@ -23,12 +23,16 @@ interface MemberRow {
   email: string | null;
 }
 
-/** One row of the public "BDJ Members" directory (see members_public in supabase/schema.sql) —
- *  deliberately narrower than Member: no birthdate/phone/email, nothing not meant for anyone to see. */
+/** One row of the public "BDJ Crews" directory (see members_public in supabase/schema.sql) —
+ *  everything except password_hash, at the site owner's explicit request (doubles as a crew
+ *  contact list). Blank optional fields come through as null, same as Member. */
 export interface MemberDirectoryEntry {
   id: number;
   name: string;
   gender: MemberGender | null;
+  birthdate: string | null;
+  phone: string | null;
+  email: string | null;
   photoData: string | null;
   dateIso: string;
 }
@@ -37,6 +41,9 @@ interface MemberDirectoryRow {
   id: number;
   name: string;
   gender: MemberGender | null;
+  birthdate: string | null;
+  phone: string | null;
+  email: string | null;
   photo_data: string | null;
   created_at: string;
 }
@@ -144,6 +151,17 @@ export async function updateMemberProfile(name: string, password: string, params
   return toMember(row);
 }
 
+/** Irreversible — deletes the account outright. Past guestbook/leaderboard rows this member owned
+ *  keep their name text as-is but lose the member_id link (see the on delete set null FKs), so
+ *  they just become ordinary unowned rows rather than disappearing. */
+export async function withdrawMember(name: string, password: string): Promise<void> {
+  const { error } = await supabase.rpc("member_withdraw", { p_name: name, p_password: password });
+  if (error) {
+    if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+    throw new Error(error.message);
+  }
+}
+
 /** Public read, no login required — same view-backed pattern as loadGuestbook/loadLeaderboard,
  *  except this THROWS on error instead of returning [] — the directory popup needs to tell "no
  *  members yet" apart from "the members_public view doesn't exist / couldn't be reached", since
@@ -151,13 +169,16 @@ export async function updateMemberProfile(name: string, password: string, params
 export async function loadMembers(): Promise<MemberDirectoryEntry[]> {
   const { data, error } = await supabase
     .from("members_public")
-    .select("id, name, gender, photo_data, created_at")
+    .select("id, name, gender, birthdate, phone, email, photo_data, created_at")
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
   return ((data as MemberDirectoryRow[] | null) ?? []).map((row) => ({
     id: row.id,
     name: row.name,
     gender: row.gender,
+    birthdate: row.birthdate,
+    phone: row.phone,
+    email: row.email,
     photoData: row.photo_data,
     dateIso: row.created_at,
   }));

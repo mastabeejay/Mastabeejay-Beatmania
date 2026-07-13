@@ -195,12 +195,14 @@ create view guestbook_public as
   select id, name, message, parent_id, attachment_data, attachment_type, heart_count, member_id, created_at from guestbook order by id desc;
 grant select on guestbook_public to anon, authenticated;
 
--- Backs the public "BDJ Members" directory listing — signup order (oldest first), and
--- deliberately narrow: no password_hash, birthdate, phone, or email, only what's meant to be shown
--- to any visitor. No functions depend on this view's row type, so it needs no CASCADE.
+-- Backs the public "BDJ Crews" directory listing — signup order (oldest first). Now includes
+-- birthdate/phone/email at the site owner's explicit request (the directory is meant to double as
+-- a contact list for the crew); still excludes password_hash, the one column that can never leave
+-- this table under any circumstance. No functions depend on this view's row type, so it needs no
+-- CASCADE.
 drop view if exists members_public;
 create view members_public as
-  select id, name, gender, photo_data, created_at from members order by id asc;
+  select id, name, gender, birthdate, phone, email, photo_data, created_at from members order by id asc;
 grant select on members_public to anon, authenticated;
 
 -- `visits` has no policies at all — not even select. Only increment_visits() below can touch it.
@@ -517,10 +519,12 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_name text := left(trim(p_name), 20);
 begin
-  if v_name is null or length(v_name) = 0 then
+  -- Korean-only name, digits-only password — enforced here too (not just client-side in main.ts),
+  -- same defense-in-depth as every other validation in this function.
+  if v_name is null or length(v_name) = 0 or v_name !~ '^[가-힣]+$' then
     raise exception 'invalid_name';
   end if;
-  if p_password is null or length(p_password) = 0 then
+  if p_password is null or length(p_password) = 0 or p_password !~ '^[0-9]+$' then
     raise exception 'invalid_password';
   end if;
   if p_gender not in ('male', 'female') then
@@ -591,6 +595,21 @@ begin
   where m.id = v_id;
 
   return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email from members m where m.id = v_id;
+end;
+$$;
+
+-- Deleting the row is enough on its own — guestbook.member_id/leaderboard.member_id both have
+-- `on delete set null`, so past posts/scores stick around unowned rather than vanishing, and no
+-- password can ever match a member_id that no longer exists (the guest/password path stays the
+-- only way to touch a formerly-member-owned row after this).
+create or replace function member_withdraw(p_name text, p_password text)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id bigint;
+begin
+  v_id := verify_member(p_name, p_password);
+  delete from members where id = v_id;
 end;
 $$;
 
@@ -795,6 +814,7 @@ grant execute on function admin_change_password(text, text) to anon, authenticat
 grant execute on function member_signup(text, text, text, text, date, text, text) to anon, authenticated;
 grant execute on function member_login(text, text) to anon, authenticated;
 grant execute on function member_update_profile(text, text, text, date, text, text, text) to anon, authenticated;
+grant execute on function member_withdraw(text, text) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_delete_leaderboard_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;

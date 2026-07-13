@@ -22,22 +22,14 @@ import {
   type GuestbookAttachmentType,
   type GuestbookEntry,
 } from "./game/Guestbook";
-import {
-  addLeaderboardEntry,
-  adminDeleteLeaderboardEntries,
-  computeProjectedRank,
-  deleteLeaderboardEntry,
-  editLeaderboardEntry,
-  loadLeaderboard,
-  NotOwnerError as LeaderboardNotOwnerError,
-  qualifiesForTop20,
-} from "./game/Leaderboard";
+import { addLeaderboardEntry, adminDeleteLeaderboardEntries, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
 import {
   loadMembers,
   memberLogin,
   memberSignup,
   NameTakenError,
   updateMemberProfile,
+  withdrawMember,
   WrongMemberPasswordError,
   type Member,
   type MemberDirectoryEntry,
@@ -182,9 +174,11 @@ const membershipProfileBirthdateInput = document.querySelector<HTMLInputElement>
 const membershipProfilePhoneInput = document.querySelector<HTMLInputElement>("#membership-profile-phone")!;
 const membershipProfileEmailInput = document.querySelector<HTMLInputElement>("#membership-profile-email")!;
 const membershipProfilePasswordInput = document.querySelector<HTMLInputElement>("#membership-profile-password")!;
+const membershipProfileSuccess = document.querySelector<HTMLSpanElement>("#membership-profile-success")!;
 const membershipProfileError = document.querySelector<HTMLSpanElement>("#membership-profile-error")!;
 const membershipProfileSubmit = document.querySelector<HTMLButtonElement>("#membership-profile-submit")!;
 const membershipProfileCancel = document.querySelector<HTMLButtonElement>("#membership-profile-cancel")!;
+const membershipProfileWithdrawButton = document.querySelector<HTMLButtonElement>("#membership-profile-withdraw-button")!;
 const membersDirectoryOpenCard = document.querySelector<HTMLButtonElement>("#members-directory-open-card")!;
 const membersDirectoryOverlay = document.querySelector<HTMLDivElement>("#members-directory-overlay")!;
 const membersDirectoryCloseButton = document.querySelector<HTMLButtonElement>("#members-directory-close-button")!;
@@ -346,43 +340,12 @@ async function renderLeaderboard(): Promise<void> {
   selectedLeaderboardIds.clear();
   leaderboardAdminDeleteButton.hidden = !adminPassword;
   if (board.length === 0) {
-    leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="11">기록이 없습니다 — 첫 기록의 주인공이 되어보세요!</td></tr>`;
+    leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="10">기록이 없습니다 — 첫 기록의 주인공이 되어보세요!</td></tr>`;
     return;
   }
   leaderboardBody.innerHTML = board
-    .map((entry, index) => {
-      const isOwnEntry = member !== null && entry.memberId === member.id;
-      const manageCell = isOwnEntry
-        ? `<button type="button" class="guestbook-action-btn" data-action="edit" data-id="${entry.id}">수정</button>
-           <button type="button" class="guestbook-action-btn" data-action="delete" data-id="${entry.id}">삭제</button>`
-        : `<span class="leaderboard-photo-empty">-</span>`;
-      const inlineFormsRow = isOwnEntry
-        ? `
-        <tr class="leaderboard-inline-form-row" data-mode="edit" data-id="${entry.id}" hidden>
-          <td colspan="11">
-            <div class="guestbook-inline-form">
-              <input type="text" class="leaderboard-edit-message" maxlength="80" />
-              <span class="guestbook-inline-error" hidden></span>
-              <div class="guestbook-inline-actions">
-                <button type="button" class="guestbook-confirm-btn" data-action="save" data-id="${entry.id}">저장</button>
-                <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
-              </div>
-            </div>
-          </td>
-        </tr>
-        <tr class="leaderboard-inline-form-row" data-mode="delete" data-id="${entry.id}" hidden>
-          <td colspan="11">
-            <div class="guestbook-inline-form">
-              <span class="guestbook-inline-error" style="color: inherit">정말 삭제하시겠습니까? 되돌릴 수 없습니다.</span>
-              <div class="guestbook-inline-actions">
-                <button type="button" class="guestbook-confirm-btn" data-action="confirm-delete" data-id="${entry.id}">삭제 확인</button>
-                <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
-              </div>
-            </div>
-          </td>
-        </tr>`
-        : "";
-      return `
+    .map(
+      (entry, index) => `
         <tr data-id="${entry.id}">
           <td>${adminPassword ? `<input type="checkbox" class="leaderboard-select-checkbox" data-id="${entry.id}" /> ` : ""}${index + 1}</td>
           <td>${escapeHtml(entry.name)}</td>
@@ -394,26 +357,16 @@ async function renderLeaderboard(): Promise<void> {
           <td>${entry.step}</td>
           <td>${escapeHtml(entry.bgm)}</td>
           <td>${formatLocalDate(entry.dateIso)}</td>
-          <td>${manageCell}</td>
-        </tr>${inlineFormsRow}`;
-    })
+        </tr>`,
+    )
     .join("");
 
   // Set via the DOM property, not interpolated into the HTML attribute above — consistent with how
   // guestbook message editing avoids putting arbitrary content inside an attribute value.
   board.forEach((entry, index) => {
-    if (entry.photo) {
-      const img = leaderboardBody.querySelector<HTMLImageElement>(`img[data-photo-index="${index}"]`);
-      if (img) img.src = entry.photo;
-    }
-    const editInput = leaderboardBody.querySelector<HTMLInputElement>(`.leaderboard-inline-form-row[data-mode="edit"][data-id="${entry.id}"] .leaderboard-edit-message`);
-    if (editInput) editInput.value = entry.message;
-  });
-}
-
-function hideAllLeaderboardForms(): void {
-  leaderboardBody.querySelectorAll<HTMLTableRowElement>(".leaderboard-inline-form-row").forEach((row) => {
-    row.hidden = true;
+    if (!entry.photo) return;
+    const img = leaderboardBody.querySelector<HTMLImageElement>(`img[data-photo-index="${index}"]`);
+    if (img) img.src = entry.photo;
   });
 }
 
@@ -450,68 +403,6 @@ leaderboardAdminDeleteButton.addEventListener("click", () => {
         console.error("리더보드 삭제 실패:", err);
       }
     });
-});
-
-/** Own-entry edit/delete — member-only (leaderboard rows have never had a per-row password), so
- *  there's no password prompt at all: being logged in as the entry's owner is the only proof
- *  required, exactly like the guestbook's member-owned rows. */
-leaderboardBody.addEventListener("click", (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
-  if (!button) return;
-  const id = Number(button.dataset.id);
-  const action = button.dataset.action;
-  const row = button.closest<HTMLTableRowElement>("tr[data-id]") ?? button.closest<HTMLTableRowElement>(".leaderboard-inline-form-row");
-  if (!row) return;
-
-  if (action === "edit" || action === "delete") {
-    const mode = action === "edit" ? "edit" : "delete";
-    const form = leaderboardBody.querySelector<HTMLTableRowElement>(`.leaderboard-inline-form-row[data-mode="${mode}"][data-id="${id}"]`);
-    if (!form) return;
-    const alreadyOpen = !form.hidden;
-    hideAllLeaderboardForms();
-    if (!alreadyOpen) form.hidden = false;
-    return;
-  }
-
-  if (action === "cancel") {
-    hideAllLeaderboardForms();
-    return;
-  }
-
-  if (!member || !memberPassword) return;
-
-  if (action === "save") {
-    const form = leaderboardBody.querySelector<HTMLTableRowElement>(`.leaderboard-inline-form-row[data-mode="edit"][data-id="${id}"]`)!;
-    const message = form.querySelector<HTMLInputElement>(".leaderboard-edit-message")!.value.trim();
-    const errorEl = form.querySelector<HTMLSpanElement>(".guestbook-inline-error")!;
-    if (!message) return;
-    void editLeaderboardEntry(id, message, member.name, memberPassword)
-      .then(() => renderLeaderboard())
-      .catch((err) => {
-        if (err instanceof WrongMemberPasswordError || err instanceof LeaderboardNotOwnerError) {
-          errorEl.textContent = "회원 인증이 만료되었습니다. 다시 로그인해주세요.";
-          errorEl.hidden = false;
-          clearMemberSession();
-          void renderLeaderboard();
-        } else {
-          console.error("리더보드 수정 실패:", err);
-        }
-      });
-    return;
-  }
-
-  if (action === "confirm-delete") {
-    void deleteLeaderboardEntry(id, member.name, memberPassword)
-      .then(() => renderLeaderboard())
-      .catch((err) => {
-        if (err instanceof WrongMemberPasswordError || err instanceof LeaderboardNotOwnerError) {
-          clearMemberSession();
-        } else {
-          console.error("리더보드 삭제 실패:", err);
-        }
-        void renderLeaderboard();
-      });
-  }
 });
 
 /** Local calendar date, not the ISO string's UTC date — slicing the raw ISO string would show the
@@ -1312,6 +1203,9 @@ membershipSignupPhotoInput.addEventListener("change", () => {
   membershipSignupError.hidden = true;
 });
 
+const MEMBER_NAME_KOREAN_ONLY_PATTERN = /^[가-힣]+$/;
+const MEMBER_PASSWORD_DIGITS_ONLY_PATTERN = /^[0-9]+$/;
+
 membershipSignupSubmit.addEventListener("click", () => {
   const name = membershipSignupNameInput.value.trim();
   const password = membershipSignupPasswordInput.value;
@@ -1321,6 +1215,16 @@ membershipSignupSubmit.addEventListener("click", () => {
   if (!name || !password) {
     membershipSignupError.textContent = "이름과 비밀번호를 입력해주세요.";
     membershipSignupError.hidden = false;
+    return;
+  }
+  // Popups (not the inline error span) per how this was asked for — distinct enough from the rest
+  // of this form's validation that a modal interruption is warranted.
+  if (!MEMBER_NAME_KOREAN_ONLY_PATTERN.test(name)) {
+    window.alert("이름은 한글로만 입력해주세요.");
+    return;
+  }
+  if (!MEMBER_PASSWORD_DIGITS_ONLY_PATTERN.test(password)) {
+    window.alert("비밀번호는 숫자로만 입력해주세요.");
     return;
   }
   if (password !== passwordConfirm) {
@@ -1393,6 +1297,7 @@ membershipNameLabel.addEventListener("click", () => {
   membershipProfilePhoneInput.value = member.phone ?? "";
   membershipProfileEmailInput.value = member.email ?? "";
   membershipProfilePasswordInput.value = "";
+  membershipProfileSuccess.hidden = true;
   membershipProfileError.hidden = true;
   membershipProfileOverlay.style.display = "flex";
 });
@@ -1410,6 +1315,7 @@ membershipProfilePhotoInput.addEventListener("change", () => {
 membershipProfileSubmit.addEventListener("click", () => {
   if (!member) return;
   const password = membershipProfilePasswordInput.value;
+  membershipProfileSuccess.hidden = true;
   membershipProfileError.hidden = true;
 
   if (!password) {
@@ -1449,7 +1355,11 @@ membershipProfileSubmit.addEventListener("click", () => {
       member = updatedMember;
       memberPassword = password;
       localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name: currentName, password }));
-      membershipProfileOverlay.style.display = "none";
+      // Left open (not closed like login/signup) so the success message is actually visible —
+      // closing immediately would show it for zero perceptible time.
+      membershipProfilePhotoInput.value = "";
+      membershipProfilePhotoFilename.textContent = "";
+      membershipProfileSuccess.hidden = false;
       setMembershipUI();
       void renderGuestbook();
       void renderLeaderboard();
@@ -1468,13 +1378,57 @@ membershipProfileSubmit.addEventListener("click", () => {
     });
 });
 
-function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry): string {
+/** Irreversible, so it's gated behind both a typed password (re-verified server-side, same as
+ *  every other profile action) and a confirm() — one accidental click shouldn't delete an account. */
+membershipProfileWithdrawButton.addEventListener("click", () => {
+  if (!member) return;
+  const password = membershipProfilePasswordInput.value;
+  membershipProfileSuccess.hidden = true;
+  membershipProfileError.hidden = true;
+
+  if (!password) {
+    membershipProfileError.textContent = "비밀번호를 입력해주세요.";
+    membershipProfileError.hidden = false;
+    return;
+  }
+  if (!window.confirm("정말 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return;
+
+  const currentName = member.name;
+  void withdrawMember(currentName, password)
+    .then(() => {
+      clearMemberSession();
+      membershipProfileOverlay.style.display = "none";
+      void renderGuestbook();
+      void renderLeaderboard();
+    })
+    .catch((err) => {
+      if (err instanceof WrongMemberPasswordError) {
+        membershipProfileError.textContent = "비밀번호가 일치하지 않습니다.";
+        membershipProfileError.hidden = false;
+      } else {
+        console.error("회원 탈퇴 실패:", err);
+        membershipProfileError.textContent = `탈퇴에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
+        membershipProfileError.hidden = false;
+      }
+    });
+});
+
+/** index is this member's 1-based signup order (loadMembers() sorts ascending by id, so position
+ *  in the array already is that order — no separate "sequence number" column exists in the DB). */
+function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, index: number): string {
+  const genderLabel = entry.gender === "male" ? "남" : entry.gender === "female" ? "여" : "";
   return `
     <div class="members-directory-entry">
+      <span class="members-directory-number">${index + 1}</span>
       <div class="members-directory-avatar${entry.photoData ? " has-photo" : ""}" data-member-id="${entry.id}"></div>
       <div class="members-directory-info">
-        <span class="members-directory-name">${escapeHtml(entry.name)}</span>
-        <span class="members-directory-meta">${entry.gender === "male" ? "남" : entry.gender === "female" ? "여" : "-"} · 가입일 ${formatLocalDate(entry.dateIso)}</span>
+        <span class="members-directory-name">${escapeHtml(entry.name)}${genderLabel ? ` (${genderLabel})` : ""}</span>
+        <span class="members-directory-meta">
+          <span class="members-directory-field">생년월일 ${entry.birthdate ? escapeHtml(entry.birthdate) : ""}</span>
+          <span class="members-directory-field">전화번호 ${entry.phone ? escapeHtml(entry.phone) : ""}</span>
+          <span class="members-directory-field">이메일 ${entry.email ? escapeHtml(entry.email) : ""}</span>
+          <span class="members-directory-field">가입일 ${formatLocalDate(entry.dateIso)}</span>
+        </span>
       </div>
     </div>`;
 }

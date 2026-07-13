@@ -116,7 +116,6 @@
                   <th>Step</th>
                   <th>BGM</th>
                   <th>기록일</th>
-                  <th>관리</th>
                 </tr>
               </thead>
               <tbody id="leaderboard-body"></tbody>
@@ -180,11 +179,11 @@
         <div id="welcome-guestbook-row">
           <p id="visitor-welcome">Welcome to MastaBeejay World : <span id="visitor-count">-</span> Manias.</p>
           <button id="guestbook-open-card" type="button">
-            <span id="guestbook-card-title">Beejay's Guest Board</span>
+            <span id="guestbook-card-title">Beejay's <span class="mobile-stack-line2">Guest Board</span></span>
             <span id="guestbook-card-sub">방명록 보러가기</span>
           </button>
           <button id="members-directory-open-card" type="button">
-            <span id="members-directory-card-title">BDJ Crews</span>
+            <span id="members-directory-card-title">BDJ <span class="mobile-stack-line2">Crews</span></span>
             <span id="members-directory-card-sub">회원 명부 보기</span>
           </button>
         </div>
@@ -415,11 +414,13 @@
             비밀번호 확인 (저장하려면 입력)
             <input type="password" id="membership-profile-password" maxlength="60" placeholder="비밀번호" />
           </label>
+          <span id="membership-profile-success" class="admin-panel-inline-success" hidden>변경 적용이 되었습니다.</span>
           <span id="membership-profile-error" class="admin-panel-inline-error" hidden></span>
           <div id="membership-profile-actions">
             <button type="button" id="membership-profile-submit">저장</button>
             <button type="button" id="membership-profile-cancel">취소</button>
           </div>
+          <button type="button" id="membership-profile-withdraw-button">회원 탈퇴</button>
         </div>
       </div>
       <div id="members-directory-overlay">
