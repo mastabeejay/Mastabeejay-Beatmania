@@ -144,14 +144,17 @@ export async function updateMemberProfile(name: string, password: string, params
   return toMember(row);
 }
 
-/** Public read, no login required — same view-backed pattern as loadGuestbook/loadLeaderboard. */
+/** Public read, no login required — same view-backed pattern as loadGuestbook/loadLeaderboard,
+ *  except this THROWS on error instead of returning [] — the directory popup needs to tell "no
+ *  members yet" apart from "the members_public view doesn't exist / couldn't be reached", since
+ *  an empty-looking directory with registered members hides a real problem. */
 export async function loadMembers(): Promise<MemberDirectoryEntry[]> {
   const { data, error } = await supabase
     .from("members_public")
     .select("id, name, gender, photo_data, created_at")
     .order("id", { ascending: true });
-  if (error || !data) return [];
-  return (data as MemberDirectoryRow[]).map((row) => ({
+  if (error) throw new Error(error.message);
+  return ((data as MemberDirectoryRow[] | null) ?? []).map((row) => ({
     id: row.id,
     name: row.name,
     gender: row.gender,

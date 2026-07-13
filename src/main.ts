@@ -1460,7 +1460,9 @@ membershipProfileSubmit.addEventListener("click", () => {
         membershipProfileError.hidden = false;
       } else {
         console.error("내 정보 수정 실패:", err);
-        membershipProfileError.textContent = "수정에 실패했습니다. 잠시 후 다시 시도해주세요.";
+        // Include the underlying message — a bare "실패했습니다" hides exactly the detail needed to
+        // tell a missing DB function apart from a network blip when the user reports it.
+        membershipProfileError.textContent = `수정에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
         membershipProfileError.hidden = false;
       }
     });
@@ -1478,7 +1480,16 @@ function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry): string {
 }
 
 async function renderMembersDirectory(): Promise<void> {
-  const members = await loadMembers();
+  let members: MemberDirectoryEntry[];
+  try {
+    members = await loadMembers();
+  } catch (err) {
+    // Distinct from the empty state below — "no members yet" when the view can't even be read
+    // would hide a real problem (most likely the members_public migration not having been run).
+    console.error("회원 명부 조회 실패:", err);
+    membersDirectoryList.innerHTML = `<p id="members-directory-empty">명부를 불러오지 못했습니다.</p>`;
+    return;
+  }
   if (members.length === 0) {
     membersDirectoryList.innerHTML = `<p id="members-directory-empty">아직 가입한 회원이 없습니다.</p>`;
     return;

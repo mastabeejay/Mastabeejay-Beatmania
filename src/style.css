@@ -1550,6 +1550,16 @@ body::before {
   z-index: 12;
 }
 
+/* Avatar with the name directly under it — the same column shape as #chatbot-toggle-main, with
+   the same gap, so with both containers pinned to top:14px the two circles and the two labels
+   line up on identical horizontal lines. */
+#membership-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
 #membership-avatar {
   flex: 0 0 auto;
   width: 52px;
@@ -1625,6 +1635,14 @@ body::before {
   text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
   cursor: pointer;
   transition: opacity 0.2s ease;
+}
+
+/* Gold instead of the cyan everything else up here wears — these two are calls to action, not
+   status, so they get a color of their own. Logout keeps the shared cyan above. */
+#membership-login-button,
+#membership-signup-button {
+  color: var(--color-cyber-gold);
+  text-shadow: 0 0 8px rgba(255, 210, 0, 0.4);
 }
 
 #membership-login-button:hover,
@@ -3302,6 +3320,19 @@ select option:disabled {
 
 /* --- Phone landscape only (short viewport) ------------------------------------------------------ */
 @media (max-height: 480px) {
+  /* Landscape spreads the top row across the full width: Jaybot hugs the left edge (the column's
+     align-items:center would otherwise center the pair as one block) and the membership widget
+     centers itself in the remaining space via its auto margins — even breathing room on both
+     sides instead of the two sitting glued together mid-screen. */
+  #top-status-row {
+    align-self: stretch;
+    padding: 0 16px;
+  }
+
+  #membership-row {
+    margin: 0 auto;
+  }
+
   /* Plenty of width sideways — let the tagline fill it, and tuck it right under the Jaybot row. */
   #leaderboard-tagline {
     font-size: 27px;

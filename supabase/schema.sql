@@ -578,13 +578,17 @@ begin
     raise exception 'invalid_gender';
   end if;
 
-  update members
-  set photo_data = coalesce(p_new_photo_data, photo_data),
+  -- The alias-qualified column refs matter: this function's RETURNS TABLE names (id, photo_data,
+  -- ...) double as PL/pgSQL variables, so a bare `photo_data`/`id` inside the statement is
+  -- ambiguous (variable vs column) and raises at runtime — the same reason member_login's select
+  -- qualifies everything with `m.`.
+  update members m
+  set photo_data = coalesce(p_new_photo_data, m.photo_data),
       gender = p_gender,
       birthdate = p_birthdate,
       phone = nullif(trim(p_phone), ''),
       email = nullif(trim(p_email), '')
-  where id = v_id;
+  where m.id = v_id;
 
   return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email from members m where m.id = v_id;
 end;
