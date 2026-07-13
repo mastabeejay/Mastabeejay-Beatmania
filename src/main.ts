@@ -40,6 +40,7 @@ import { adminAddBannerImages, adminDeleteBannerImage, loadBannerImages, type Ba
 import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
+import { getOnlineMemberIds, trackMemberOnline, untrackMemberOnline } from "./game/Presence";
 import { ScoreManager } from "./game/ScoreManager";
 import { adminAddSocialLink, adminDeleteSocialLink, adminUpdateSocialLink, loadSocialLinks } from "./game/SocialLinks";
 import { buildTestChart, DIFFICULTY_PRESETS, type ChartDensity } from "./game/testChart";
@@ -182,7 +183,7 @@ const membershipProfileWithdrawButton = document.querySelector<HTMLButtonElement
 const membersDirectoryOpenCard = document.querySelector<HTMLButtonElement>("#members-directory-open-card")!;
 const membersDirectoryOverlay = document.querySelector<HTMLDivElement>("#members-directory-overlay")!;
 const membersDirectoryCloseButton = document.querySelector<HTMLButtonElement>("#members-directory-close-button")!;
-const membersDirectoryList = document.querySelector<HTMLDivElement>("#members-directory-list")!;
+const membersDirectoryList = document.querySelector<HTMLTableSectionElement>("#members-directory-list")!;
 const guestbookOpenCard = document.querySelector<HTMLButtonElement>("#guestbook-open-card")!;
 const guestbookOverlay = document.querySelector<HTMLDivElement>("#guestbook-overlay")!;
 const guestbookCloseButton = document.querySelector<HTMLButtonElement>("#guestbook-close-button")!;
@@ -278,6 +279,7 @@ function setMembershipUI(): void {
     membershipNameLabel.title = "내 정보 보기/수정";
     membershipAuthActions.hidden = true;
     membershipLogoutButton.hidden = false;
+    trackMemberOnline(member.id);
   } else {
     membershipAvatar.style.backgroundImage = "";
     membershipAvatar.classList.remove("has-photo");
@@ -286,6 +288,7 @@ function setMembershipUI(): void {
     membershipNameLabel.title = "";
     membershipAuthActions.hidden = false;
     membershipLogoutButton.hidden = true;
+    untrackMemberOnline();
   }
 
   // Guestbook: a logged-in member's name is fixed and no per-row password is ever needed.
@@ -1391,23 +1394,24 @@ membershipProfileWithdrawButton.addEventListener("click", () => {
 });
 
 /** index is this member's 1-based signup order (loadMembers() sorts ascending by id, so position
- *  in the array already is that order — no separate "sequence number" column exists in the DB). */
-function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, index: number): string {
-  const genderLabel = entry.gender === "male" ? "남" : entry.gender === "female" ? "여" : "";
+ *  in the array already is that order — no separate "sequence number" column exists in the DB).
+ *  onlineIds is a snapshot of getOnlineMemberIds() taken once per renderMembersDirectory() call —
+ *  same one-shot-per-open pattern as the roster fetch itself, not a live-updating subscription. */
+function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, index: number, onlineIds: Set<number>): string {
+  const genderLabel = entry.gender === "male" ? "남" : entry.gender === "female" ? "여" : "-";
+  const isOnline = onlineIds.has(entry.id);
   return `
-    <div class="members-directory-entry">
-      <span class="members-directory-number">${index + 1}</span>
-      <div class="members-directory-avatar${entry.photoData ? " has-photo" : ""}" data-member-id="${entry.id}"></div>
-      <div class="members-directory-info">
-        <span class="members-directory-name">${escapeHtml(entry.name)}${genderLabel ? ` (${genderLabel})` : ""}</span>
-        <span class="members-directory-meta">
-          <span class="members-directory-field">생년월일 ${entry.birthdate ? escapeHtml(entry.birthdate) : ""}</span>
-          <span class="members-directory-field">전화번호 ${entry.phone ? escapeHtml(entry.phone) : ""}</span>
-          <span class="members-directory-field">이메일 ${entry.email ? escapeHtml(entry.email) : ""}</span>
-          <span class="members-directory-field">가입일 ${formatLocalDate(entry.dateIso)}</span>
-        </span>
-      </div>
-    </div>`;
+    <tr>
+      <td class="members-directory-number">${index + 1}</td>
+      <td><div class="members-directory-avatar${entry.photoData ? " has-photo" : ""}" data-member-id="${entry.id}"></div></td>
+      <td class="members-directory-name">${escapeHtml(entry.name)}</td>
+      <td>${genderLabel}</td>
+      <td>${entry.birthdate ? escapeHtml(entry.birthdate) : "-"}</td>
+      <td>${entry.phone ? escapeHtml(entry.phone) : "-"}</td>
+      <td>${entry.email ? escapeHtml(entry.email) : "-"}</td>
+      <td>${formatLocalDate(entry.dateIso)}</td>
+      <td class="members-directory-online${isOnline ? " is-online" : ""}">${isOnline ? "🟢 접속중" : "⚪ -"}</td>
+    </tr>`;
 }
 
 async function renderMembersDirectory(): Promise<void> {
@@ -1415,7 +1419,7 @@ async function renderMembersDirectory(): Promise<void> {
   // first so a guest sees an explanatory message instead of a request that's just going to be
   // rejected server-side anyway (list_members() also enforces this — see its own comment).
   if (!member || !memberPassword) {
-    membersDirectoryList.innerHTML = `<p id="members-directory-empty">로그인한 회원만 볼 수 있습니다.</p>`;
+    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">로그인한 회원만 볼 수 있습니다.</td></tr>`;
     return;
   }
 
@@ -1424,7 +1428,7 @@ async function renderMembersDirectory(): Promise<void> {
     members = await loadMembers(member.name, memberPassword);
   } catch (err) {
     if (err instanceof WrongMemberPasswordError) {
-      membersDirectoryList.innerHTML = `<p id="members-directory-empty">회원 인증이 만료되었습니다. 다시 로그인해주세요.</p>`;
+      membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">회원 인증이 만료되었습니다. 다시 로그인해주세요.</td></tr>`;
       clearMemberSession();
       return;
     }
@@ -1432,14 +1436,15 @@ async function renderMembersDirectory(): Promise<void> {
     // would hide a real problem (most likely the members_public/list_members migration not having
     // been run yet).
     console.error("회원 명부 조회 실패:", err);
-    membersDirectoryList.innerHTML = `<p id="members-directory-empty">명부를 불러오지 못했습니다.</p>`;
+    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">명부를 불러오지 못했습니다.</td></tr>`;
     return;
   }
   if (members.length === 0) {
-    membersDirectoryList.innerHTML = `<p id="members-directory-empty">아직 가입한 회원이 없습니다.</p>`;
+    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">아직 가입한 회원이 없습니다.</td></tr>`;
     return;
   }
-  membersDirectoryList.innerHTML = members.map(renderMembersDirectoryEntryHtml).join("");
+  const onlineIds = getOnlineMemberIds();
+  membersDirectoryList.innerHTML = members.map((entry, index) => renderMembersDirectoryEntryHtml(entry, index, onlineIds)).join("");
   // Set via the DOM property, not interpolated into the HTML above — same reasoning as every other
   // base64 photo in this codebase (guestbook attachments, leaderboard photos).
   for (const entry of members) {

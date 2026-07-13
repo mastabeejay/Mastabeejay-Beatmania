@@ -329,11 +329,13 @@ body::before {
   color: var(--color-cyber-cyan);
 }
 
-.install-guide-card-sub {
-  font-family: var(--font-body);
-  font-weight: 600;
-  font-size: 10px;
-  color: rgba(201, 211, 222, 0.55);
+/* One label for the whole card row instead of every card repeating "설치 방법 보기" — sits directly
+   above the Windows card on desktop (both #install-guide-section and #install-guide-cards are
+   columns there), and to its immediate left on mobile (see that breakpoint). */
+#install-guide-label {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-align: center;
 }
 
 #install-guide-overlay {
@@ -1161,6 +1163,13 @@ body::before {
   margin-top: 6px;
 }
 
+/* "취소/종료" reads longer than every other 저장/취소 pair's label — flex:1 on both keeps 저장 and
+   취소/종료 exactly the same width regardless, instead of the wider label growing past the other. */
+#membership-profile-actions button {
+  flex: 1;
+  white-space: nowrap;
+}
+
 #membership-login-submit,
 #membership-signup-submit,
 #membership-profile-submit,
@@ -1954,38 +1963,54 @@ body::before {
   margin: 0;
 }
 
-#members-directory-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.members-directory-entry {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(0, 240, 255, 0.04);
-  border: 1px solid rgba(0, 240, 255, 0.12);
-}
-
-/* Signup order, 1-indexed (see renderMembersDirectoryEntryHtml) — a fixed-width column so names
-   below it stay aligned regardless of how many digits the number runs to. */
-.members-directory-number {
-  flex: 0 0 20px;
+/* Column headers stay fixed at the top of the list instead of repeating on every row (as plain
+   field labels used to) — same header/body split as #leaderboard-table. */
+#members-directory-table {
+  width: 100%;
+  border-collapse: collapse;
   font-family: var(--font-body);
-  font-weight: 700;
   font-size: 12px;
+}
+
+#members-directory-table th,
+#members-directory-table td {
+  padding: 6px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+#members-directory-table thead th {
+  color: var(--color-cyber-gold);
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 210, 0, 0.3);
+}
+
+#members-directory-table tbody tr:nth-child(odd) {
+  background: rgba(0, 240, 255, 0.04);
+}
+
+#members-directory-table tbody td {
+  color: rgba(201, 211, 222, 0.9);
+}
+
+#members-directory-empty td {
   color: rgba(201, 211, 222, 0.5);
-  text-align: right;
+  font-style: italic;
+}
+
+/* Signup order, 1-indexed (see renderMembersDirectoryEntryHtml). Selectors below are scoped with
+   #members-directory-table td.* (not a bare class) so they outrank #members-directory-table tbody
+   td's own color above — a bare class has lower specificity than that id+type rule and would
+   otherwise silently lose. */
+#members-directory-table td.members-directory-number {
+  color: rgba(201, 211, 222, 0.5);
+  font-weight: 700;
 }
 
 .members-directory-avatar {
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
   border-radius: 50%;
   background-color: rgba(201, 211, 222, 0.15);
   background-position: center;
@@ -1994,7 +2019,7 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 14px;
   border: 1px solid rgba(0, 240, 255, 0.3);
 }
 
@@ -2007,37 +2032,25 @@ body::before {
   content: none;
 }
 
-.members-directory-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.members-directory-name {
+/* Kept larger/bolder than the other columns so the name stays the one thing that's easy to scan
+   at a glance, same as before this was reshaped into a table. */
+#members-directory-table td.members-directory-name {
   font-family: var(--font-body);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-cyber-cyan);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.members-directory-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-}
-
-/* Each optional field keeps its label even when the value is blank (a member who skipped
-   birthdate/phone/email at signup) — a bare label with nothing after it reads as "not provided"
-   rather than the row silently missing a column. */
-.members-directory-field {
-  font-family: var(--font-body);
+/* Presence (see src/game/Presence.ts) — a snapshot taken when the directory opens, not a live
+   subscription, so it reflects who was online at that moment. */
+#members-directory-table td.members-directory-online {
   font-size: 11px;
-  color: rgba(201, 211, 222, 0.6);
-  white-space: nowrap;
+  color: rgba(201, 211, 222, 0.5);
+}
+
+#members-directory-table td.members-directory-online.is-online {
+  color: #3ddc84;
+  font-weight: 700;
 }
 
 .guestbook-entry {
@@ -2990,9 +3003,13 @@ select option:disabled {
   }
 
   /* Same story as the Jaybot launcher: the fixed bottom-right install-guide stack was covering
-     the guestbook/notice/footer area. It becomes the column's last row, cards side by side. */
+     the guestbook/notice/footer area. It becomes the column's last row, cards side by side — and
+     the section itself switches to a row too, so the "설치방법" label sits immediately left of the
+     Windows card instead of stacked above the whole row (which reads fine on desktop's vertical
+     card stack, but not here). */
   #install-guide-section {
     position: static;
+    flex-direction: row;
     align-items: center;
   }
 
@@ -3067,6 +3084,23 @@ select option:disabled {
 
   #leaderboard-table th,
   #leaderboard-table td {
+    padding: 4px 5px;
+  }
+
+  /* Same story as #leaderboard-table above — 9 columns don't fit a phone's width readably, so the
+     table keeps a real minimum width and this scroll body (unlike guestbook's, which never needs
+     horizontal scroll) reaches the rest sideways. */
+  #members-directory-scroll-body {
+    overflow-x: auto;
+  }
+
+  #members-directory-table {
+    min-width: 600px;
+    font-size: 11px;
+  }
+
+  #members-directory-table th,
+  #members-directory-table td {
     padding: 4px 5px;
   }
 
@@ -3172,10 +3206,6 @@ select option:disabled {
 
   .install-guide-card-label {
     font-size: 9px;
-  }
-
-  .install-guide-card-sub {
-    display: none;
   }
 
   #install-guide-overlay-panel {
@@ -3350,17 +3380,13 @@ select option:disabled {
 
 /* --- Phone landscape only (short viewport) ------------------------------------------------------ */
 @media (max-height: 480px) {
-  /* Landscape spreads the top row across the full width: Jaybot hugs the left edge (the column's
-     align-items:center would otherwise center the pair as one block) and the membership widget
-     centers itself in the remaining space via its auto margins — even breathing room on both
-     sides instead of the two sitting glued together mid-screen. */
+  /* Landscape spreads #top-status-row across the full width so Jaybot hugs the left edge (the
+     column's align-items:center would otherwise center it) — but the membership widget sits right
+     next to Jaybot's tagline instead of drifting into the empty space beyond it, so it no longer
+     needs a stretch/auto-margin trick of its own. */
   #top-status-row {
     align-self: stretch;
     padding: 0 16px;
-  }
-
-  #membership-row {
-    margin: 0 auto;
   }
 
   /* Plenty of width sideways — let the tagline fill it, and tuck it right under the Jaybot row. */

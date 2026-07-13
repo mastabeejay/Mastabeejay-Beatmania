@@ -194,26 +194,23 @@
           <div id="notice-board-images"></div>
         </div>
         <div id="install-guide-section">
+          <div id="install-guide-label" class="text-metallic-gold">설치방법</div>
           <div id="install-guide-cards">
             <button type="button" class="install-guide-card" data-platform="windows">
               <span class="install-guide-card-icon">🖥️</span>
               <span class="install-guide-card-label">Windows</span>
-              <span class="install-guide-card-sub">설치 방법 보기</span>
             </button>
             <button type="button" class="install-guide-card" data-platform="macos">
               <span class="install-guide-card-icon">💻</span>
               <span class="install-guide-card-label">macOS</span>
-              <span class="install-guide-card-sub">설치 방법 보기</span>
             </button>
             <button type="button" class="install-guide-card" data-platform="android">
               <span class="install-guide-card-icon">🤖</span>
               <span class="install-guide-card-label">Android</span>
-              <span class="install-guide-card-sub">설치 방법 보기</span>
             </button>
             <button type="button" class="install-guide-card" data-platform="ios">
               <span class="install-guide-card-icon">📱</span>
               <span class="install-guide-card-label">iOS</span>
-              <span class="install-guide-card-sub">설치 방법 보기</span>
             </button>
           </div>
         </div>
@@ -418,7 +415,7 @@
           <span id="membership-profile-error" class="admin-panel-inline-error" hidden></span>
           <div id="membership-profile-actions">
             <button type="button" id="membership-profile-submit">저장</button>
-            <button type="button" id="membership-profile-cancel">취소</button>
+            <button type="button" id="membership-profile-cancel">취소/종료</button>
           </div>
           <button type="button" id="membership-profile-withdraw-button">회원 탈퇴</button>
         </div>
@@ -430,7 +427,22 @@
             <button id="members-directory-close-button" type="button">✕ 닫기</button>
           </div>
           <div id="members-directory-scroll-body">
-            <div id="members-directory-list"></div>
+            <table id="members-directory-table">
+              <thead>
+                <tr>
+                  <th>번호</th>
+                  <th></th>
+                  <th>이름</th>
+                  <th>성별</th>
+                  <th>생년월일</th>
+                  <th>전화번호</th>
+                  <th>이메일</th>
+                  <th>가입일</th>
+                  <th>접속현황</th>
+                </tr>
+              </thead>
+              <tbody id="members-directory-list"></tbody>
+            </table>
           </div>
         </div>
       </div>
