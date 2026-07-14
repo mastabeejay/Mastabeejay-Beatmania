@@ -2,12 +2,15 @@
 export const KEY_ZONE_X_START = 0.08;
 export const KEY_WIDTH_PCT = 0.049;
 export const KEY_GAP_PCT = 0.02;
-export const KEY_ZONE_Y_RANGE: [number, number] = [0.66, 0.81];
+// Shifted up from [0.66, 0.81] — landscape's short viewport height left too little margin below
+// the keys (and, worse, below the scratch disk — see resolveScratchZone in ZoneLayout.ts for the
+// clamp that handles the rest of that specifically).
+export const KEY_ZONE_Y_RANGE: [number, number] = [0.6, 0.75];
 export const NUM_KEYS = 5;
 
 // Scratch disk layout. Radius is applied against min(width, height) in pixels when
 // rendering/hit-testing, so the disk stays a true circle regardless of the camera's aspect ratio.
-export const SCRATCH_DISK_CENTER = { xPct: 0.78, yPct: 0.72 };
+export const SCRATCH_DISK_CENTER = { xPct: 0.78, yPct: 0.68 };
 export const SCRATCH_DISK_RADIUS_PCT = 0.2652; // 0.204 * 1.3
 
 // Press-gesture thresholds. Units are normalized-coordinate velocity (fraction

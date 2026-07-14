@@ -1,14 +1,18 @@
 import type { JudgmentResult } from "../game/JudgmentEngine";
 import { SCRATCH_LANE } from "../game/types";
-import type { KeyZone, ScratchZone } from "../handTracking/ZoneLayout";
+import { resolveScratchZone, type KeyZone, type ScratchZone } from "../handTracking/ZoneLayout";
 
 interface ActiveJudgment extends JudgmentResult {
   expiresAtMs: number;
+  /** Combo count *after* this judgment — 0 for a Bad (which breaks the combo), so no "Combo 0" is
+   *  ever shown. */
+  combo: number;
 }
 
 const DISPLAY_DURATION_MS = 500;
 
 const TIER_COLOR: Record<string, string> = {
+  Excellent: "#ffd200",
   Great: "#00f0ff",
   Good: "#39ff8a",
   Bad: "#ff2ee0",
@@ -23,8 +27,8 @@ export class JudgmentRenderer {
     this.active = [];
   }
 
-  register(result: JudgmentResult): void {
-    this.active.push({ ...result, expiresAtMs: performance.now() + DISPLAY_DURATION_MS });
+  register(result: JudgmentResult, combo: number): void {
+    this.active.push({ ...result, combo, expiresAtMs: performance.now() + DISPLAY_DURATION_MS });
   }
 
   draw(zones: KeyZone[], scratchZone: ScratchZone, width: number, height: number): void {
@@ -32,12 +36,13 @@ export class JudgmentRenderer {
     this.active = this.active.filter((judgment) => judgment.expiresAtMs > now);
 
     const hitLineY = (zones[0]?.yMin ?? 0.66) * height;
+    const resolvedScratch = resolveScratchZone(scratchZone, width, height);
 
     for (const judgment of this.active) {
       const isScratch = judgment.lane === SCRATCH_LANE;
       const zone = zones[judgment.lane];
-      const cx = isScratch ? scratchZone.centerXPct * width : zone ? ((zone.xMin + zone.xMax) / 2) * width : width / 2;
-      const baseY = isScratch ? scratchZone.centerYPct * height : hitLineY;
+      const cx = isScratch ? resolvedScratch.cx : zone ? ((zone.xMin + zone.xMax) / 2) * width : width / 2;
+      const baseY = isScratch ? resolvedScratch.cy : hitLineY;
 
       const remaining = (judgment.expiresAtMs - now) / DISPLAY_DURATION_MS; // 1 -> 0
       const riseOffset = (1 - remaining) * 30;
@@ -51,6 +56,12 @@ export class JudgmentRenderer {
       this.ctx.shadowColor = color;
       this.ctx.shadowBlur = 16;
       this.ctx.fillText(judgment.tier, cx, baseY - 30 - riseOffset);
+      if (judgment.combo > 0) {
+        this.ctx.font = "700 15px Orbitron, sans-serif";
+        this.ctx.fillStyle = "#ffd200";
+        this.ctx.shadowColor = "#ffd200";
+        this.ctx.fillText(`Combo ${judgment.combo}`, cx, baseY - 8 - riseOffset);
+      }
       this.ctx.shadowBlur = 0;
       this.ctx.globalAlpha = 1;
     }

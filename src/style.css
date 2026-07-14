@@ -15,6 +15,24 @@
   color-scheme: dark;
 }
 
+/* Generic in-flight state for any button wrapped in withButtonLoading() (main.ts) — a network
+   round-trip with zero visual change read as "did my click even register?", so this pulses and
+   dims the button (its own label is swapped for a loading message by the JS side) until the
+   Supabase call resolves either way. */
+@keyframes button-loading-pulse {
+  0%, 100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.is-loading {
+  cursor: wait !important;
+  animation: button-loading-pulse 1s ease-in-out infinite;
+}
+
 body {
   margin: 0;
   /* 100vh is measured against mobile browsers' "large viewport" (address bar hidden) even while
@@ -147,6 +165,17 @@ body::before {
   color: var(--color-cyber-gold);
   text-shadow: 0 0 12px rgba(255, 210, 0, 0.5);
   line-height: 1.2;
+}
+
+/* Hidden (via the `hidden` attribute) whenever the combo is 0 — a fresh run or right after a Bad
+   hit resets it, so there's nothing to show until the next successful hit starts a new streak. */
+#combo-value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: var(--color-cyber-gold);
+  text-shadow: 0 0 8px rgba(255, 210, 0, 0.4);
 }
 
 #track-info {
@@ -564,6 +593,7 @@ body::before {
 }
 
 #chatbot-input-row {
+  flex-shrink: 0;
   display: flex;
   gap: 6px;
   padding: 10px 12px;
@@ -1247,12 +1277,18 @@ body::before {
 
 /* Explains why a skipped optional field (photo/생년월일/전화번호/Email) just shows blank in the
    Crews directory rather than some placeholder — sits once, above every optional field rather than
-   repeating per-field. */
+   repeating per-field. Gold + a faint highlighted box (same treatment as
+   #install-guide-modal-footer's warning note) so it actually stands out instead of reading as
+   fine-print. */
 #membership-signup-optional-hint {
   font-family: var(--font-body);
-  font-size: 11px;
-  font-style: italic;
-  color: rgba(201, 211, 222, 0.55);
+  font-weight: 600;
+  font-size: 12px;
+  color: rgba(255, 210, 0, 0.9);
+  background: rgba(255, 210, 0, 0.08);
+  border: 1px solid rgba(255, 210, 0, 0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
   margin: 0 0 8px;
 }
 
@@ -2245,9 +2281,32 @@ body::before {
 .guestbook-entry-top {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   font-family: var(--font-body);
+}
+
+/* Groups the optional admin checkbox/avatar with the name so they stay tight against each other —
+   .guestbook-entry-top itself only ever has two children (this + the date) either way, so
+   justify-content:space-between puts a single cluster at the start and the date at the end
+   regardless of how many optional pieces this cluster ends up with. */
+.guestbook-entry-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.guestbook-entry-avatar {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: rgba(201, 211, 222, 0.15);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  border: 1px solid rgba(0, 240, 255, 0.3);
 }
 
 .guestbook-entry-name {
@@ -2712,8 +2771,8 @@ select option:disabled {
   font-family: var(--font-body);
   font-weight: 700;
   letter-spacing: 0.04em;
-  font-size: 14px;
-  padding: 8px 18px;
+  font-size: 15px;
+  padding: 9px 20px;
   border-radius: 999px;
   border: 1px solid rgba(255, 46, 224, 0.4);
   background: rgba(6, 10, 18, 0.7);
@@ -3194,13 +3253,17 @@ select option:disabled {
      footer. */
   /* --keyboard-inset (set in main.ts from window.visualViewport) pushes the whole panel up by
      however much the on-screen keyboard is currently covering, so the input row at its bottom
-     stays above the keyboard instead of hidden behind it. 0px the rest of the time. */
+     stays above the keyboard instead of hidden behind it. 0px the rest of the time. `top` shrinks
+     as the inset grows (floor 8px) rather than staying pinned at 76px — landscape phones are short
+     enough that a keyboard plus a fixed 76px top reserve left almost no panel height at all, which
+     squeezed the input row down until its own typed text was clipped even though the cursor was
+     technically above the keyboard. */
   #chatbot-panel {
     width: min(480px, calc(100vw - 32px));
     max-width: none;
-    top: 76px;
+    top: max(8px, calc(76px - var(--keyboard-inset, 0px)));
     bottom: calc(84px + var(--keyboard-inset, 0px));
-    transition: bottom 0.15s ease;
+    transition: top 0.15s ease, bottom 0.15s ease;
     z-index: 20;
   }
 
@@ -3467,15 +3530,17 @@ select option:disabled {
 
   /* In-game HUD: #game-title/#hud-stack/#stop-button are 3 independently fixed-position elements
      that, on desktop, sit in their own top corners with room to spare — on a 375px-wide portrait
-     phone, #hud-stack's top-left score box directly overlapped the centered title text. Moving
-     score/track-info/stop-button down into one shared row below the (unmoved) title, and
-     shrinking each enough that all three fit that row side by side, resolves the overlap. */
+     phone, #hud-stack's top-left score box directly overlapped the centered title text. Moving it
+     down below the (unmoved) title resolves the overlap; score sits directly under the title on
+     the left, and track-info directly under score, left-aligned — stacked (not a shared row),
+     since #track-info needs the full row width to avoid truncating a long custom song title.
+     #stop-button is unrelated to this stack and keeps its own top-right corner. */
   #hud-stack {
     top: 50px;
     left: 8px;
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 
   #score-hud {
@@ -3490,9 +3555,13 @@ select option:disabled {
     font-size: 18px;
   }
 
+  #combo-value {
+    font-size: 10px;
+  }
+
   #track-info {
     padding: 4px 8px;
-    max-width: 110px;
+    max-width: calc(100vw - 16px);
   }
 
   #track-info-title {
@@ -3509,11 +3578,14 @@ select option:disabled {
     white-space: nowrap;
   }
 
+  /* Unchanged position from before (top:50/right:8, clear of the title) — only score/track-info
+     moved this round; the slightly larger padding/font here just mirrors the desktop-wide size
+     bump from renaming this button 종료. */
   #stop-button {
     top: 50px;
     right: 8px;
-    padding: 5px 12px;
-    font-size: 11px;
+    padding: 6px 14px;
+    font-size: 12px;
   }
 
   /* Portrait only — landscape has plenty of horizontal room per item, so "YBJ 힙합"/"자유 음원"
@@ -3567,8 +3639,10 @@ select option:disabled {
   }
 
   /* The Track pill only (the admin panel's 이미지 찾기 shares this class and must stay wide).
-     With the emoji hidden, 자유/음원 stack as two centered lines, 음원 directly under 자유. */
-  #song-file-label {
+     With the emoji hidden, 자유/음원 stack as two centered lines, 음원 directly under 자유. Applies
+     to the step-setup ready screen's own file button too — same shape, same shrink. */
+  #song-file-label,
+  #step-song-file-label {
     font-size: 10px;
     padding: 4px 4px;
     width: 44px;
@@ -3576,7 +3650,8 @@ select option:disabled {
     text-align: center;
   }
 
-  #song-file-icon {
+  #song-file-icon,
+  #step-song-file-icon {
     display: none;
   }
 
@@ -3589,6 +3664,15 @@ select option:disabled {
   .settings-select-label select {
     font-size: 10px;
     padding: 2px 2px;
+  }
+
+  /* Same compacting as #main-controls-row's groups above gets every individual item small enough
+     that all 4 (무반주/연습 radio, YBJ/힙합 radio, 자유/음원 file button, 속도 + 난이도 selects) fit
+     one row without wrapping — nowrap here is what actually stops 난이도 from dropping to its own
+     line once there's finally room for it. */
+  #step-setup-row {
+    flex-wrap: nowrap;
+    gap: 6px;
   }
 
   #calibration-toggle-label {

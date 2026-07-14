@@ -1,12 +1,13 @@
 import type { NoteEvent } from "./types";
 
-export type JudgmentTier = "Great" | "Good" | "Bad";
+export type JudgmentTier = "Excellent" | "Great" | "Good" | "Bad";
 
 export interface JudgmentResult {
   tier: JudgmentTier;
   lane: number;
 }
 
+const EXCELLENT_WINDOW_MS = 50;
 const GREAT_WINDOW_MS = 100;
 const GOOD_WINDOW_MS = 220;
 const BAD_WINDOW_MS = 400; // outer bound: a press further off than this from any note is ignored, not judged
@@ -38,7 +39,8 @@ export class JudgmentEngine {
     if (!best || bestDelta > BAD_WINDOW_MS) return null;
 
     this.judgedIds.add(best.id);
-    const tier: JudgmentTier = bestDelta <= GREAT_WINDOW_MS ? "Great" : bestDelta <= GOOD_WINDOW_MS ? "Good" : "Bad";
+    const tier: JudgmentTier =
+      bestDelta <= EXCELLENT_WINDOW_MS ? "Excellent" : bestDelta <= GREAT_WINDOW_MS ? "Great" : bestDelta <= GOOD_WINDOW_MS ? "Good" : "Bad";
     return { tier, lane };
   }
 

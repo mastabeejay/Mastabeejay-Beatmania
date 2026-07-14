@@ -36,6 +36,7 @@
         <div id="score-hud">
           <div id="score-hud-label">SCORE</div>
           <div id="score-value">0</div>
+          <div id="combo-value" hidden></div>
         </div>
         <div id="track-info">
           <div id="track-info-title"></div>
@@ -50,7 +51,7 @@
         <button id="admin-logout-button" type="button" hidden>🔓 관리자 모드 (로그아웃)</button>
         <button id="admin-panel-open-button" type="button" hidden>⚙️ 관리자 패널</button>
       </div>
-      <button id="stop-button" type="button">⏹ 중단</button>
+      <button id="stop-button" type="button">⏹ 종료</button>
       <div id="calibration-status"></div>
       <div id="start-overlay">
         <div id="top-status-row">
@@ -129,7 +130,7 @@
               <div id="bgm-mode-select" class="bgm-mode-select">
                 <label>
                   <input type="radio" name="bgm-mode" id="bgm-mode-test" value="test" />
-                  무반주 연습
+                  <span>무반주 <span class="mobile-stack-line2">연습</span></span>
                 </label>
                 <label>
                   <input type="radio" name="bgm-mode" id="bgm-mode-default" value="default" checked />
@@ -413,12 +414,8 @@
             <input type="password" id="membership-profile-new-password" maxlength="60" placeholder="새 비밀번호" />
           </label>
           <label class="admin-banner-field-label">
-            새 비밀번호 확인
-            <input type="password" id="membership-profile-new-password-confirm" maxlength="60" placeholder="새 비밀번호 확인" />
-          </label>
-          <label class="admin-banner-field-label">
-            비밀번호 확인 (저장하려면 입력)
-            <input type="password" id="membership-profile-password" maxlength="60" placeholder="비밀번호" />
+            현재 비밀번호 (저장하려면 입력)
+            <input type="password" id="membership-profile-password" maxlength="60" placeholder="현재 비밀번호" />
           </label>
           <span id="membership-profile-success" class="admin-panel-inline-success" hidden>변경 적용이 되었습니다.</span>
           <span id="membership-profile-error" class="admin-panel-inline-error" hidden></span>
@@ -527,14 +524,14 @@
           <div id="step-bgm-mode-select" class="bgm-mode-select">
             <label>
               <input type="radio" name="step-bgm-mode" id="step-bgm-mode-test" value="test" />
-              무반주 연습 트랙
+              <span>무반주 <span class="mobile-stack-line2">연습</span></span>
             </label>
             <label>
               <input type="radio" name="step-bgm-mode" id="step-bgm-mode-default" value="default" checked />
-              YBJ 힙합 트랙
+              <span>YBJ <span class="mobile-stack-line2">힙합</span></span>
             </label>
           </div>
-          <label id="step-song-file-label" class="song-file-label" for="step-song-file-input">🎵 자유 음원 트랙</label>
+          <label id="step-song-file-label" class="song-file-label" for="step-song-file-input"><span id="step-song-file-icon">🎵</span> <span>자유 <span class="mobile-stack-line2">음원</span></span></label>
           <input type="file" id="step-song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
           <label class="settings-select-label">속도
             <select id="step-speed-select">

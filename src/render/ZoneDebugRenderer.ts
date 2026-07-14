@@ -1,4 +1,4 @@
-import type { KeyZone, ScratchZone } from "../handTracking/ZoneLayout";
+import { resolveScratchZone, type KeyZone, type ScratchZone } from "../handTracking/ZoneLayout";
 import type { FingertipDebugSample, PressEvent } from "../handTracking/types";
 
 export class ZoneDebugRenderer {
@@ -53,9 +53,7 @@ export class ZoneDebugRenderer {
    *  the hand is engaged; the marker line rotates with rotationRad so the disk visibly spins with
    *  the detected up/down rub motion. */
   drawScratchDisk(zone: ScratchZone, rotationRad: number, engaged: boolean, width: number, height: number): void {
-    const cx = zone.centerXPct * width;
-    const cy = zone.centerYPct * height;
-    const r = zone.radiusPct * Math.min(width, height);
+    const { cx, cy, r } = resolveScratchZone(zone, width, height);
 
     this.ctx.fillStyle = engaged ? "rgba(15, 15, 15, 0.72)" : "rgba(10, 10, 10, 0.55)";
     this.ctx.beginPath();

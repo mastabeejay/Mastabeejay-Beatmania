@@ -40,6 +40,26 @@ export function computeScratchZone(): ScratchZone {
   };
 }
 
+export interface ResolvedScratchZone {
+  cx: number;
+  cy: number;
+  r: number;
+}
+
+/** Resolves a ScratchZone's fractional geometry into actual pixels for the CURRENT canvas size,
+ *  clamping the vertical center so the disk never extends past the bottom edge. centerYPct was
+ *  tuned against a tall portrait aspect, where min(width,height) (the radius's basis) is much
+ *  smaller than height itself; in landscape they're much closer together, so the same fraction of
+ *  height left almost no margin below the disk and it clipped off-screen. Every consumer (the
+ *  renderer, hit-testing, note/judgment placement) must go through this one function rather than
+ *  each re-deriving cx/cy/r itself, or the visual disk and the interactive zone could drift apart. */
+export function resolveScratchZone(zone: ScratchZone, width: number, height: number): ResolvedScratchZone {
+  const r = zone.radiusPct * Math.min(width, height);
+  const marginPx = 12;
+  const idealCy = zone.centerYPct * height;
+  return { cx: zone.centerXPct * width, cy: Math.min(idealCy, height - r - marginPx), r };
+}
+
 /** x, y must already be in displayed (mirrored) screen-space fractions, matching zone coordinates. */
 export function findZoneAt(zones: KeyZone[], x: number, y: number): KeyZone | null {
   return zones.find((zone) => x >= zone.xMin && x < zone.xMax && y >= zone.yMin && y <= zone.yMax) ?? null;

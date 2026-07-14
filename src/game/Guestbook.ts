@@ -17,6 +17,9 @@ export interface GuestbookEntry {
   /** Set when a logged-in BDJ member posted this — lets that same member edit/delete it without a
    *  password (see editGuestbookEntry/deleteGuestbookEntry's memberName/memberPassword params). */
   memberId: number | null;
+  /** The posting member's profile photo, shown next to their name — null for guest-posted entries
+   *  or a member who never set one. */
+  memberPhotoData: string | null;
   dateIso: string;
 }
 
@@ -29,6 +32,7 @@ interface GuestbookRow {
   attachment_type: GuestbookAttachmentType | null;
   heart_count: number;
   member_id: number | null;
+  member_photo_data: string | null;
   created_at: string;
 }
 
@@ -75,16 +79,18 @@ function toEntry(row: GuestbookRow): GuestbookEntry {
     attachmentType: row.attachment_type,
     heartCount: row.heart_count,
     memberId: row.member_id,
+    memberPhotoData: row.member_photo_data,
     dateIso: row.created_at,
   };
 }
 
 /** Reads go straight to the `guestbook_public` view (see supabase/schema.sql) — it exposes every
- *  column except password_hash, so there's nothing sensitive for the anon key to leak here. */
+ *  column except password_hash, plus (via a join) the posting member's own photo_data — nothing
+ *  else about that member, so there's nothing sensitive for the anon key to leak here. */
 export async function loadGuestbook(): Promise<GuestbookEntry[]> {
   const { data, error } = await supabase
     .from("guestbook_public")
-    .select("id, name, message, parent_id, attachment_data, attachment_type, heart_count, member_id, created_at")
+    .select("id, name, message, parent_id, attachment_data, attachment_type, heart_count, member_id, member_photo_data, created_at")
     .order("id", { ascending: false });
   if (error || !data) return [];
   return data.map(toEntry);

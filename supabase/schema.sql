@@ -198,6 +198,12 @@ grant select on site_banner_images to anon, authenticated;
 -- the underlying table with the view owner's privileges and bypasses the deny-all RLS on the base
 -- table while still only exposing the columns listed here.
 --
+-- member_photo_data is the ONLY members column exposed here (via the left join) — a guest-posted
+-- entry (member_id null) just gets null back, same as any other member-only field. This is
+-- deliberately narrower than members_public: no name/gender/birthdate/phone/email leak through a
+-- guestbook read, only the one field the entry avatar needs, and only for whichever member happens
+-- to already be named on that row.
+--
 -- CASCADE because add/edit/delete_guestbook_entry (+ admin_delete_guestbook_entries) all declare
 -- `returns setof guestbook_public`, which makes them depend on the view's row type — plain DROP
 -- fails once those functions exist (as they will on any re-run after the first). Every function
@@ -206,7 +212,10 @@ grant select on site_banner_images to anon, authenticated;
 -- so they're untouched by this.
 drop view if exists guestbook_public cascade;
 create view guestbook_public as
-  select id, name, message, parent_id, attachment_data, attachment_type, heart_count, member_id, created_at from guestbook order by id desc;
+  select g.id, g.name, g.message, g.parent_id, g.attachment_data, g.attachment_type, g.heart_count, g.member_id, m.photo_data as member_photo_data, g.created_at
+  from guestbook g
+  left join members m on m.id = g.member_id
+  order by g.id desc;
 grant select on guestbook_public to anon, authenticated;
 
 -- Backs the "BDJ Crews" directory listing — signup order (oldest first). Includes birthdate/phone/

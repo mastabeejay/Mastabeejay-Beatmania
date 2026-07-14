@@ -113,6 +113,7 @@ const calibrationToggle = document.querySelector<HTMLInputElement>("#calibration
 const calibrationStatus = document.querySelector<HTMLDivElement>("#calibration-status")!;
 const scoreHud = document.querySelector<HTMLDivElement>("#score-hud")!;
 const scoreValueEl = document.querySelector<HTMLDivElement>("#score-value")!;
+const comboValueEl = document.querySelector<HTMLDivElement>("#combo-value")!;
 const resultsOverlay = document.querySelector<HTMLDivElement>("#results-overlay")!;
 const resultsStepLabelEl = document.querySelector<HTMLDivElement>("#results-step-label")!;
 const resultsScoreEl = document.querySelector<HTMLDivElement>("#results-score")!;
@@ -176,7 +177,6 @@ const membershipProfileBirthdateInput = document.querySelector<HTMLInputElement>
 const membershipProfilePhoneInput = document.querySelector<HTMLInputElement>("#membership-profile-phone")!;
 const membershipProfileEmailInput = document.querySelector<HTMLInputElement>("#membership-profile-email")!;
 const membershipProfileNewPasswordInput = document.querySelector<HTMLInputElement>("#membership-profile-new-password")!;
-const membershipProfileNewPasswordConfirmInput = document.querySelector<HTMLInputElement>("#membership-profile-new-password-confirm")!;
 const membershipProfilePasswordInput = document.querySelector<HTMLInputElement>("#membership-profile-password")!;
 const membershipProfileSuccess = document.querySelector<HTMLSpanElement>("#membership-profile-success")!;
 const membershipProfileError = document.querySelector<HTMLSpanElement>("#membership-profile-error")!;
@@ -196,6 +196,8 @@ const directChatCloseButton = document.querySelector<HTMLButtonElement>("#direct
 const membersDirectoryList = document.querySelector<HTMLTableSectionElement>("#members-directory-list")!;
 const guestbookOpenCard = document.querySelector<HTMLButtonElement>("#guestbook-open-card")!;
 const guestbookOverlay = document.querySelector<HTMLDivElement>("#guestbook-overlay")!;
+const guestbookTitle = document.querySelector<HTMLDivElement>("#guestbook-title")!;
+const guestbookScrollBody = document.querySelector<HTMLDivElement>("#guestbook-scroll-body")!;
 const guestbookCloseButton = document.querySelector<HTMLButtonElement>("#guestbook-close-button")!;
 const photoCountdownOverlay = document.querySelector<HTMLDivElement>("#photo-countdown-overlay")!;
 const photoCountdownDescEl = document.querySelector<HTMLDivElement>("#photo-countdown-desc")!;
@@ -453,6 +455,24 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+/** Disables the button and swaps its label for a loading message while `action` is in flight —
+ *  every action this wraps crosses the network to Supabase, and with no visual change a click
+ *  looked identical to a click that didn't register at all until the response eventually landed. */
+async function withButtonLoading<T>(button: HTMLButtonElement, loadingText: string, action: () => Promise<T>): Promise<T> {
+  const originalText = button.textContent;
+  const originalDisabled = button.disabled;
+  button.disabled = true;
+  button.classList.add("is-loading");
+  button.textContent = loadingText;
+  try {
+    return await action();
+  } finally {
+    button.disabled = originalDisabled;
+    button.classList.remove("is-loading");
+    button.textContent = originalText;
+  }
+}
+
 const GUESTBOOK_HEARTED_STORAGE_KEY = "bdj-guestbook-hearted-ids";
 
 /** There's no visitor identity to key a server-side "already hearted" check off of, so one heart
@@ -489,8 +509,11 @@ function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): stri
   return `
     <div class="guestbook-entry${isReply ? " guestbook-reply" : ""}" data-id="${entry.id}">
       <div class="guestbook-entry-top">
-        ${adminPassword ? `<input type="checkbox" class="guestbook-select-checkbox" data-id="${entry.id}" />` : ""}
-        <span class="guestbook-entry-name">${escapeHtml(entry.name)}</span>
+        <div class="guestbook-entry-left">
+          ${adminPassword ? `<input type="checkbox" class="guestbook-select-checkbox" data-id="${entry.id}" />` : ""}
+          ${entry.memberPhotoData ? `<div class="guestbook-entry-avatar" data-guestbook-avatar-id="${entry.id}"></div>` : ""}
+          <span class="guestbook-entry-name">${escapeHtml(entry.name)}</span>
+        </div>
         <span class="guestbook-entry-date">${formatLocalDate(entry.dateIso)}</span>
       </div>
       <div class="guestbook-entry-message">${escapeHtml(entry.message)}</div>
@@ -587,6 +610,10 @@ async function renderGuestbook(): Promise<void> {
   for (const entry of entries) {
     const editInput = guestbookList.querySelector<HTMLInputElement>(`.guestbook-inline-form[data-mode="edit"][data-id="${entry.id}"] .guestbook-edit-message`);
     if (editInput) editInput.value = entry.message;
+    if (entry.memberPhotoData) {
+      const avatar = guestbookList.querySelector<HTMLDivElement>(`.guestbook-entry-avatar[data-guestbook-avatar-id="${entry.id}"]`);
+      if (avatar) avatar.style.backgroundImage = `url(${entry.memberPhotoData})`;
+    }
     if (!entry.attachmentData) continue;
     if (entry.attachmentType === "image") {
       const img = guestbookList.querySelector<HTMLImageElement>(`img.guestbook-attachment-thumb[data-attachment-id="${entry.id}"]`);
@@ -857,6 +884,12 @@ guestbookOpenCard.addEventListener("click", () => {
 guestbookCloseButton.addEventListener("click", () => {
   guestbookOverlay.style.display = "none";
   hideAllGuestbookForms();
+});
+
+guestbookTitle.style.cursor = "pointer";
+guestbookTitle.title = "맨 위로 이동";
+guestbookTitle.addEventListener("click", () => {
+  guestbookScrollBody.scrollTo({ top: 0, behavior: "smooth" });
 });
 
 const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: string; steps: string[] }> = {
@@ -1179,25 +1212,27 @@ membershipLoginSubmit.addEventListener("click", () => {
   const password = membershipLoginPasswordInput.value;
   membershipLoginError.hidden = true;
   if (!name || !password) return;
-  void memberLogin(name, password)
-    .then((loggedInMember) => {
-      member = loggedInMember;
-      memberPassword = password;
-      localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name, password }));
-      membershipLoginOverlay.style.display = "none";
-      setMembershipUI();
-      void renderGuestbook();
-      void renderLeaderboard();
-    })
-    .catch((err) => {
-      if (err instanceof WrongMemberPasswordError) {
-        membershipLoginError.textContent = "이름 또는 비밀번호가 일치하지 않습니다";
-      } else {
-        console.error("멤버십 로그인 실패:", err);
-        membershipLoginError.textContent = "로그인에 실패했습니다. 잠시 후 다시 시도해주세요.";
-      }
-      membershipLoginError.hidden = false;
-    });
+  void withButtonLoading(membershipLoginSubmit, "로그인 중...", () =>
+    memberLogin(name, password)
+      .then((loggedInMember) => {
+        member = loggedInMember;
+        memberPassword = password;
+        localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name, password }));
+        membershipLoginOverlay.style.display = "none";
+        setMembershipUI();
+        void renderGuestbook();
+        void renderLeaderboard();
+      })
+      .catch((err) => {
+        if (err instanceof WrongMemberPasswordError) {
+          membershipLoginError.textContent = "이름 또는 비밀번호가 일치하지 않습니다";
+        } else {
+          console.error("멤버십 로그인 실패:", err);
+          membershipLoginError.textContent = "로그인에 실패했습니다. 잠시 후 다시 시도해주세요.";
+        }
+        membershipLoginError.hidden = false;
+      }),
+  );
 });
 
 membershipLogoutButton.addEventListener("click", () => {
@@ -1276,26 +1311,28 @@ membershipSignupSubmit.addEventListener("click", () => {
   const phone = membershipSignupPhoneInput.value.trim() || null;
   const email = membershipSignupEmailInput.value.trim() || null;
 
-  void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
-    .then((photoData) => memberSignup({ name, password, photoData, gender, birthdate, phone, email }))
-    .then((newMember) => {
-      member = newMember;
-      memberPassword = password;
-      localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name, password }));
-      membershipSignupOverlay.style.display = "none";
-      setMembershipUI();
-      void renderGuestbook();
-      void renderLeaderboard();
-    })
-    .catch((err) => {
-      if (err instanceof NameTakenError) {
-        membershipSignupError.textContent = "이미 사용 중인 이름입니다. 다른 이름을 입력해주세요.";
-      } else {
-        console.error("멤버십 가입 실패:", err);
-        membershipSignupError.textContent = "가입에 실패했습니다. 잠시 후 다시 시도해주세요.";
-      }
-      membershipSignupError.hidden = false;
-    });
+  void withButtonLoading(membershipSignupSubmit, "가입 처리 중...", () =>
+    (file ? readFileAsDataUrl(file) : Promise.resolve(null))
+      .then((photoData) => memberSignup({ name, password, photoData, gender, birthdate, phone, email }))
+      .then((newMember) => {
+        member = newMember;
+        memberPassword = password;
+        localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name, password }));
+        membershipSignupOverlay.style.display = "none";
+        setMembershipUI();
+        void renderGuestbook();
+        void renderLeaderboard();
+      })
+      .catch((err) => {
+        if (err instanceof NameTakenError) {
+          membershipSignupError.textContent = "이미 사용 중인 이름입니다. 다른 이름을 입력해주세요.";
+        } else {
+          console.error("멤버십 가입 실패:", err);
+          membershipSignupError.textContent = "가입에 실패했습니다. 잠시 후 다시 시도해주세요.";
+        }
+        membershipSignupError.hidden = false;
+      }),
+  );
 });
 
 membershipAvatar.addEventListener("click", () => {
@@ -1315,7 +1352,6 @@ membershipNameLabel.addEventListener("click", () => {
   membershipProfilePhoneInput.value = member.phone ?? "";
   membershipProfileEmailInput.value = member.email ?? "";
   membershipProfileNewPasswordInput.value = "";
-  membershipProfileNewPasswordConfirmInput.value = "";
   membershipProfilePasswordInput.value = "";
   membershipProfileSuccess.hidden = true;
   membershipProfileError.hidden = true;
@@ -1336,7 +1372,6 @@ membershipProfileSubmit.addEventListener("click", () => {
   if (!member) return;
   const password = membershipProfilePasswordInput.value;
   const newPassword = membershipProfileNewPasswordInput.value;
-  const newPasswordConfirm = membershipProfileNewPasswordConfirmInput.value;
   membershipProfileSuccess.hidden = true;
   membershipProfileError.hidden = true;
 
@@ -1351,17 +1386,12 @@ membershipProfileSubmit.addEventListener("click", () => {
     return;
   }
   // Blank means "keep the current password" — only validate/apply it when the field was actually
-  // touched, same optional-unless-typed treatment as birthdate/phone/email above.
-  if (newPassword) {
-    if (!MEMBER_PASSWORD_DIGITS_ONLY_PATTERN.test(newPassword)) {
-      window.alert("새 비밀번호는 숫자로만 입력해주세요.");
-      return;
-    }
-    if (newPassword !== newPasswordConfirm) {
-      membershipProfileError.textContent = "새 비밀번호가 서로 일치하지 않습니다.";
-      membershipProfileError.hidden = false;
-      return;
-    }
+  // touched, same optional-unless-typed treatment as birthdate/phone/email above. No separate
+  // confirm field — a typo here is low-stakes (just edit the profile again), and dropping it
+  // removes exactly the "do all 3 password fields need the same value?" confusion this caused.
+  if (newPassword && !MEMBER_PASSWORD_DIGITS_ONLY_PATTERN.test(newPassword)) {
+    window.alert("새 비밀번호는 숫자로만 입력해주세요.");
+    return;
   }
 
   const file = membershipProfilePhotoInput.files?.[0] ?? null;
@@ -1376,36 +1406,37 @@ membershipProfileSubmit.addEventListener("click", () => {
   // one, otherwise the same current password used to authorize this save.
   const effectivePassword = newPassword || password;
 
-  void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
-    .then((photoData) => updateMemberProfile(currentName, password, { gender, birthdate, phone, email, photoData, newPassword: newPassword || null }))
-    .then((updatedMember) => {
-      member = updatedMember;
-      memberPassword = effectivePassword;
-      localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name: currentName, password: effectivePassword }));
-      // Left open (not closed like login/signup) so the success message is actually visible —
-      // closing immediately would show it for zero perceptible time.
-      membershipProfilePhotoInput.value = "";
-      membershipProfilePhotoFilename.textContent = "";
-      membershipProfileNewPasswordInput.value = "";
-      membershipProfileNewPasswordConfirmInput.value = "";
-      membershipProfilePasswordInput.value = "";
-      membershipProfileSuccess.hidden = false;
-      setMembershipUI();
-      void renderGuestbook();
-      void renderLeaderboard();
-    })
-    .catch((err) => {
-      if (err instanceof WrongMemberPasswordError) {
-        membershipProfileError.textContent = "비밀번호가 일치하지 않습니다.";
-        membershipProfileError.hidden = false;
-      } else {
-        console.error("내 정보 수정 실패:", err);
-        // Include the underlying message — a bare "실패했습니다" hides exactly the detail needed to
-        // tell a missing DB function apart from a network blip when the user reports it.
-        membershipProfileError.textContent = `수정에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
-        membershipProfileError.hidden = false;
-      }
-    });
+  void withButtonLoading(membershipProfileSubmit, "저장 중...", () =>
+    (file ? readFileAsDataUrl(file) : Promise.resolve(null))
+      .then((photoData) => updateMemberProfile(currentName, password, { gender, birthdate, phone, email, photoData, newPassword: newPassword || null }))
+      .then((updatedMember) => {
+        member = updatedMember;
+        memberPassword = effectivePassword;
+        localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name: currentName, password: effectivePassword }));
+        // Left open (not closed like login/signup) so the success message is actually visible —
+        // closing immediately would show it for zero perceptible time.
+        membershipProfilePhotoInput.value = "";
+        membershipProfilePhotoFilename.textContent = "";
+        membershipProfileNewPasswordInput.value = "";
+        membershipProfilePasswordInput.value = "";
+        membershipProfileSuccess.hidden = false;
+        setMembershipUI();
+        void renderGuestbook();
+        void renderLeaderboard();
+      })
+      .catch((err) => {
+        if (err instanceof WrongMemberPasswordError) {
+          membershipProfileError.textContent = "비밀번호가 일치하지 않습니다.";
+          membershipProfileError.hidden = false;
+        } else {
+          console.error("내 정보 수정 실패:", err);
+          // Include the underlying message — a bare "실패했습니다" hides exactly the detail needed to
+          // tell a missing DB function apart from a network blip when the user reports it.
+          membershipProfileError.textContent = `수정에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
+          membershipProfileError.hidden = false;
+        }
+      }),
+  );
 });
 
 /** Irreversible, so it's gated behind both a typed password (re-verified server-side, same as
@@ -1509,6 +1540,10 @@ async function renderMembersDirectory(): Promise<void> {
     return;
   }
 
+  // The roster fetch (photos included) can take a real moment — without this, the popup just sat
+  // there unchanged until it landed, indistinguishable from the click not having registered.
+  membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">불러오는 중...</td></tr>`;
+
   let members: MemberDirectoryEntry[];
   try {
     members = await loadMembers(member.name, memberPassword);
@@ -1551,7 +1586,7 @@ membersDirectoryOpenCard.addEventListener("click", () => {
 });
 
 membersDirectoryRefreshButton.addEventListener("click", () => {
-  void renderMembersDirectory();
+  void withButtonLoading(membersDirectoryRefreshButton, "🔄 새로고침 중...", renderMembersDirectory);
 });
 
 membersDirectoryCloseButton.addEventListener("click", () => {
@@ -1624,17 +1659,19 @@ function sendActiveDirectChatMessage(): void {
   if (!text || !member || !memberPassword || activeChatPartnerId == null || !activeChatPartnerName) return;
   const partnerId = activeChatPartnerId;
   directChatInput.value = "";
-  void sendDirectMessage(member.name, memberPassword, partnerId, text)
-    .then(() => {
-      notifyNewMessage(partnerId, member!.id, member!.name);
-      // Re-fetches rather than appending the single new message locally — simpler, and the
-      // conversation is short-lived/small enough that a full reload costs nothing noticeable.
-      if (activeChatPartnerId === partnerId) void openDirectChat(partnerId, activeChatPartnerName!);
-    })
-    .catch((err) => {
-      console.error("메시지 전송 실패:", err);
-      window.alert("메시지 전송에 실패했습니다.");
-    });
+  void withButtonLoading(directChatSendButton, "전송 중...", () =>
+    sendDirectMessage(member!.name, memberPassword!, partnerId, text)
+      .then(() => {
+        notifyNewMessage(partnerId, member!.id, member!.name);
+        // Re-fetches rather than appending the single new message locally — simpler, and the
+        // conversation is short-lived/small enough that a full reload costs nothing noticeable.
+        if (activeChatPartnerId === partnerId) return openDirectChat(partnerId, activeChatPartnerName!);
+      })
+      .catch((err) => {
+        console.error("메시지 전송 실패:", err);
+        window.alert("메시지 전송에 실패했습니다.");
+      }),
+  );
 }
 
 directChatSendButton.addEventListener("click", sendActiveDirectChatMessage);
@@ -2041,13 +2078,34 @@ if (isStandaloneApp) {
  *  *layout* viewport, which most mobile browsers don't shrink when the keyboard opens, only the
  *  *visual* viewport does. Tracking that gap as a CSS variable and adding it to the panel's
  *  `bottom` (see style.css) pushes the whole panel — input row included — back above the keyboard. */
+// The keyboard-closed height to compare against — seeded at load (before any input is ever
+// focused, so definitely keyboard-closed) and re-seeded on width changes (see below), rather than
+// read fresh from window.innerHeight on every check. window.innerHeight and visualViewport.height
+// come from two different, independently-updating browser mechanisms (mobile browser chrome
+// collapsing/expanding shifts one without the other) — comparing visualViewport against its own
+// past self avoids that drift, which was why the very first keyboard-open under-computed the
+// inset until an orientation change happened to resync things.
+let restingViewportHeight = window.visualViewport?.height ?? window.innerHeight;
+let lastViewportWidth = window.innerWidth;
+
 function updateKeyboardInset(): void {
   const viewport = window.visualViewport;
-  const inset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+  if (!viewport) return;
+  // A real orientation/resize changes width; the on-screen keyboard never does — this is what
+  // tells the two apart, so an orientation change re-seeds the baseline instead of being
+  // misread as "the keyboard closed by however much the whole viewport just shrank/grew".
+  if (window.innerWidth !== lastViewportWidth) {
+    lastViewportWidth = window.innerWidth;
+    restingViewportHeight = viewport.height;
+  } else if (viewport.height > restingViewportHeight) {
+    restingViewportHeight = viewport.height;
+  }
+  const inset = Math.max(0, restingViewportHeight - viewport.height);
   document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
 }
 window.visualViewport?.addEventListener("resize", updateKeyboardInset);
 window.visualViewport?.addEventListener("scroll", updateKeyboardInset);
+window.addEventListener("orientationchange", updateKeyboardInset);
 
 /** Metallic gradient stops mirroring .text-metallic-gold/.text-metallic in style.css, reused here
  *  since canvas text needs its own gradient object rather than a CSS class. */
@@ -2061,22 +2119,13 @@ function goldGradient(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1:
   return g;
 }
 
-function chromeGradient(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number): CanvasGradient {
-  const g = ctx.createLinearGradient(x0, y0, x1, y1);
-  g.addColorStop(0, "#f4f7fa");
-  g.addColorStop(0.35, "#c9d3de");
-  g.addColorStop(0.55, "#6b7684");
-  g.addColorStop(0.8, "#c9d3de");
-  g.addColorStop(1, "#f4f7fa");
-  return g;
-}
-
-/** Draws the "trophy shot" overlay onto an already-captured camera frame: title + score up top,
- *  a decorative luxury-metal turntable/keys graphic along the bottom (a stylized keepsake render,
- *  not the live gameplay hit-zone overlay), and a photo-credit watermark at the very bottom. */
-function drawPhotoOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, score: number): void {
-  // Letterbox bands behind the text keep it legible over whatever the camera happened to be
-  // showing (the metal graphics below get their own shading and don't need this).
+/** Draws the title/score band up top and the photo-credit watermark at the very bottom onto an
+ *  already-captured, already-composited frame. The keys/scratch turntable themselves are NOT drawn
+ *  here — they come from compositing the real #overlay-canvas (see capturePhoto), which already
+ *  shows exactly what the player saw during play, not a separately invented graphic. */
+function drawPhotoTextOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, score: number): void {
+  // Letterbox band behind the text keeps it legible over whatever the camera happened to be
+  // showing.
   const topBand = ctx.createLinearGradient(0, 0, 0, 80);
   topBand.addColorStop(0, "rgba(3, 5, 10, 0.75)");
   topBand.addColorStop(1, "rgba(3, 5, 10, 0)");
@@ -2096,77 +2145,8 @@ function drawPhotoOverlay(ctx: CanvasRenderingContext2D, width: number, height: 
   ctx.fillText(`SCORE ${score.toLocaleString()}`, width / 2, 62);
   ctx.shadowBlur = 0;
 
-  // Bottom deck: a scratch turntable on the left, 5 keys spanning the rest — same left/right split
-  // as the real gameplay layout, but rendered as a static luxury-metal keepsake graphic rather than
-  // the live hit-zone overlay.
-  const deckTop = height - 100;
-  const deckBackdrop = ctx.createLinearGradient(0, deckTop, 0, height);
-  deckBackdrop.addColorStop(0, "rgba(3, 5, 10, 0)");
-  deckBackdrop.addColorStop(0.3, "rgba(3, 5, 10, 0.7)");
-  deckBackdrop.addColorStop(1, "rgba(3, 5, 10, 0.85)");
-  ctx.fillStyle = deckBackdrop;
-  ctx.fillRect(0, deckTop, width, 100);
-
-  const turntableCx = 68;
-  const turntableCy = height - 55;
-  const turntableR = 40;
-  const disc = ctx.createRadialGradient(turntableCx - 10, turntableCy - 10, 4, turntableCx, turntableCy, turntableR);
-  disc.addColorStop(0, "#f4f7fa");
-  disc.addColorStop(0.5, "#9aa5b1");
-  disc.addColorStop(1, "#3a4149");
-  ctx.beginPath();
-  ctx.arc(turntableCx, turntableCy, turntableR, 0, Math.PI * 2);
-  ctx.fillStyle = disc;
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = goldGradient(ctx, turntableCx - turntableR, 0, turntableCx + turntableR, 0);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(turntableCx, turntableCy, turntableR * 0.32, 0, Math.PI * 2);
-  ctx.fillStyle = goldGradient(ctx, turntableCx - 14, 0, turntableCx + 14, 0);
-  ctx.fill();
-  // Tonearm — a simple angled bar with a small pivot/head, evoking a real turntable's arm.
-  ctx.save();
-  ctx.translate(turntableCx + turntableR * 0.55, turntableCy - turntableR * 0.95);
-  ctx.rotate((28 * Math.PI) / 180);
-  ctx.fillStyle = chromeGradient(ctx, -3, 0, 3, 0);
-  ctx.fillRect(-2.5, 0, 5, turntableR * 1.15);
-  ctx.beginPath();
-  ctx.arc(0, 0, 5, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffd200";
-  ctx.fill();
-  ctx.restore();
-
-  const keysLeft = turntableCx + turntableR + 26;
-  const keysRight = width - 16;
-  const keyCount = 5;
-  const keyGap = 6;
-  const keyWidth = (keysRight - keysLeft - keyGap * (keyCount - 1)) / keyCount;
-  const keyTop = height - 88;
-  const keyHeight = 64;
-  for (let i = 0; i < keyCount; i++) {
-    const x = keysLeft + i * (keyWidth + keyGap);
-    const keyGrad = ctx.createLinearGradient(0, keyTop, 0, keyTop + keyHeight);
-    keyGrad.addColorStop(0, "#f4f7fa");
-    keyGrad.addColorStop(0.45, "#aab4bf");
-    keyGrad.addColorStop(0.55, "#7b8591");
-    keyGrad.addColorStop(1, "#454c54");
-    ctx.fillStyle = keyGrad;
-    const radius = 6;
-    ctx.beginPath();
-    ctx.moveTo(x + radius, keyTop);
-    ctx.arcTo(x + keyWidth, keyTop, x + keyWidth, keyTop + keyHeight, radius);
-    ctx.arcTo(x + keyWidth, keyTop + keyHeight, x, keyTop + keyHeight, radius);
-    ctx.arcTo(x, keyTop + keyHeight, x, keyTop, radius);
-    ctx.arcTo(x, keyTop, x + keyWidth, keyTop, radius);
-    ctx.closePath();
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "rgba(255, 210, 0, 0.6)";
-    ctx.stroke();
-  }
-
-  // Photo-credit watermark, last so it sits above everything else.
+  // Photo-credit watermark, last so it sits above everything else. 2026 is the site's fixed
+  // production year (matches "Produced by Beejay ... in 2026" elsewhere) — only the date changes.
   const today = new Date();
   const dateLabel = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   ctx.font = "600 13px Rajdhani, sans-serif";
@@ -2177,11 +2157,13 @@ function drawPhotoOverlay(ctx: CanvasRenderingContext2D, width: number, height: 
   ctx.shadowBlur = 0;
 }
 
-/** Grabs the current camera frame as a JPEG data URL, then composites the trophy-shot overlay
- *  (title/score/luxury-metal turntable+keys/watermark — see drawPhotoOverlay) on top. Mirrored
- *  horizontally to match what the player actually saw on screen while posing — the live <video> is
- *  only mirrored via a CSS transform, the underlying frame data is not, so an unmirrored capture
- *  would look flipped. */
+/** Grabs the current camera frame as a JPEG data URL, composites the real #overlay-canvas on top
+ *  (the same hand-tracking zones/scratch-disk pixels the player was just looking at — not a
+ *  separately invented graphic), then adds the title/score/watermark text. Mirrored horizontally
+ *  to match what the player actually saw on screen while posing — the live <video> is only
+ *  mirrored via a CSS transform, the underlying frame data is not, so an unmirrored capture would
+ *  look flipped. #overlay-canvas itself is drawn in already-mirrored coordinate space (see
+ *  ZoneLayout.ts), so it must NOT be mirrored a second time here. */
 function capturePhoto(videoEl: HTMLVideoElement, score: number): string {
   const captureCanvas = document.createElement("canvas");
   captureCanvas.width = videoEl.videoWidth;
@@ -2190,10 +2172,11 @@ function capturePhoto(videoEl: HTMLVideoElement, score: number): string {
   captureCtx.translate(captureCanvas.width, 0);
   captureCtx.scale(-1, 1);
   captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
-  // The overlay itself (text, turntable, keys) must NOT be mirrored along with the video frame —
-  // undo the flip before drawing it.
+  // Everything from here on (the overlay canvas, the text) is already in correct/mirrored
+  // coordinate space and must NOT be mirrored again — undo the flip first.
   captureCtx.setTransform(1, 0, 0, 1, 0, 0);
-  drawPhotoOverlay(captureCtx, captureCanvas.width, captureCanvas.height, score);
+  captureCtx.drawImage(canvas, 0, 0, captureCanvas.width, captureCanvas.height);
+  drawPhotoTextOverlay(captureCtx, captureCanvas.width, captureCanvas.height, score);
   return captureCanvas.toDataURL("image/jpeg", 0.85);
 }
 
@@ -2293,7 +2276,7 @@ async function resolveBgmSelection(
 
 type StepOutcome =
   | { aborted: true }
-  | { aborted: false; finalScore: number; counts: { Great: number; Good: number; Bad: number } };
+  | { aborted: false; finalScore: number; counts: { Excellent: number; Great: number; Good: number; Bad: number } };
 
 /** Runs exactly one step's worth of gameplay (one song/track, load through natural end) on an
  *  already-initialized camera/hand-tracker, resolving once the step ends. Resolves aborted:true
@@ -2320,6 +2303,7 @@ function playStep(
       stopButton.style.display = "block";
       scoreHud.style.display = "block";
       scoreValueEl.textContent = "0";
+      comboValueEl.hidden = true;
       if (defaultTrack) {
         trackInfoTitleEl.textContent = defaultTrack.title;
         trackInfoProducerEl.textContent = defaultTrack.producer;
@@ -2345,7 +2329,7 @@ function playStep(
         trackInfoEl.style.display = "none";
         calibrationStatus.style.display = "none";
         startOverlay.style.removeProperty("display");
-        hud.textContent = "중단됨";
+        hud.textContent = "종료됨";
         resolve({ aborted: true });
       };
 
@@ -2377,9 +2361,11 @@ function playStep(
       const scratchZone = computeScratchZone();
 
       function registerJudgment(result: JudgmentResult): void {
-        judgmentRenderer.register(result);
-        scoreManager.addJudgment(result.tier);
-        scoreValueEl.textContent = String(scoreManager.getScore());
+        const outcome = scoreManager.addJudgment(result.tier);
+        judgmentRenderer.register(result, outcome.combo);
+        scoreValueEl.textContent = String(outcome.score);
+        comboValueEl.hidden = outcome.combo <= 0;
+        if (outcome.combo > 0) comboValueEl.textContent = `COMBO ${outcome.combo}`;
       }
 
       // Hand-tracking runs at camera/inference FPS (often well under 60); rendering runs on its own
@@ -2504,14 +2490,14 @@ function playStep(
 function showStepResults(
   stepNumber: number,
   stepScore: number,
-  counts: { Great: number; Good: number; Bad: number },
+  counts: { Excellent: number; Great: number; Good: number; Bad: number },
   cumulativeScore: number,
   canContinue: boolean,
 ): Promise<"continue" | "end"> {
   return new Promise((resolve) => {
     resultsStepLabelEl.textContent = `STEP ${stepNumber} 완료`;
     resultsScoreEl.textContent = String(cumulativeScore);
-    resultsBreakdownEl.textContent = `이번 STEP 점수 ${stepScore}  ·  Great ${counts.Great}   Good ${counts.Good}   Bad ${counts.Bad}`;
+    resultsBreakdownEl.textContent = `이번 STEP 점수 ${stepScore}  ·  Excellent ${counts.Excellent}   Great ${counts.Great}   Good ${counts.Good}   Bad ${counts.Bad}`;
     resultsNextStepButton.style.display = canContinue ? "inline-block" : "none";
     resultsConfirmButton.textContent = canContinue ? "종료하고 순위 확인" : "확인";
     resultsOverlay.style.display = "flex";
@@ -2675,8 +2661,20 @@ async function runSession(
     canvas.height = video.videoHeight;
     fitStageToViewport(video.videoWidth, video.videoHeight);
   };
-  resyncStageAndCanvas();
-  window.addEventListener("resize", resyncStageAndCanvas);
+  let resyncRetryTimer = 0;
+  const scheduleResync = () => {
+    resyncStageAndCanvas();
+    // A rotation can fire "resize" before the camera stream itself has reported its (possibly
+    // swapped) post-rotation videoWidth/videoHeight, baking in stale dimensions on this immediate
+    // call — a short delayed re-check catches that once the stream has actually settled, which is
+    // what let repeated rotations eventually squish the display even after the immediate resync
+    // above was added (this delayed half was still missing).
+    window.clearTimeout(resyncRetryTimer);
+    resyncRetryTimer = window.setTimeout(resyncStageAndCanvas, 350);
+  };
+  scheduleResync();
+  window.addEventListener("resize", scheduleResync);
+  window.addEventListener("orientationchange", scheduleResync);
 
   // Safari's WebGL backend has been unreliable with MediaPipe's GPU delegate — hand tracking would
   // detect once and then silently stop producing results on later frames. CPU is slower but stable

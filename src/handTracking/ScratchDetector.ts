@@ -1,5 +1,5 @@
 import type { HandFrame } from "./types";
-import type { ScratchZone } from "./ZoneLayout";
+import { resolveScratchZone, type ScratchZone } from "./ZoneLayout";
 
 const ENTER_RADIUS_MULT = 1.2;
 const EXIT_RADIUS_MULT = 1.4;
@@ -57,9 +57,7 @@ export class ScratchDetector {
   }
 
   process(hands: HandFrame[], frameTimestampMs: number, zone: ScratchZone, canvasWidth: number, canvasHeight: number): ScratchEvent | null {
-    const cx = zone.centerXPct * canvasWidth;
-    const cy = zone.centerYPct * canvasHeight;
-    const r = zone.radiusPct * Math.min(canvasWidth, canvasHeight);
+    const { cx, cy, r } = resolveScratchZone(zone, canvasWidth, canvasHeight);
 
     let closest: { x: number; y: number; dist: number } | null = null;
     for (const hand of hands) {
