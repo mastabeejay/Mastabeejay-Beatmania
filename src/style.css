@@ -1245,6 +1245,17 @@ body::before {
   color: var(--color-cyber-silver);
 }
 
+/* Explains why a skipped optional field (photo/생년월일/전화번호/Email) just shows blank in the
+   Crews directory rather than some placeholder — sits once, above every optional field rather than
+   repeating per-field. */
+#membership-signup-optional-hint {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(201, 211, 222, 0.55);
+  margin: 0 0 8px;
+}
+
 #membership-signup-photo-row,
 #membership-profile-photo-row {
   display: flex;
@@ -1902,6 +1913,13 @@ body::before {
   border: 1px solid rgba(0, 240, 255, 0.3);
   background: rgba(6, 10, 18, 0.85);
   box-shadow: 0 0 30px rgba(0, 240, 255, 0.15);
+}
+
+/* Guestbook specifically ran noticeably short of its available space (a handful of entries left a
+   lot of dead area below) — taller than the shared 70vh above, Crews' own table already fills its
+   height fine so it's untouched. */
+#guestbook-overlay-panel {
+  max-height: 88vh;
 }
 
 /* Title + the return-to-main button share a header row at the very top of the panel — a close
@@ -2943,8 +2961,10 @@ select option:disabled {
   display: none;
   position: fixed;
   inset: 0;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 14px;
   padding: 24px;
   background: rgba(0, 0, 0, 0.88);
   backdrop-filter: blur(4px);
@@ -2954,10 +2974,30 @@ select option:disabled {
 
 #photo-lightbox-image {
   max-width: min(90vw, 640px);
-  max-height: 85vh;
+  max-height: 78vh;
   border-radius: 12px;
   border: 2px solid rgba(255, 210, 0, 0.5);
   box-shadow: 0 0 40px rgba(255, 210, 0, 0.25);
+}
+
+/* Its own click handler stops propagation so it doesn't also trigger the overlay's
+   click-anywhere-to-close behavior. */
+#photo-lightbox-download-button {
+  font-family: var(--font-body);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-size: 13px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 210, 0, 0.5);
+  background: rgba(255, 210, 0, 0.14);
+  color: var(--color-cyber-gold);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+#photo-lightbox-download-button:hover {
+  background: rgba(255, 210, 0, 0.26);
 }
 
 /* --- Mobile layout for the pre-game start screen -----------------------------------------------
@@ -3022,11 +3062,15 @@ select option:disabled {
      normally sized to doesn't exist on a phone. Capped at 480px so landscape (wide but short)
      gets a sane left-anchored box rather than a letterbox-wide strip. Bottom stops above the
      footer. */
+  /* --keyboard-inset (set in main.ts from window.visualViewport) pushes the whole panel up by
+     however much the on-screen keyboard is currently covering, so the input row at its bottom
+     stays above the keyboard instead of hidden behind it. 0px the rest of the time. */
   #chatbot-panel {
     width: min(480px, calc(100vw - 32px));
     max-width: none;
     top: 76px;
-    bottom: 84px;
+    bottom: calc(84px + var(--keyboard-inset, 0px));
+    transition: bottom 0.15s ease;
     z-index: 20;
   }
 
@@ -3289,6 +3333,57 @@ select option:disabled {
 
   #chatbot-toggle-tagline {
     display: none;
+  }
+
+  /* In-game HUD: #game-title/#hud-stack/#stop-button are 3 independently fixed-position elements
+     that, on desktop, sit in their own top corners with room to spare — on a 375px-wide portrait
+     phone, #hud-stack's top-left score box directly overlapped the centered title text. Moving
+     score/track-info/stop-button down into one shared row below the (unmoved) title, and
+     shrinking each enough that all three fit that row side by side, resolves the overlap. */
+  #hud-stack {
+    top: 50px;
+    left: 8px;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #score-hud {
+    padding: 4px 10px;
+  }
+
+  #score-hud-label {
+    font-size: 9px;
+  }
+
+  #score-value {
+    font-size: 18px;
+  }
+
+  #track-info {
+    padding: 4px 8px;
+    max-width: 110px;
+  }
+
+  #track-info-title {
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #track-info-producer {
+    font-size: 9px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #stop-button {
+    top: 50px;
+    right: 8px;
+    padding: 5px 12px;
+    font-size: 11px;
   }
 
   /* Portrait only — landscape has plenty of horizontal room per item, so "YBJ 힙합"/"자유 음원"

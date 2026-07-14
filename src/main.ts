@@ -174,6 +174,8 @@ const membershipProfileGenderFemale = document.querySelector<HTMLInputElement>("
 const membershipProfileBirthdateInput = document.querySelector<HTMLInputElement>("#membership-profile-birthdate")!;
 const membershipProfilePhoneInput = document.querySelector<HTMLInputElement>("#membership-profile-phone")!;
 const membershipProfileEmailInput = document.querySelector<HTMLInputElement>("#membership-profile-email")!;
+const membershipProfileNewPasswordInput = document.querySelector<HTMLInputElement>("#membership-profile-new-password")!;
+const membershipProfileNewPasswordConfirmInput = document.querySelector<HTMLInputElement>("#membership-profile-new-password-confirm")!;
 const membershipProfilePasswordInput = document.querySelector<HTMLInputElement>("#membership-profile-password")!;
 const membershipProfileSuccess = document.querySelector<HTMLSpanElement>("#membership-profile-success")!;
 const membershipProfileError = document.querySelector<HTMLSpanElement>("#membership-profile-error")!;
@@ -193,6 +195,7 @@ const photoCountdownDescEl = document.querySelector<HTMLDivElement>("#photo-coun
 const photoCountdownNumberEl = document.querySelector<HTMLDivElement>("#photo-countdown-number")!;
 const photoLightboxOverlay = document.querySelector<HTMLDivElement>("#photo-lightbox-overlay")!;
 const photoLightboxImage = document.querySelector<HTMLImageElement>("#photo-lightbox-image")!;
+const photoLightboxDownloadButton = document.querySelector<HTMLButtonElement>("#photo-lightbox-download-button")!;
 const installGuideCards = document.querySelectorAll<HTMLButtonElement>(".install-guide-card");
 const installGuideOverlay = document.querySelector<HTMLDivElement>("#install-guide-overlay")!;
 const installGuideModalTitle = document.querySelector<HTMLDivElement>("#install-guide-modal-title")!;
@@ -385,6 +388,18 @@ leaderboardBody.addEventListener("click", (event) => {
 photoLightboxOverlay.addEventListener("click", () => {
   photoLightboxOverlay.style.display = "none";
   photoLightboxImage.src = "";
+});
+
+/** Reads whatever's currently shown (photoLightboxImage.src is already a data: URL for every
+ *  caller — leaderboard photo, guestbook attachment, member profile photo) rather than tracking a
+ *  separate href, so this never needs updating when a new lightbox call site is added. Stops
+ *  propagation so downloading doesn't also trigger the overlay's click-anywhere-to-close. */
+photoLightboxDownloadButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const link = document.createElement("a");
+  link.href = photoLightboxImage.src;
+  link.download = "beejay-deejay-jackey.jpg";
+  link.click();
 });
 
 leaderboardBody.addEventListener("change", (event) => {
@@ -840,7 +855,7 @@ const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: s
       "크롬(Chrome) 또는 엣지(Edge) 브라우저로 이 사이트에 접속하세요.",
       "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 '설치'를 찾아 클릭하세요.",
       "나타나는 창에서 '설치' 버튼을 클릭하세요.",
-      "바탕화면이나 시작 메뉴에 MBBM 아이콘이 생깁니다. 더블클릭하면 브라우저 주소창 없이 바로 게임이 실행됩니다.",
+      "바탕화면이나 시작 메뉴에 BDJ 아이콘이 생깁니다. 더블클릭하면 브라우저 주소창 없이 바로 게임이 실행됩니다.",
     ],
   },
   macos: {
@@ -849,7 +864,7 @@ const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: s
       "크롬(Chrome) 또는 엣지(Edge) 브라우저로 이 사이트에 접속하세요.",
       "주소창 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 메뉴에서 '설치'를 찾아 클릭하세요.",
       "나타나는 창에서 '설치' 버튼을 클릭하세요.",
-      "Dock이나 런치패드에 MBBM 아이콘이 생깁니다. 클릭하면 바로 게임이 실행됩니다.",
+      "Dock이나 런치패드에 BDJ 아이콘이 생깁니다. 클릭하면 바로 게임이 실행됩니다.",
       "참고: 사파리(Safari)를 쓰신다면 macOS Sonoma(14) 이상에서 메뉴바의 '파일' → 'Dock에 추가'로도 설치할 수 있어요.",
     ],
   },
@@ -860,7 +875,7 @@ const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: s
       "화면 하단(또는 상단) 가운데의 공유 버튼(네모 안에 위쪽 화살표, □↑ 모양)을 탭하세요.",
       "위로 열리는 메뉴를 아래로 스크롤해서 '홈 화면에 추가'를 찾아 탭하세요.",
       "오른쪽 위의 '추가'를 탭하세요.",
-      "홈 화면에 MBBM 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
+      "홈 화면에 BDJ 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
     ],
   },
   android: {
@@ -870,7 +885,7 @@ const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: s
       "화면 오른쪽 위의 점 3개(⋮) 메뉴를 탭하세요.",
       "메뉴에서 '앱 설치' 또는 '홈 화면에 추가'를 찾아 탭하세요. 화면 하단에 자동으로 설치 안내 배너가 뜨면 그걸 탭해도 됩니다.",
       "'설치' 버튼을 한 번 더 탭해서 확인하세요.",
-      "홈 화면에 MBBM 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
+      "홈 화면에 BDJ 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
     ],
   },
 };
@@ -1288,6 +1303,8 @@ membershipNameLabel.addEventListener("click", () => {
   membershipProfileBirthdateInput.value = member.birthdate ?? "";
   membershipProfilePhoneInput.value = member.phone ?? "";
   membershipProfileEmailInput.value = member.email ?? "";
+  membershipProfileNewPasswordInput.value = "";
+  membershipProfileNewPasswordConfirmInput.value = "";
   membershipProfilePasswordInput.value = "";
   membershipProfileSuccess.hidden = true;
   membershipProfileError.hidden = true;
@@ -1307,6 +1324,8 @@ membershipProfilePhotoInput.addEventListener("change", () => {
 membershipProfileSubmit.addEventListener("click", () => {
   if (!member) return;
   const password = membershipProfilePasswordInput.value;
+  const newPassword = membershipProfileNewPasswordInput.value;
+  const newPasswordConfirm = membershipProfileNewPasswordConfirmInput.value;
   membershipProfileSuccess.hidden = true;
   membershipProfileError.hidden = true;
 
@@ -1320,6 +1339,19 @@ membershipProfileSubmit.addEventListener("click", () => {
     membershipProfileError.hidden = false;
     return;
   }
+  // Blank means "keep the current password" — only validate/apply it when the field was actually
+  // touched, same optional-unless-typed treatment as birthdate/phone/email above.
+  if (newPassword) {
+    if (!MEMBER_PASSWORD_DIGITS_ONLY_PATTERN.test(newPassword)) {
+      window.alert("새 비밀번호는 숫자로만 입력해주세요.");
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      membershipProfileError.textContent = "새 비밀번호가 서로 일치하지 않습니다.";
+      membershipProfileError.hidden = false;
+      return;
+    }
+  }
 
   const file = membershipProfilePhotoInput.files?.[0] ?? null;
   if (!validateAttachmentFile(file, membershipProfileError, false).valid) return;
@@ -1329,17 +1361,23 @@ membershipProfileSubmit.addEventListener("click", () => {
   const birthdate = membershipProfileBirthdateInput.value || null;
   const phone = membershipProfilePhoneInput.value.trim() || null;
   const email = membershipProfileEmailInput.value.trim() || null;
+  // Whatever the member re-authenticates with going forward — the new password if they just set
+  // one, otherwise the same current password used to authorize this save.
+  const effectivePassword = newPassword || password;
 
   void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
-    .then((photoData) => updateMemberProfile(currentName, password, { gender, birthdate, phone, email, photoData }))
+    .then((photoData) => updateMemberProfile(currentName, password, { gender, birthdate, phone, email, photoData, newPassword: newPassword || null }))
     .then((updatedMember) => {
       member = updatedMember;
-      memberPassword = password;
-      localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name: currentName, password }));
+      memberPassword = effectivePassword;
+      localStorage.setItem(MEMBER_CREDENTIALS_KEY, JSON.stringify({ name: currentName, password: effectivePassword }));
       // Left open (not closed like login/signup) so the success message is actually visible —
       // closing immediately would show it for zero perceptible time.
       membershipProfilePhotoInput.value = "";
       membershipProfilePhotoFilename.textContent = "";
+      membershipProfileNewPasswordInput.value = "";
+      membershipProfileNewPasswordConfirmInput.value = "";
+      membershipProfilePasswordInput.value = "";
       membershipProfileSuccess.hidden = false;
       setMembershipUI();
       void renderGuestbook();
@@ -1394,16 +1432,17 @@ membershipProfileWithdrawButton.addEventListener("click", () => {
     });
 });
 
-/** index is this member's 1-based signup order (loadMembers() sorts ascending by id, so position
- *  in the array already is that order — no separate "sequence number" column exists in the DB).
- *  onlineIds is a snapshot of getOnlineMemberIds() taken once per renderMembersDirectory() call —
- *  same one-shot-per-open pattern as the roster fetch itself, not a live-updating subscription. */
-function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, index: number, onlineIds: Set<number>): string {
+/** signupOrder is this member's permanent 1-based signup rank (computed once from the roster's
+ *  natural id-ascending order, before the display sort below reorders rows by online status) — it
+ *  stays the same regardless of who's currently online, rather than shifting every time the table
+ *  re-renders. onlineIds is a snapshot of getOnlineMemberIds() taken once per renderMembersDirectory()
+ *  call — same one-shot-per-open pattern as the roster fetch itself, not a live-updating subscription. */
+function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, signupOrder: number, onlineIds: Set<number>): string {
   const genderLabel = entry.gender === "male" ? "남" : entry.gender === "female" ? "여" : "-";
   const isOnline = onlineIds.has(entry.id);
   return `
     <tr>
-      <td class="members-directory-number">${index + 1}</td>
+      <td class="members-directory-number">${signupOrder}</td>
       <td><div class="members-directory-avatar${entry.photoData ? " has-photo" : ""}" data-member-id="${entry.id}"></div></td>
       <td class="members-directory-name">${escapeHtml(entry.name)}</td>
       <td>${genderLabel}</td>
@@ -1413,6 +1452,36 @@ function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, index: num
       <td>${formatLocalDate(entry.dateIso)}</td>
       <td class="members-directory-online${isOnline ? " is-online" : ""}">${isOnline ? "🟢 접속중" : "⚪ -"}</td>
     </tr>`;
+}
+
+/** YYYY-MM-DD in the viewer's local timezone — same day-boundary logic as formatLocalDate, but
+ *  without the time-of-day part, since two members who joined on the same calendar day (just at
+ *  different times) should tie at this step and fall through to the age/name tiebreakers below. */
+function localDateOnly(dateIso: string): string {
+  const d = new Date(dateIso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Crews directory sort order, most to least important: online now, then earlier signup date,
+ *  then older (earlier birthdate — members who skipped it sort after ones who gave it, within the
+ *  same signup date), then name in Korean alphabetical order. Each tier only breaks ties left by
+ *  the one before it. */
+function compareMembersForDirectory(a: MemberDirectoryEntry, b: MemberDirectoryEntry, onlineIds: Set<number>): number {
+  const aOnline = onlineIds.has(a.id);
+  const bOnline = onlineIds.has(b.id);
+  if (aOnline !== bOnline) return aOnline ? -1 : 1;
+
+  const aDate = localDateOnly(a.dateIso);
+  const bDate = localDateOnly(b.dateIso);
+  if (aDate !== bDate) return aDate < bDate ? -1 : 1;
+
+  if (a.birthdate !== b.birthdate) {
+    if (!a.birthdate) return 1;
+    if (!b.birthdate) return -1;
+    return a.birthdate < b.birthdate ? -1 : 1;
+  }
+
+  return a.name.localeCompare(b.name, "ko");
 }
 
 async function renderMembersDirectory(): Promise<void> {
@@ -1445,7 +1514,12 @@ async function renderMembersDirectory(): Promise<void> {
     return;
   }
   const onlineIds = getOnlineMemberIds();
-  membersDirectoryList.innerHTML = members.map((entry, index) => renderMembersDirectoryEntryHtml(entry, index, onlineIds)).join("");
+  // signupOrder is captured from the roster's natural id-ascending order (loadMembers()/
+  // list_members() already sort that way) before the sort below reorders rows for display.
+  const ranked = members
+    .map((entry, i) => ({ entry, signupOrder: i + 1 }))
+    .sort((a, b) => compareMembersForDirectory(a.entry, b.entry, onlineIds));
+  membersDirectoryList.innerHTML = ranked.map(({ entry, signupOrder }) => renderMembersDirectoryEntryHtml(entry, signupOrder, onlineIds)).join("");
   // Set via the DOM property, not interpolated into the HTML above — same reasoning as every other
   // base64 photo in this codebase (guestbook attachments, leaderboard photos).
   for (const entry of members) {
@@ -1854,6 +1928,19 @@ if (isStandaloneApp) {
   window.addEventListener("orientationchange", nudgeTouchHitTestingAfterRotation);
   window.visualViewport?.addEventListener("resize", nudgeTouchHitTestingAfterRotation);
 }
+
+/** On mobile, typing in the Jaybot chat input used to leave the input (and whatever the player
+ *  was typing) hidden behind the on-screen keyboard — #chatbot-panel is bottom-anchored to the
+ *  *layout* viewport, which most mobile browsers don't shrink when the keyboard opens, only the
+ *  *visual* viewport does. Tracking that gap as a CSS variable and adding it to the panel's
+ *  `bottom` (see style.css) pushes the whole panel — input row included — back above the keyboard. */
+function updateKeyboardInset(): void {
+  const viewport = window.visualViewport;
+  const inset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+  document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+}
+window.visualViewport?.addEventListener("resize", updateKeyboardInset);
+window.visualViewport?.addEventListener("scroll", updateKeyboardInset);
 
 /** Grabs the current camera frame as a JPEG data URL. Mirrored horizontally to match what the
  *  player actually saw on screen while posing — the live <video> is only mirrored via a CSS
@@ -2330,13 +2417,21 @@ async function runSession(
     return;
   }
 
-  // Size the stage to the camera's native aspect ratio and the canvas's drawing buffer to its
+  // Sizes the stage to the camera's native aspect ratio and the canvas's drawing buffer to its
   // native resolution, so normalized landmark coordinates map 1:1 onto displayed pixels with no
-  // crop/letterbox math. Done once — the camera/stage don't change between steps.
-  fitStageToViewport(video.videoWidth, video.videoHeight);
-  window.addEventListener("resize", () => fitStageToViewport(video.videoWidth, video.videoHeight));
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  // crop/letterbox math. Re-run on every resize (which also fires on mobile orientation change),
+  // not just once at session start — some mobile browsers report a different video.videoWidth/
+  // videoHeight after a device rotation (the sensor's native orientation swaps), and #stage's CSS
+  // box was already being re-fit to that new aspect on resize while the canvas's actual pixel
+  // buffer stayed frozen at its start-of-session size — that mismatch is what squished the
+  // hand-tracking overlay (keys/turntable) after rotating a couple of times.
+  const resyncStageAndCanvas = () => {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    fitStageToViewport(video.videoWidth, video.videoHeight);
+  };
+  resyncStageAndCanvas();
+  window.addEventListener("resize", resyncStageAndCanvas);
 
   // Safari's WebGL backend has been unreliable with MediaPipe's GPU delegate — hand tracking would
   // detect once and then silently stop producing results on later frames. CPU is slower but stable

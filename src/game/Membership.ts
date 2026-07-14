@@ -131,6 +131,8 @@ export interface MemberProfileUpdateParams {
   email?: string | null;
   /** A newly-picked photo to replace the existing one; omit/null to leave the current photo alone. */
   photoData?: string | null;
+  /** Omit/null/blank to leave the current password unchanged — same digits-only rule as signup. */
+  newPassword?: string | null;
 }
 
 /** Re-verifies the password fresh (typed into the profile modal, not silently reused from the
@@ -145,6 +147,7 @@ export async function updateMemberProfile(name: string, password: string, params
     p_phone: params.phone ?? null,
     p_email: params.email ?? null,
     p_new_photo_data: params.photoData ?? null,
+    p_new_password: params.newPassword ?? null,
   });
   if (error) throwMemberError(error);
   const row = (data as MemberRow[] | null)?.[0];

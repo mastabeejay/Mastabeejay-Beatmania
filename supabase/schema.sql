@@ -562,17 +562,22 @@ begin
 end;
 $$;
 
+-- Signature gained a trailing param (p_new_password) — drop the prior 7-arg overload first.
+drop function if exists member_update_profile(text, text, text, date, text, text, text);
+
 -- Profile edit: re-verifies the password fresh (typed into the profile modal, not silently reused
 -- from the cached login credentials) — same "re-enter the current password even though already
 -- logged in" caution as admin_change_password. Gender stays required (can't be cleared back to
 -- null); birthdate/phone/email are directly set from the form (blank clears them, unlike
 -- add/edit_guestbook_entry's coalesce-on-null pattern, since this form always shows the current
 -- value and resubmits it as-is when unchanged); a skipped photo re-upload (p_new_photo_data null)
--- keeps the existing one via coalesce.
+-- keeps the existing one via coalesce. p_new_password is optional (null/blank = keep the current
+-- one) — same digits-only rule as signup, enforced here too since the client-side check alone
+-- never stops a direct API call.
 create or replace function member_update_profile(
   p_name text, p_password text, p_gender text,
   p_birthdate date default null, p_phone text default null, p_email text default null,
-  p_new_photo_data text default null
+  p_new_photo_data text default null, p_new_password text default null
 )
 returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text)
 language plpgsql security definer set search_path = public, extensions as $$
@@ -582,6 +587,12 @@ begin
   v_id := verify_member(p_name, p_password);
   if p_gender not in ('male', 'female') then
     raise exception 'invalid_gender';
+  end if;
+  if p_new_password is not null and p_new_password <> '' then
+    if p_new_password !~ '^[0-9]+$' then
+      raise exception 'invalid_password';
+    end if;
+    update members set password_hash = crypt(p_new_password, gen_salt('bf')) where id = v_id;
   end if;
 
   -- The alias-qualified column refs matter: this function's RETURNS TABLE names (id, photo_data,
@@ -827,7 +838,7 @@ grant execute on function admin_change_password(text, text) to anon, authenticat
 -- helper called from within these other security definer functions, not something the client calls.
 grant execute on function member_signup(text, text, text, text, date, text, text) to anon, authenticated;
 grant execute on function member_login(text, text) to anon, authenticated;
-grant execute on function member_update_profile(text, text, text, date, text, text, text) to anon, authenticated;
+grant execute on function member_update_profile(text, text, text, date, text, text, text, text) to anon, authenticated;
 grant execute on function member_withdraw(text, text) to anon, authenticated;
 grant execute on function list_members(text, text) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
