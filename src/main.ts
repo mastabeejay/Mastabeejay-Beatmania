@@ -23,7 +23,14 @@ import {
   type GuestbookAttachmentType,
   type GuestbookEntry,
 } from "./game/Guestbook";
-import { addLeaderboardEntry, adminDeleteLeaderboardEntries, computeProjectedRank, loadLeaderboard, qualifiesForTop20 } from "./game/Leaderboard";
+import {
+  addLeaderboardEntry,
+  adminDeleteLeaderboardEntries,
+  computeProjectedRank,
+  loadLeaderboard,
+  qualifiesForTop20,
+  type LeaderboardEntry,
+} from "./game/Leaderboard";
 import {
   loadMembers,
   memberLogin,
@@ -355,8 +362,10 @@ stepSongFileInput.addEventListener("change", () => {
   stepSelectedSongFile = stepSongFileInput.files?.[0] ?? null;
 });
 
-async function renderLeaderboard(): Promise<void> {
-  const board = await loadLeaderboard();
+/** Same reuse-the-mutation's-own-return-value pattern as renderGuestbook — omit `board` to fetch
+ *  fresh (e.g. after a login/logout, where no just-mutated list is on hand). */
+async function renderLeaderboard(board?: LeaderboardEntry[]): Promise<void> {
+  board ??= await loadLeaderboard();
   selectedLeaderboardIds.clear();
   leaderboardAdminDeleteButton.hidden = !adminPassword;
   if (board.length === 0) {
@@ -427,7 +436,10 @@ leaderboardAdminDeleteButton.addEventListener("click", () => {
   if (!adminPassword || selectedLeaderboardIds.size === 0) return;
   if (!window.confirm(`선택한 ${selectedLeaderboardIds.size}개 기록을 삭제하시겠습니까?`)) return;
   void adminDeleteLeaderboardEntries(Array.from(selectedLeaderboardIds), adminPassword)
-    .then(() => renderLeaderboard())
+    .then((board) => {
+      showToast("삭제가 완료되었습니다.");
+      return renderLeaderboard(board);
+    })
     .catch((err) => {
       if (err instanceof WrongAdminPasswordError) {
         forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
@@ -453,6 +465,27 @@ function escapeHtml(text: string): string {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
+}
+
+const toastEl = document.querySelector<HTMLDivElement>("#toast")!;
+let toastHideTimer = 0;
+
+/** Brief "it worked" confirmation for an action whose success isn't otherwise obvious at a glance
+ *  (a modal that just closes, a list that quietly re-renders) — complements withButtonLoading's
+ *  in-flight state below with a clear after-the-fact one. Repeated calls restart the timer instead
+ *  of stacking, so a rapid string of actions just keeps the latest message visible. */
+function showToast(message: string): void {
+  window.clearTimeout(toastHideTimer);
+  toastEl.textContent = message;
+  toastEl.hidden = false;
+  // Next frame, so the browser registers the `hidden` removal before the opacity transition starts.
+  requestAnimationFrame(() => toastEl.classList.add("toast-visible"));
+  toastHideTimer = window.setTimeout(() => {
+    toastEl.classList.remove("toast-visible");
+    toastHideTimer = window.setTimeout(() => {
+      toastEl.hidden = true;
+    }, 200);
+  }, 2000);
 }
 
 /** Disables the button and swaps its label for a loading message while `action` is in flight —
@@ -576,8 +609,11 @@ function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): stri
     </div>`;
 }
 
-async function renderGuestbook(): Promise<void> {
-  const entries = await loadGuestbook();
+/** Pass the fresh row set straight from a mutating RPC's own return value (add/edit/delete already
+ *  get `setof guestbook_public` back) to skip a redundant round trip for the exact same query —
+ *  omit it (e.g. after a login/logout, where no such list is on hand) to fetch fresh instead. */
+async function renderGuestbook(entries?: GuestbookEntry[]): Promise<void> {
+  entries ??= await loadGuestbook();
   selectedGuestbookIds.clear();
   guestbookAdminDeleteButton.hidden = !adminPassword;
   if (entries.length === 0) {
@@ -670,7 +706,10 @@ guestbookAdminDeleteButton.addEventListener("click", () => {
   if (!adminPassword || selectedGuestbookIds.size === 0) return;
   if (!window.confirm(`선택한 ${selectedGuestbookIds.size}개 글을 삭제하시겠습니까? (답글이 있는 글은 답글도 함께 삭제됩니다)`)) return;
   void adminDeleteGuestbookEntries(Array.from(selectedGuestbookIds), adminPassword)
-    .then(() => renderGuestbook())
+    .then((entries) => {
+      showToast("삭제가 완료되었습니다.");
+      return renderGuestbook(entries);
+    })
     .catch((err) => {
       if (err instanceof WrongAdminPasswordError) {
         forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
@@ -727,7 +766,10 @@ guestbookList.addEventListener("click", (event) => {
           ? editGuestbookEntry(id, message, passwordInput.value, attachmentData, attachmentType)
           : editGuestbookEntry(id, message, null, attachmentData, attachmentType, member!.name, memberPassword!),
       )
-      .then(() => renderGuestbook())
+      .then((entries) => {
+        showToast("수정이 완료되었습니다.");
+        return renderGuestbook(entries);
+      })
       .catch((err) => {
         if (err instanceof WrongPasswordError) {
           errorEl.textContent = "비밀번호가 일치하지 않습니다";
@@ -772,7 +814,10 @@ guestbookList.addEventListener("click", (event) => {
     const errorEl = form.querySelector<HTMLSpanElement>(".guestbook-inline-error")!;
     if (passwordInput && !passwordInput.value) return;
     void (passwordInput ? deleteGuestbookEntry(id, passwordInput.value) : deleteGuestbookEntry(id, null, member!.name, memberPassword!))
-      .then(() => renderGuestbook())
+      .then((entries) => {
+        showToast("삭제가 완료되었습니다.");
+        return renderGuestbook(entries);
+      })
       .catch((err) => {
         if (err instanceof WrongPasswordError) {
           errorEl.textContent = "비밀번호가 일치하지 않습니다";
@@ -805,7 +850,10 @@ guestbookList.addEventListener("click", (event) => {
     if (!name) return;
 
     void addGuestbookEntry({ name, message, password, parentId: id, memberName: member?.name, memberPassword: memberPassword ?? undefined })
-      .then(() => renderGuestbook())
+      .then((entries) => {
+        showToast("답글이 등록되었습니다.");
+        return renderGuestbook(entries);
+      })
       .catch((err) => console.error("답글 등록 실패:", err));
   }
 });
@@ -863,7 +911,7 @@ guestbookForm.addEventListener("submit", (event) => {
     .then((attachmentData) =>
       addGuestbookEntry({ name, message, password, attachmentData, attachmentType, memberName: member?.name, memberPassword: memberPassword ?? undefined }),
     )
-    .then(() => {
+    .then((entries) => {
       // Keeps the name locked in if still logged in, instead of blanking a field the visitor
       // never got to type into.
       guestbookNameInput.value = member?.name ?? "";
@@ -871,7 +919,8 @@ guestbookForm.addEventListener("submit", (event) => {
       guestbookPasswordInput.value = "";
       guestbookAttachmentInput.value = "";
       guestbookAttachmentFilename.textContent = "";
-      return renderGuestbook();
+      showToast("등록이 완료되었습니다.");
+      return renderGuestbook(entries);
     })
     .catch((err) => console.error("방명록 등록 실패:", err));
 });
@@ -1237,6 +1286,7 @@ membershipLoginSubmit.addEventListener("click", () => {
 
 membershipLogoutButton.addEventListener("click", () => {
   clearMemberSession();
+  showToast("로그아웃되었습니다.");
   void renderGuestbook();
   void renderLeaderboard();
 });
@@ -1459,6 +1509,7 @@ membershipProfileWithdrawButton.addEventListener("click", () => {
     .then(() => {
       clearMemberSession();
       membershipProfileOverlay.style.display = "none";
+      showToast("탈퇴가 완료되었습니다.");
       void renderGuestbook();
       void renderLeaderboard();
     })
@@ -1851,7 +1902,10 @@ adminBannerImagesList.addEventListener("click", (event) => {
   const id = Number(button.dataset.id);
   if (!window.confirm("이 이미지를 삭제하시겠습니까?")) return;
   void adminDeleteBannerImage(id, adminPassword)
-    .then(() => Promise.all([renderAdminBannerImagesList(), renderBanner()]))
+    .then(() => {
+      showToast("삭제가 완료되었습니다.");
+      return Promise.all([renderAdminBannerImagesList(), renderBanner()]);
+    })
     .catch((err) => handleAdminPanelError(err, "이미지 삭제 실패:"));
 });
 
@@ -1863,6 +1917,7 @@ adminSocialLinkAddButton.addEventListener("click", () => {
   void adminAddSocialLink(platform, url, adminPassword)
     .then(() => {
       adminSocialLinkUrlInput.value = "";
+      showToast("추가가 완료되었습니다.");
       return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
     })
     .catch((err) => handleAdminPanelError(err, "링크 추가 실패:"));
@@ -1914,7 +1969,10 @@ adminSocialLinksList.addEventListener("click", (event) => {
     const url = row.querySelector<HTMLInputElement>(".admin-social-link-edit-url")!.value.trim();
     if (!url) return;
     void adminUpdateSocialLink(id, platform, url, adminPassword)
-      .then(() => Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]))
+      .then(() => {
+        showToast("수정이 완료되었습니다.");
+        return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
+      })
       .catch((err) => handleAdminPanelError(err, "링크 수정 실패:"));
     return;
   }
@@ -1922,7 +1980,10 @@ adminSocialLinksList.addEventListener("click", (event) => {
   if (action === "delete-link") {
     if (!window.confirm("이 링크 버튼을 삭제하시겠습니까?")) return;
     void adminDeleteSocialLink(id, adminPassword)
-      .then(() => Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]))
+      .then(() => {
+        showToast("삭제가 완료되었습니다.");
+        return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
+      })
       .catch((err) => handleAdminPanelError(err, "링크 삭제 실패:"));
   }
 });
@@ -2599,8 +2660,9 @@ async function finalizeSession(
       // Matches the guestbook's own required-name behavior — a logged-in member's name is already
       // filled in and locked, so this only ever blocks a guest who left it blank.
       if (!name) return;
+      let updatedBoard: LeaderboardEntry[] | undefined;
       try {
-        await addLeaderboardEntry({
+        updatedBoard = await addLeaderboardEntry({
           name,
           message,
           score: cumulativeScore,
@@ -2620,7 +2682,7 @@ async function finalizeSession(
       nameEntryNameInput.value = member?.name ?? "";
       nameEntryMessageInput.value = "";
       nameEntryOverlay.style.display = "none";
-      await renderLeaderboard();
+      await renderLeaderboard(updatedBoard);
       startOverlay.style.removeProperty("display");
       resolve();
     };

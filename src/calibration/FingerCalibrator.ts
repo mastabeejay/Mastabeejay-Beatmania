@@ -53,10 +53,6 @@ export class FingerCalibrator {
     this.pressSamplesByLane.set(lane, list);
   }
 
-  getPressSampleCount(lane: number): number {
-    return this.pressSamplesByLane.get(lane)?.length ?? 0;
-  }
-
   computeZones(): KeyZone[] {
     const hasRest = this.restCount > 0;
     const restX = hasRest ? this.restSumX.map((sum) => sum / this.restCount) : null;

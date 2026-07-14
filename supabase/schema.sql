@@ -233,10 +233,8 @@ create view members_public as
 
 -- --- RPC functions (all security definer, all owned by postgres) --------------------------------
 
--- Signature changed (added p_photo, then p_step, then membership) — drop the older overloads so
--- they don't linger alongside the current one.
-drop function if exists submit_score(text, text, integer, text, text, text);
-drop function if exists submit_score(text, text, integer, text, text, text, text);
+-- Signature changed (added p_photo, then p_step, then membership) — drop the prior overload so it
+-- doesn't linger alongside the current one.
 drop function if exists submit_score(text, text, integer, text, text, text, text, integer);
 
 -- Member path (both p_member_name/p_member_password given) verifies via verify_member(), records
@@ -309,9 +307,7 @@ end;
 $$;
 
 -- Signature changed each time a param was added (p_parent_id, then attachment, then membership) —
--- drop every prior overload so it doesn't linger alongside the current one.
-drop function if exists add_guestbook_entry(text, text, text);
-drop function if exists add_guestbook_entry(text, text, text, bigint);
+-- drop the prior overload so it doesn't linger alongside the current one.
 drop function if exists add_guestbook_entry(text, text, text, bigint, text, text);
 
 -- Member path (both p_member_name/p_member_password given) verifies via verify_member(), records
@@ -367,7 +363,6 @@ begin
 end;
 $$;
 
-drop function if exists edit_guestbook_entry(bigint, text, text);
 drop function if exists edit_guestbook_entry(bigint, text, text, text, text);
 
 -- p_attachment_data left null means "leave the existing attachment alone" (coalesce keeps it);
@@ -614,7 +609,7 @@ begin
     if p_new_password !~ '^[0-9]+$' then
       raise exception 'invalid_password';
     end if;
-    update members set password_hash = crypt(p_new_password, gen_salt('bf')) where id = v_id;
+    update members m set password_hash = crypt(p_new_password, gen_salt('bf')) where m.id = v_id;
   end if;
 
   -- The alias-qualified column refs matter: this function's RETURNS TABLE names (id, photo_data,

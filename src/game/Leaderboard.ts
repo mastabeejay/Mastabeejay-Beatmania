@@ -54,23 +54,6 @@ interface LeaderboardRow {
 
 const MAX_ENTRIES = 20;
 
-/** Thrown by a member-authenticated edit/delete when the verified member doesn't own this entry —
- *  shouldn't normally surface (the client only offers this for the logged-in member's own rows),
- *  but the server checks regardless. */
-export class NotOwnerError extends Error {
-  constructor() {
-    super("You don't own this entry");
-  }
-}
-
-/** Shared by editLeaderboardEntry/deleteLeaderboardEntry — both map the same set of RPC error
- *  codes to the same typed exceptions. */
-function throwLeaderboardError(error: { message: string }): never {
-  if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
-  if (error.message === "not_owner") throw new NotOwnerError();
-  throw new Error(error.message);
-}
-
 function toEntry(row: LeaderboardRow): LeaderboardEntry {
   return {
     id: row.id,
@@ -145,29 +128,5 @@ export async function adminDeleteLeaderboardEntries(ids: number[], adminPassword
     if (error.message === "wrong_password") throw new WrongAdminPasswordError();
     throw new Error(error.message);
   }
-  return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
-}
-
-/** Member-only — leaderboard rows have never had a per-row password, so this is the only way for a
- *  regular (non-admin) user to touch their own entry, and only the message is editable (never the
- *  score, so nobody can rewrite their way onto the board). */
-export async function editLeaderboardEntry(id: number, message: string, memberName: string, memberPassword: string): Promise<LeaderboardEntry[]> {
-  const { data, error } = await supabase.rpc("edit_leaderboard_entry", {
-    p_id: id,
-    p_message: message,
-    p_member_name: memberName,
-    p_member_password: memberPassword,
-  });
-  if (error) throwLeaderboardError(error);
-  return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
-}
-
-export async function deleteLeaderboardEntry(id: number, memberName: string, memberPassword: string): Promise<LeaderboardEntry[]> {
-  const { data, error } = await supabase.rpc("delete_leaderboard_entry", {
-    p_id: id,
-    p_member_name: memberName,
-    p_member_password: memberPassword,
-  });
-  if (error) throwLeaderboardError(error);
   return ((data as LeaderboardRow[] | null) ?? []).map(toEntry);
 }

@@ -46,11 +46,6 @@ export class GestureDetector {
     return this.zones;
   }
 
-  /** Swap in newly calibrated zones (e.g. after finger calibration) without losing velocity history. */
-  setZones(zones: KeyZone[]): void {
-    this.zones = zones;
-  }
-
   process(hands: HandFrame[], frameTimestampMs: number): GestureProcessResult {
     const events: PressEvent[] = [];
     const debug: FingertipDebugSample[] = [];

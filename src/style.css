@@ -33,6 +33,37 @@
   animation: button-loading-pulse 1s ease-in-out infinite;
 }
 
+/* Brief "it worked" confirmation for actions whose result isn't otherwise obvious at a glance
+   (e.g. a modal that just closes, or a list that re-renders quietly) — shown via showToast() in
+   main.ts, which handles its own timed hide/fade instead of relying on a CSS animation's
+   `animation-fill-mode` (that fights with the JS-driven `hidden` attribute toggle). */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 200;
+  max-width: min(90vw, 420px);
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+  color: #6be08a;
+  background: rgba(5, 7, 13, 0.92);
+  border: 1px solid rgba(107, 224, 138, 0.4);
+  box-shadow: 0 0 16px rgba(107, 224, 138, 0.25);
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+#toast.toast-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 body {
   margin: 0;
   /* 100vh is measured against mobile browsers' "large viewport" (address bar hidden) even while
@@ -1673,6 +1704,8 @@ body::before {
   gap: 2px;
 }
 
+/* Gold, not the cyan everything else up here wears — all three are actions the visitor takes
+   (log in, join, or leave), not passive status like the name/avatar next to them. */
 #membership-login-button,
 #membership-signup-button,
 #membership-logout-button {
@@ -1683,19 +1716,10 @@ body::before {
   padding: 0;
   border: none;
   background: none;
-  color: var(--color-cyber-cyan);
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
-  cursor: pointer;
-  transition: opacity 0.2s ease;
-}
-
-/* Gold instead of the cyan everything else up here wears — all three are actions the visitor
-   takes (log in, join, or leave), not passive status like the name/avatar next to them. */
-#membership-login-button,
-#membership-signup-button,
-#membership-logout-button {
   color: var(--color-cyber-gold);
   text-shadow: 0 0 8px rgba(255, 210, 0, 0.4);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
 }
 
 #membership-login-button:hover,
