@@ -30,6 +30,19 @@ create table if not exists members (
   created_at timestamptz not null default now()
 );
 
+-- BDJ Crews direct messages — a member can only message another member who's currently shown as
+-- online in the Crews directory (enforced client-side; nothing here stops an offline recipient
+-- from receiving one too, but the UI never offers that path). Same deny-all RLS as members —
+-- every read/write goes through send_direct_message/load_direct_messages below.
+create table if not exists direct_messages (
+  id bigint generated always as identity primary key,
+  sender_id bigint not null references members(id) on delete cascade,
+  recipient_id bigint not null references members(id) on delete cascade,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+alter table direct_messages enable row level security;
+
 create table if not exists leaderboard (
   id bigint generated always as identity primary key,
   name text not null,
@@ -638,6 +651,50 @@ begin
 end;
 $$;
 
+-- Crews direct chat: the client is responsible for only ever offering this against a member who's
+-- currently online (there's no DB-level online concept — that's Realtime Presence, see
+-- src/game/Presence.ts — so this can't enforce it server-side); here we just verify the sender and
+-- that the recipient is a real member. Message delivery to the recipient's open chat window is a
+-- separate Realtime Broadcast nudge sent client-side after this succeeds (see
+-- src/game/DirectMessages.ts) — this row is the durable copy either side can reload from.
+create or replace function send_direct_message(p_name text, p_password text, p_recipient_id bigint, p_message text)
+returns direct_messages
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_sender_id bigint;
+  v_row direct_messages;
+begin
+  v_sender_id := verify_member(p_name, p_password);
+  if p_recipient_id = v_sender_id then
+    raise exception 'cannot_message_self';
+  end if;
+  if not exists (select 1 from members where id = p_recipient_id) then
+    raise exception 'recipient_not_found';
+  end if;
+  insert into direct_messages (sender_id, recipient_id, message)
+  values (v_sender_id, p_recipient_id, left(trim(p_message), 500))
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+-- Full history between the caller and one other member, oldest first — p_other_member_id can be
+-- either side of any given row, so both messaging and being messaged surface the same thread.
+create or replace function load_direct_messages(p_name text, p_password text, p_other_member_id bigint)
+returns setof direct_messages
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id bigint;
+begin
+  v_id := verify_member(p_name, p_password);
+  return query
+    select * from direct_messages
+    where (sender_id = v_id and recipient_id = p_other_member_id)
+       or (sender_id = p_other_member_id and recipient_id = v_id)
+    order by created_at asc;
+end;
+$$;
+
 create or replace function admin_delete_guestbook_entries(p_ids bigint[], p_admin_password text)
 returns setof guestbook_public
 language plpgsql security definer set search_path = public, extensions as $$
@@ -841,6 +898,8 @@ grant execute on function member_login(text, text) to anon, authenticated;
 grant execute on function member_update_profile(text, text, text, date, text, text, text, text) to anon, authenticated;
 grant execute on function member_withdraw(text, text) to anon, authenticated;
 grant execute on function list_members(text, text) to anon, authenticated;
+grant execute on function send_direct_message(text, text, bigint, text) to anon, authenticated;
+grant execute on function load_direct_messages(text, text, bigint) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_delete_leaderboard_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;

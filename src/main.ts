@@ -8,6 +8,7 @@ import { adminSetChatbotMode, askGemini, GeminiRateLimitedError, isGeminiConfigu
 import { matchFaq } from "./game/ChatbotFaq";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
+import { closeChatInbox, loadDirectMessages, notifyNewMessage, openChatInbox, sendDirectMessage, type DirectMessage } from "./game/DirectMessages";
 import {
   addGuestbookEntry,
   addGuestbookHeart,
@@ -186,6 +187,12 @@ const membersDirectoryOpenCard = document.querySelector<HTMLButtonElement>("#mem
 const membersDirectoryOverlay = document.querySelector<HTMLDivElement>("#members-directory-overlay")!;
 const membersDirectoryRefreshButton = document.querySelector<HTMLButtonElement>("#members-directory-refresh-button")!;
 const membersDirectoryCloseButton = document.querySelector<HTMLButtonElement>("#members-directory-close-button")!;
+const directChatOverlay = document.querySelector<HTMLDivElement>("#direct-chat-overlay")!;
+const directChatTitle = document.querySelector<HTMLDivElement>("#direct-chat-title")!;
+const directChatMessages = document.querySelector<HTMLDivElement>("#direct-chat-messages")!;
+const directChatInput = document.querySelector<HTMLInputElement>("#direct-chat-input")!;
+const directChatSendButton = document.querySelector<HTMLButtonElement>("#direct-chat-send-button")!;
+const directChatCloseButton = document.querySelector<HTMLButtonElement>("#direct-chat-close-button")!;
 const membersDirectoryList = document.querySelector<HTMLTableSectionElement>("#members-directory-list")!;
 const guestbookOpenCard = document.querySelector<HTMLButtonElement>("#guestbook-open-card")!;
 const guestbookOverlay = document.querySelector<HTMLDivElement>("#guestbook-overlay")!;
@@ -284,6 +291,7 @@ function setMembershipUI(): void {
     membershipAuthActions.hidden = true;
     membershipLogoutButton.hidden = false;
     trackMemberOnline(member.id);
+    openChatInbox(member.id, handleIncomingDirectMessage);
   } else {
     membershipAvatar.style.backgroundImage = "";
     membershipAvatar.classList.remove("has-photo");
@@ -292,6 +300,9 @@ function setMembershipUI(): void {
     membershipNameLabel.title = "";
     membershipAuthActions.hidden = false;
     membershipLogoutButton.hidden = true;
+    closeChatInbox();
+    directChatOverlay.style.display = "none";
+    activeChatPartnerId = null;
     untrackMemberOnline();
   }
 
@@ -1440,17 +1451,22 @@ membershipProfileWithdrawButton.addEventListener("click", () => {
 function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, signupOrder: number, onlineIds: Set<number>): string {
   const genderLabel = entry.gender === "male" ? "남" : entry.gender === "female" ? "여" : "-";
   const isOnline = onlineIds.has(entry.id);
+  // Chat only ever makes sense against another online member — clicking your own row, or anyone
+  // offline, does nothing (no trigger class/attributes at all in that case).
+  const canChat = isOnline && entry.id !== member?.id;
+  const chatAttrs = canChat ? ` data-chat-member-id="${entry.id}" data-chat-member-name="${escapeHtml(entry.name)}"` : "";
+  const chatClass = canChat ? " members-directory-chat-trigger" : "";
   return `
     <tr>
       <td class="members-directory-number">${signupOrder}</td>
       <td><div class="members-directory-avatar${entry.photoData ? " has-photo" : ""}" data-member-id="${entry.id}"></div></td>
-      <td class="members-directory-name">${escapeHtml(entry.name)}</td>
+      <td class="members-directory-name${chatClass}"${chatAttrs}>${escapeHtml(entry.name)}</td>
       <td>${genderLabel}</td>
       <td>${entry.birthdate ? escapeHtml(entry.birthdate) : "-"}</td>
       <td>${entry.phone ? escapeHtml(entry.phone) : "-"}</td>
       <td>${entry.email ? escapeHtml(entry.email) : "-"}</td>
       <td>${formatLocalDate(entry.dateIso)}</td>
-      <td class="members-directory-online${isOnline ? " is-online" : ""}">${isOnline ? "🟢 접속중" : "⚪ -"}</td>
+      <td class="members-directory-online${isOnline ? " is-online" : ""}${chatClass}"${chatAttrs}>${isOnline ? "🟢 접속중" : "⚪ -"}</td>
     </tr>`;
 }
 
@@ -1541,6 +1557,97 @@ membersDirectoryRefreshButton.addEventListener("click", () => {
 membersDirectoryCloseButton.addEventListener("click", () => {
   membersDirectoryOverlay.style.display = "none";
 });
+
+// --- BDJ Crews direct chat --------------------------------------------------------------------
+// One conversation open at a time (like the shared photo lightbox elsewhere in this file) rather
+// than a multi-window messenger — switching partners just reloads the panel against the new one.
+
+let activeChatPartnerId: number | null = null;
+let activeChatPartnerName: string | null = null;
+
+function formatMessageTime(dateIso: string): string {
+  const d = new Date(dateIso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function renderDirectChatMessages(messages: DirectMessage[]): void {
+  if (messages.length === 0) {
+    directChatMessages.innerHTML = `<p id="direct-chat-empty">아직 대화가 없습니다. 첫 메시지를 보내보세요!</p>`;
+    return;
+  }
+  directChatMessages.innerHTML = messages
+    .map((msg) => {
+      const mine = msg.senderId === member?.id;
+      return `<div class="direct-chat-message ${mine ? "mine" : "theirs"}">${escapeHtml(msg.message)}<br /><small>${formatMessageTime(msg.dateIso)}</small></div>`;
+    })
+    .join("");
+  directChatMessages.scrollTop = directChatMessages.scrollHeight;
+}
+
+/** Opens (or switches) the chat panel onto partnerId — used both for a user-initiated click on an
+ *  online Crews row and for an incoming-message nudge from openChatInbox's handler below. */
+async function openDirectChat(partnerId: number, partnerName: string): Promise<void> {
+  if (!member || !memberPassword) return;
+  activeChatPartnerId = partnerId;
+  activeChatPartnerName = partnerName;
+  directChatTitle.textContent = `${partnerName}님과의 대화`;
+  directChatOverlay.style.display = "flex";
+  directChatMessages.innerHTML = `<p id="direct-chat-empty">불러오는 중...</p>`;
+  try {
+    const messages = await loadDirectMessages(member.name, memberPassword, partnerId);
+    // The panel may have been switched to a different partner while this was in flight.
+    if (activeChatPartnerId === partnerId) renderDirectChatMessages(messages);
+  } catch (err) {
+    console.error("대화 불러오기 실패:", err);
+    if (activeChatPartnerId === partnerId) {
+      directChatMessages.innerHTML = `<p id="direct-chat-empty">대화를 불러오지 못했습니다.</p>`;
+    }
+  }
+}
+
+membersDirectoryList.addEventListener("click", (event) => {
+  const target = (event.target as HTMLElement).closest<HTMLElement>("[data-chat-member-id]");
+  if (!target) return;
+  const partnerId = Number(target.dataset.chatMemberId);
+  const partnerName = target.dataset.chatMemberName ?? "";
+  void openDirectChat(partnerId, partnerName);
+});
+
+directChatCloseButton.addEventListener("click", () => {
+  directChatOverlay.style.display = "none";
+  activeChatPartnerId = null;
+  activeChatPartnerName = null;
+});
+
+function sendActiveDirectChatMessage(): void {
+  const text = directChatInput.value.trim();
+  if (!text || !member || !memberPassword || activeChatPartnerId == null || !activeChatPartnerName) return;
+  const partnerId = activeChatPartnerId;
+  directChatInput.value = "";
+  void sendDirectMessage(member.name, memberPassword, partnerId, text)
+    .then(() => {
+      notifyNewMessage(partnerId, member!.id, member!.name);
+      // Re-fetches rather than appending the single new message locally — simpler, and the
+      // conversation is short-lived/small enough that a full reload costs nothing noticeable.
+      if (activeChatPartnerId === partnerId) void openDirectChat(partnerId, activeChatPartnerName!);
+    })
+    .catch((err) => {
+      console.error("메시지 전송 실패:", err);
+      window.alert("메시지 전송에 실패했습니다.");
+    });
+}
+
+directChatSendButton.addEventListener("click", sendActiveDirectChatMessage);
+directChatInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") sendActiveDirectChatMessage();
+});
+
+/** Wired into setMembershipUI() below — an incoming message either refreshes the conversation
+ *  already open with that sender, or pops the chat open onto them (this is the "메신저처럼 상대방
+ *  화면에도 창이 뜨는" behavior asked for). */
+function handleIncomingDirectMessage(fromId: number, fromName: string): void {
+  void openDirectChat(fromId, fromName);
+}
 
 /** Shared by every admin-panel action below — a rejected password means the stored one no longer
  *  matches (e.g. the owner rotated it directly in Supabase), so drop out of admin mode entirely
@@ -1942,10 +2049,140 @@ function updateKeyboardInset(): void {
 window.visualViewport?.addEventListener("resize", updateKeyboardInset);
 window.visualViewport?.addEventListener("scroll", updateKeyboardInset);
 
-/** Grabs the current camera frame as a JPEG data URL. Mirrored horizontally to match what the
- *  player actually saw on screen while posing — the live <video> is only mirrored via a CSS
- *  transform, the underlying frame data is not, so an unmirrored capture would look flipped. */
-function capturePhoto(videoEl: HTMLVideoElement): string {
+/** Metallic gradient stops mirroring .text-metallic-gold/.text-metallic in style.css, reused here
+ *  since canvas text needs its own gradient object rather than a CSS class. */
+function goldGradient(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number): CanvasGradient {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, "#fff6d8");
+  g.addColorStop(0.3, "#ffd200");
+  g.addColorStop(0.5, "#9a6a00");
+  g.addColorStop(0.72, "#ffd200");
+  g.addColorStop(1, "#fff6d8");
+  return g;
+}
+
+function chromeGradient(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number): CanvasGradient {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0, "#f4f7fa");
+  g.addColorStop(0.35, "#c9d3de");
+  g.addColorStop(0.55, "#6b7684");
+  g.addColorStop(0.8, "#c9d3de");
+  g.addColorStop(1, "#f4f7fa");
+  return g;
+}
+
+/** Draws the "trophy shot" overlay onto an already-captured camera frame: title + score up top,
+ *  a decorative luxury-metal turntable/keys graphic along the bottom (a stylized keepsake render,
+ *  not the live gameplay hit-zone overlay), and a photo-credit watermark at the very bottom. */
+function drawPhotoOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, score: number): void {
+  // Letterbox bands behind the text keep it legible over whatever the camera happened to be
+  // showing (the metal graphics below get their own shading and don't need this).
+  const topBand = ctx.createLinearGradient(0, 0, 0, 80);
+  topBand.addColorStop(0, "rgba(3, 5, 10, 0.75)");
+  topBand.addColorStop(1, "rgba(3, 5, 10, 0)");
+  ctx.fillStyle = topBand;
+  ctx.fillRect(0, 0, width, 80);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = "700 26px Orbitron, sans-serif";
+  ctx.fillStyle = goldGradient(ctx, width / 2 - 140, 0, width / 2 + 140, 0);
+  ctx.fillText("Beejay's Deejay Jackey", width / 2, 34);
+
+  ctx.font = "700 20px Orbitron, sans-serif";
+  ctx.fillStyle = "#00f0ff";
+  ctx.shadowColor = "rgba(0, 240, 255, 0.6)";
+  ctx.shadowBlur = 8;
+  ctx.fillText(`SCORE ${score.toLocaleString()}`, width / 2, 62);
+  ctx.shadowBlur = 0;
+
+  // Bottom deck: a scratch turntable on the left, 5 keys spanning the rest — same left/right split
+  // as the real gameplay layout, but rendered as a static luxury-metal keepsake graphic rather than
+  // the live hit-zone overlay.
+  const deckTop = height - 100;
+  const deckBackdrop = ctx.createLinearGradient(0, deckTop, 0, height);
+  deckBackdrop.addColorStop(0, "rgba(3, 5, 10, 0)");
+  deckBackdrop.addColorStop(0.3, "rgba(3, 5, 10, 0.7)");
+  deckBackdrop.addColorStop(1, "rgba(3, 5, 10, 0.85)");
+  ctx.fillStyle = deckBackdrop;
+  ctx.fillRect(0, deckTop, width, 100);
+
+  const turntableCx = 68;
+  const turntableCy = height - 55;
+  const turntableR = 40;
+  const disc = ctx.createRadialGradient(turntableCx - 10, turntableCy - 10, 4, turntableCx, turntableCy, turntableR);
+  disc.addColorStop(0, "#f4f7fa");
+  disc.addColorStop(0.5, "#9aa5b1");
+  disc.addColorStop(1, "#3a4149");
+  ctx.beginPath();
+  ctx.arc(turntableCx, turntableCy, turntableR, 0, Math.PI * 2);
+  ctx.fillStyle = disc;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = goldGradient(ctx, turntableCx - turntableR, 0, turntableCx + turntableR, 0);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(turntableCx, turntableCy, turntableR * 0.32, 0, Math.PI * 2);
+  ctx.fillStyle = goldGradient(ctx, turntableCx - 14, 0, turntableCx + 14, 0);
+  ctx.fill();
+  // Tonearm — a simple angled bar with a small pivot/head, evoking a real turntable's arm.
+  ctx.save();
+  ctx.translate(turntableCx + turntableR * 0.55, turntableCy - turntableR * 0.95);
+  ctx.rotate((28 * Math.PI) / 180);
+  ctx.fillStyle = chromeGradient(ctx, -3, 0, 3, 0);
+  ctx.fillRect(-2.5, 0, 5, turntableR * 1.15);
+  ctx.beginPath();
+  ctx.arc(0, 0, 5, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffd200";
+  ctx.fill();
+  ctx.restore();
+
+  const keysLeft = turntableCx + turntableR + 26;
+  const keysRight = width - 16;
+  const keyCount = 5;
+  const keyGap = 6;
+  const keyWidth = (keysRight - keysLeft - keyGap * (keyCount - 1)) / keyCount;
+  const keyTop = height - 88;
+  const keyHeight = 64;
+  for (let i = 0; i < keyCount; i++) {
+    const x = keysLeft + i * (keyWidth + keyGap);
+    const keyGrad = ctx.createLinearGradient(0, keyTop, 0, keyTop + keyHeight);
+    keyGrad.addColorStop(0, "#f4f7fa");
+    keyGrad.addColorStop(0.45, "#aab4bf");
+    keyGrad.addColorStop(0.55, "#7b8591");
+    keyGrad.addColorStop(1, "#454c54");
+    ctx.fillStyle = keyGrad;
+    const radius = 6;
+    ctx.beginPath();
+    ctx.moveTo(x + radius, keyTop);
+    ctx.arcTo(x + keyWidth, keyTop, x + keyWidth, keyTop + keyHeight, radius);
+    ctx.arcTo(x + keyWidth, keyTop + keyHeight, x, keyTop + keyHeight, radius);
+    ctx.arcTo(x, keyTop + keyHeight, x, keyTop, radius);
+    ctx.arcTo(x, keyTop, x + keyWidth, keyTop, radius);
+    ctx.closePath();
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(255, 210, 0, 0.6)";
+    ctx.stroke();
+  }
+
+  // Photo-credit watermark, last so it sits above everything else.
+  const today = new Date();
+  const dateLabel = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  ctx.font = "600 13px Rajdhani, sans-serif";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+  ctx.shadowBlur = 4;
+  ctx.fillText(`Photo by Beejay, 2026. ${dateLabel}.`, width / 2, height - 8);
+  ctx.shadowBlur = 0;
+}
+
+/** Grabs the current camera frame as a JPEG data URL, then composites the trophy-shot overlay
+ *  (title/score/luxury-metal turntable+keys/watermark — see drawPhotoOverlay) on top. Mirrored
+ *  horizontally to match what the player actually saw on screen while posing — the live <video> is
+ *  only mirrored via a CSS transform, the underlying frame data is not, so an unmirrored capture
+ *  would look flipped. */
+function capturePhoto(videoEl: HTMLVideoElement, score: number): string {
   const captureCanvas = document.createElement("canvas");
   captureCanvas.width = videoEl.videoWidth;
   captureCanvas.height = videoEl.videoHeight;
@@ -1953,34 +2190,42 @@ function capturePhoto(videoEl: HTMLVideoElement): string {
   captureCtx.translate(captureCanvas.width, 0);
   captureCtx.scale(-1, 1);
   captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+  // The overlay itself (text, turntable, keys) must NOT be mirrored along with the video frame —
+  // undo the flip before drawing it.
+  captureCtx.setTransform(1, 0, 0, 1, 0, 0);
+  drawPhotoOverlay(captureCtx, captureCanvas.width, captureCanvas.height, score);
   return captureCanvas.toDataURL("image/jpeg", 0.85);
 }
 
 /** Counts down over the still-live camera feed (see finalizeSession — camera.stop() is deliberately
- *  deferred until after this resolves) and captures a photo the moment it hits zero. Two phases:
- *  first the rank announcement sits alone for a couple seconds so it actually gets read, then the
- *  5-4-3-2-1 number starts — showing both at once from the start meant most players never noticed
- *  which rank they'd hit before the photo fired. */
-function runPhotoCountdown(videoEl: HTMLVideoElement, rank: number): Promise<string> {
+ *  deferred until after this resolves) and captures a photo the moment it hits zero. Three phases:
+ *  the rank announcement, then a pose prompt, each sitting alone for a couple seconds so they
+ *  actually get read, then the 5-4-3-2-1 number — showing everything at once from the start meant
+ *  most players never noticed which rank they'd hit, or had time to pose, before the photo fired. */
+function runPhotoCountdown(videoEl: HTMLVideoElement, rank: number, score: number): Promise<string> {
   return new Promise((resolve) => {
     photoCountdownDescEl.textContent = `${rank}위 입성을 축하합니다! 기념촬영을 하겠습니다.`;
     photoCountdownNumberEl.textContent = "";
     photoCountdownOverlay.style.display = "flex";
 
     setTimeout(() => {
-      let count = 5;
-      photoCountdownNumberEl.textContent = String(count);
-      const interval = setInterval(() => {
-        count -= 1;
-        if (count > 0) {
-          photoCountdownNumberEl.textContent = String(count);
-          return;
-        }
-        clearInterval(interval);
-        const photo = capturePhoto(videoEl);
-        photoCountdownOverlay.style.display = "none";
-        resolve(photo);
-      }, 1000);
+      photoCountdownDescEl.textContent = "DJ의 자세를 잡아주세요";
+
+      setTimeout(() => {
+        let count = 5;
+        photoCountdownNumberEl.textContent = String(count);
+        const interval = setInterval(() => {
+          count -= 1;
+          if (count > 0) {
+            photoCountdownNumberEl.textContent = String(count);
+            return;
+          }
+          clearInterval(interval);
+          const photo = capturePhoto(videoEl, score);
+          photoCountdownOverlay.style.display = "none";
+          resolve(photo);
+        }, 1000);
+      }, 2000);
     }, 2000);
   });
 }
@@ -2357,7 +2602,7 @@ async function finalizeSession(
   }
 
   const rank = await computeProjectedRank(cumulativeScore);
-  const capturedPhoto = await runPhotoCountdown(video, rank);
+  const capturedPhoto = await runPhotoCountdown(video, rank, cumulativeScore);
   camera.stop();
   nameEntryOverlay.style.display = "flex";
 
