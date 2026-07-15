@@ -2157,13 +2157,23 @@ if (isStandaloneApp) {
 pwaRefreshButton.addEventListener("click", () => {
   window.location.reload();
 });
+const exitFallbackOverlay = document.querySelector<HTMLDivElement>("#exit-fallback-overlay")!;
 exitSiteButton.addEventListener("click", () => {
   if (!window.confirm("게임을 종료하고 사이트를 나가시겠습니까?")) return;
+  // `open("", "_self")` re-targets this window as "opened by script" first — several Android
+  // WebView/Chrome builds only allow a page to window.close() itself when that's true, and
+  // otherwise silently no-op it (this is why it worked on PC — a desktop PWA's window already
+  // qualifies on its own — but did nothing on mobile).
+  window.open("", "_self");
   window.close();
-  // window.close() silently no-ops for a window the script didn't itself open — most standalone/PWA
-  // launches fall in that bucket, so this fallback at least leaves the game itself closed instead of
-  // doing nothing visible when the OS won't let the tab/window actually close.
-  window.location.href = "about:blank";
+  // Still here means the platform refused to close the window/tab outright — true on iOS Safari's
+  // home-screen standalone mode in particular, which never allows a script to exit its own app;
+  // there's no client-side way around that. Show a clear "close this yourself" screen instead of
+  // silently doing nothing (a short delay so this never flashes on the platforms where close() DID
+  // work — the window is already gone by the time this fires there).
+  window.setTimeout(() => {
+    exitFallbackOverlay.style.display = "flex";
+  }, 150);
 });
 
 /** Standalone (home-screen icon) launch runs in WKWebView, not MobileSafari — and WKWebView has a
@@ -2582,8 +2592,25 @@ function playStep(
       if (audioCtx.state !== "running") await audioCtx.resume();
       audioEngine.play();
 
-      function renderFrame(): void {
+      // Uncapped, this loop redraws at the display's native refresh rate — on a 144-240Hz gaming
+      // monitor that's 2.4-4x more full-scene redraws per second than a 60Hz phone screen, for
+      // identical per-call cost (the canvas is a fixed 640x480 buffer everywhere, never resized to
+      // the display). Each redraw allocates fresh arrays/objects (getVisibleNotes' filter, the
+      // skeleton renderer's per-landmark map) and, while a judgment is showing, runs a shadowBlur
+      // pass — one of Canvas2D's most expensive primitives. None of that scales down on a slower
+      // display; it scales UP on a faster one, which is what showed up as PC-only stutter (mobile
+      // screens run at 60Hz; gaming monitors commonly don't). Capping to ~60fps here keeps the
+      // total draw cost per second constant regardless of the monitor's refresh rate.
+      const TARGET_FRAME_MS = 1000 / 60;
+      let lastRenderTime = 0;
+
+      function renderFrame(now: number): void {
         if (stopped) return;
+        if (now - lastRenderTime < TARGET_FRAME_MS) {
+          requestAnimationFrame(renderFrame);
+          return;
+        }
+        lastRenderTime = now;
 
         // Note scroll position is recomputed from the audio clock every frame — never accumulated
         // from render deltas — so it can't drift even if a frame is dropped or delayed.
