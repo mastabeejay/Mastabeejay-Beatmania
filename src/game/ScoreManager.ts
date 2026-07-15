@@ -20,28 +20,33 @@ export interface JudgmentOutcome {
 
 export class ScoreManager {
   private score: number;
-  private combo: number;
+  /** Raw consecutive-hit streak — keeps counting from the very first hit, unlike the public
+   *  "combo" concept below which only starts once there's actually something to chain. */
+  private streak: number;
   private counts: Record<JudgmentTier, number>;
 
   constructor() {
     this.score = 0;
-    this.combo = 0;
+    this.streak = 0;
     this.counts = { Excellent: 0, Great: 0, Good: 0, Bad: 0 };
   }
 
-  /** Good/Great/Excellent extend the combo by 1 and add a combo bonus on top of the tier's own
-   *  score; Bad resets the combo to 0 and earns no bonus — same "a miss breaks your streak" rule
-   *  as any other rhythm game's combo counter. */
+  /** Good/Great/Excellent extend the streak by 1; Bad resets it to 0 — same "a miss breaks your
+   *  streak" rule as any other rhythm game's combo counter. A single hit isn't a "combo" though
+   *  (there's nothing chained together yet), so the reported combo — and its score bonus — stays
+   *  0 until the streak reaches 2; only from there on does it track the streak 1:1 and pay out
+   *  combo * 5 on top of the tier's own score. */
   addJudgment(tier: JudgmentTier): JudgmentOutcome {
     this.counts[tier] += 1;
     if (tier === "Bad") {
-      this.combo = 0;
+      this.streak = 0;
       this.score += TIER_SCORE[tier];
-    } else {
-      this.combo += 1;
-      this.score += TIER_SCORE[tier] + this.combo * COMBO_BONUS_PER_COMBO;
+      return { score: this.score, combo: 0 };
     }
-    return { score: this.score, combo: this.combo };
+    this.streak += 1;
+    const combo = this.streak >= 2 ? this.streak : 0;
+    this.score += TIER_SCORE[tier] + combo * COMBO_BONUS_PER_COMBO;
+    return { score: this.score, combo };
   }
 
   getScore(): number {
@@ -49,7 +54,7 @@ export class ScoreManager {
   }
 
   getCombo(): number {
-    return this.combo;
+    return this.streak >= 2 ? this.streak : 0;
   }
 
   getCounts(): Record<JudgmentTier, number> {
