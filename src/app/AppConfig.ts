@@ -11,7 +11,7 @@ export const NUM_KEYS = 5;
 // Scratch disk layout. Radius is applied against min(width, height) in pixels when
 // rendering/hit-testing, so the disk stays a true circle regardless of the camera's aspect ratio.
 export const SCRATCH_DISK_CENTER = { xPct: 0.78, yPct: 0.68 };
-export const SCRATCH_DISK_RADIUS_PCT = 0.2652; // 0.204 * 1.3
+export const SCRATCH_DISK_RADIUS_PCT = 0.22;
 
 // Press-gesture thresholds. Units are normalized-coordinate velocity (fraction
 // of frame per ms), so a score of 1.0 means "moving at exactly the threshold

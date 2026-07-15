@@ -47,17 +47,24 @@ export interface ResolvedScratchZone {
 }
 
 /** Resolves a ScratchZone's fractional geometry into actual pixels for the CURRENT canvas size,
- *  clamping the vertical center so the disk never extends past the bottom edge. centerYPct was
- *  tuned against a tall portrait aspect, where min(width,height) (the radius's basis) is much
- *  smaller than height itself; in landscape they're much closer together, so the same fraction of
- *  height left almost no margin below the disk and it clipped off-screen. Every consumer (the
- *  renderer, hit-testing, note/judgment placement) must go through this one function rather than
- *  each re-deriving cx/cy/r itself, or the visual disk and the interactive zone could drift apart. */
+ *  clamping the center on BOTH axes so the disk never extends past any edge. centerXPct/centerYPct
+ *  were tuned against a specific aspect ratio, but the radius's basis (min(width,height)) diverges
+ *  from width or height individually as the aspect ratio changes — e.g. a portrait-shaped canvas
+ *  (width < height) has radius based on the narrow dimension while centerXPct is applied against
+ *  that same narrow width, so a large-enough radius pushes cx + r past the right edge even though
+ *  the disk fits fine vertically. Clamping only cy (as a previous version of this function did) left
+ *  that horizontal case completely unguarded. Every consumer (the renderer, hit-testing, note/
+ *  judgment placement) must go through this one function rather than each re-deriving cx/cy/r
+ *  itself, or the visual disk and the interactive zone could drift apart. */
 export function resolveScratchZone(zone: ScratchZone, width: number, height: number): ResolvedScratchZone {
   const r = zone.radiusPct * Math.min(width, height);
   const marginPx = 12;
-  const idealCy = zone.centerYPct * height;
-  return { cx: zone.centerXPct * width, cy: Math.min(idealCy, height - r - marginPx), r };
+  const clamp = (ideal: number, dimension: number) => Math.min(Math.max(ideal, r + marginPx), dimension - r - marginPx);
+  return {
+    cx: clamp(zone.centerXPct * width, width),
+    cy: clamp(zone.centerYPct * height, height),
+    r,
+  };
 }
 
 /** x, y must already be in displayed (mirrored) screen-space fractions, matching zone coordinates. */

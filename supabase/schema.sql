@@ -463,6 +463,14 @@ begin
 end;
 $$;
 
+-- Bare headcount for the "n Crews" welcome-row stat — public (no credentials required), unlike
+-- members_public/list_members(), since a total count alone carries no personal information.
+create or replace function count_members()
+returns integer
+language sql security definer set search_path = public as $$
+  select count(*)::integer from members;
+$$;
+
 -- Admin moderation: one shared password (not per-row), checked fresh on every call rather than via
 -- any session/token — same stateless pattern as the guestbook's own password checks, just against
 -- admin_settings instead of a per-row password_hash. Returns false (not an error) when no password
@@ -893,6 +901,7 @@ grant execute on function delete_guestbook_entry(bigint, text, text, text) to an
 grant execute on function add_guestbook_heart(bigint) to anon, authenticated;
 grant execute on function remove_guestbook_heart(bigint) to anon, authenticated;
 grant execute on function increment_visits() to anon, authenticated;
+grant execute on function count_members() to anon, authenticated;
 grant execute on function admin_login(text) to anon, authenticated;
 grant execute on function admin_change_password(text, text) to anon, authenticated;
 -- verify_member is intentionally NOT granted — see its own comment above, it's an internal-only

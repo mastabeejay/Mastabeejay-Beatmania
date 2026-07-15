@@ -32,6 +32,7 @@ import {
   type LeaderboardEntry,
 } from "./game/Leaderboard";
 import {
+  countMembers,
   loadMembers,
   memberLogin,
   memberSignup,
@@ -140,7 +141,6 @@ const nameEntryNameInput = document.querySelector<HTMLInputElement>("#name-entry
 const nameEntryMessageInput = document.querySelector<HTMLInputElement>("#name-entry-message")!;
 const nameEntrySubmitButton = document.querySelector<HTMLButtonElement>("#name-entry-submit")!;
 const leaderboardBody = document.querySelector<HTMLTableSectionElement>("#leaderboard-body")!;
-const visitorCountEl = document.querySelector<HTMLSpanElement>("#visitor-count")!;
 const guestbookList = document.querySelector<HTMLDivElement>("#guestbook-list")!;
 const guestbookForm = document.querySelector<HTMLFormElement>("#guestbook-form")!;
 const guestbookNameInput = document.querySelector<HTMLInputElement>("#guestbook-name")!;
@@ -290,6 +290,20 @@ const MEMBER_CREDENTIALS_KEY = "bdj-member-credentials";
 let member: Member | null = null;
 let memberPassword: string | null = null;
 
+// BDJ Crews direct chat: one conversation open at a time (like the shared photo lightbox elsewhere
+// in this file) rather than a multi-window messenger — switching partners just reloads the panel
+// against the new one. Declared here (not down by the rest of the direct-chat code below) because
+// setMembershipUI() below references activeChatPartnerId on logout — it used to live next to
+// direct-chat's other declarations, hundreds of lines further down, which meant restoreMemberSession()
+// (called at module load, long before execution ever reaches that later line) threw "Cannot access
+// 'activeChatPartnerId' before initialization" every single page load. The rest of setMembershipUI()
+// still ran fine afterward since the error was an unhandled rejection inside an async function
+// (restoreMemberSession) invoked via `void`, not a crash visible anywhere — so nothing after that
+// point in the function, including this file's own guest/member UI gating, ever actually applied on
+// first load.
+let activeChatPartnerId: number | null = null;
+let activeChatPartnerName: string | null = null;
+
 function setMembershipUI(): void {
   if (member) {
     membershipAvatar.style.backgroundImage = member.photoData ? `url(${member.photoData})` : "";
@@ -314,6 +328,11 @@ function setMembershipUI(): void {
     activeChatPartnerId = null;
     untrackMemberOnline();
   }
+
+  // Guests can't use the guestbook at all — greyed out and inert (not just hidden) so it stays
+  // visible as a reason to join the crew rather than looking like a missing feature.
+  guestbookOpenCard.disabled = !member;
+  guestbookOpenCard.title = member ? "" : "BDJ Crew 로그인 후 이용 가능합니다";
 
   // Guestbook: a logged-in member's name is fixed and no per-row password is ever needed.
   guestbookNameInput.value = member?.name ?? "";
@@ -705,18 +724,22 @@ guestbookList.addEventListener("click", (event) => {
 guestbookAdminDeleteButton.addEventListener("click", () => {
   if (!adminPassword || selectedGuestbookIds.size === 0) return;
   if (!window.confirm(`선택한 ${selectedGuestbookIds.size}개 글을 삭제하시겠습니까? (답글이 있는 글은 답글도 함께 삭제됩니다)`)) return;
-  void adminDeleteGuestbookEntries(Array.from(selectedGuestbookIds), adminPassword)
-    .then((entries) => {
-      showToast("삭제가 완료되었습니다.");
-      return renderGuestbook(entries);
-    })
-    .catch((err) => {
-      if (err instanceof WrongAdminPasswordError) {
-        forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
-      } else {
-        console.error("방명록 삭제 실패:", err);
-      }
-    });
+  const adminPasswordSnapshot = adminPassword;
+  void withButtonLoading(guestbookAdminDeleteButton, "삭제 중...", () =>
+    adminDeleteGuestbookEntries(Array.from(selectedGuestbookIds), adminPasswordSnapshot)
+      .then((entries) => {
+        showToast("삭제가 완료되었습니다.");
+        return renderGuestbook(entries);
+      })
+      .catch((err) => {
+        if (err instanceof WrongAdminPasswordError) {
+          forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
+        } else {
+          console.error("방명록 삭제 실패:", err);
+          window.alert("삭제 처리 중 오류가 발생했습니다. 다시 시도해주세요.");
+        }
+      }),
+  );
 });
 
 guestbookList.addEventListener("click", (event) => {
@@ -760,32 +783,36 @@ guestbookList.addEventListener("click", (event) => {
     if (!attachmentValidation.valid) return;
     const attachmentType = attachmentValidation.type;
 
-    void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
-      .then((attachmentData) =>
-        passwordInput
-          ? editGuestbookEntry(id, message, passwordInput.value, attachmentData, attachmentType)
-          : editGuestbookEntry(id, message, null, attachmentData, attachmentType, member!.name, memberPassword!),
-      )
-      .then((entries) => {
-        showToast("수정이 완료되었습니다.");
-        return renderGuestbook(entries);
-      })
-      .catch((err) => {
-        if (err instanceof WrongPasswordError) {
-          errorEl.textContent = "비밀번호가 일치하지 않습니다";
-          errorEl.hidden = false;
-        } else if (err instanceof NoPasswordSetError) {
-          errorEl.textContent = "비밀번호 없이 등록된 글은 수정할 수 없습니다";
-          errorEl.hidden = false;
-        } else if (err instanceof WrongMemberPasswordError || err instanceof GuestbookNotOwnerError) {
-          errorEl.textContent = "회원 인증이 만료되었습니다. 다시 로그인해주세요.";
-          errorEl.hidden = false;
-          clearMemberSession();
-          void renderGuestbook();
-        } else {
-          console.error("방명록 수정 실패:", err);
-        }
-      });
+    void withButtonLoading(button, "저장 중...", () =>
+      (file ? readFileAsDataUrl(file) : Promise.resolve(null))
+        .then((attachmentData) =>
+          passwordInput
+            ? editGuestbookEntry(id, message, passwordInput.value, attachmentData, attachmentType)
+            : editGuestbookEntry(id, message, null, attachmentData, attachmentType, member!.name, memberPassword!),
+        )
+        .then((entries) => {
+          showToast("수정이 완료되었습니다.");
+          return renderGuestbook(entries);
+        })
+        .catch((err) => {
+          if (err instanceof WrongPasswordError) {
+            errorEl.textContent = "비밀번호가 일치하지 않습니다";
+            errorEl.hidden = false;
+          } else if (err instanceof NoPasswordSetError) {
+            errorEl.textContent = "비밀번호 없이 등록된 글은 수정할 수 없습니다";
+            errorEl.hidden = false;
+          } else if (err instanceof WrongMemberPasswordError || err instanceof GuestbookNotOwnerError) {
+            errorEl.textContent = "회원 인증이 만료되었습니다. 다시 로그인해주세요.";
+            errorEl.hidden = false;
+            clearMemberSession();
+            void renderGuestbook();
+          } else {
+            console.error("방명록 수정 실패:", err);
+            errorEl.textContent = "처리 중 오류가 발생했습니다. 다시 시도해주세요.";
+            errorEl.hidden = false;
+          }
+        }),
+    );
     return;
   }
 
@@ -813,27 +840,31 @@ guestbookList.addEventListener("click", (event) => {
     const passwordInput = form.querySelector<HTMLInputElement>(".guestbook-inline-password");
     const errorEl = form.querySelector<HTMLSpanElement>(".guestbook-inline-error")!;
     if (passwordInput && !passwordInput.value) return;
-    void (passwordInput ? deleteGuestbookEntry(id, passwordInput.value) : deleteGuestbookEntry(id, null, member!.name, memberPassword!))
-      .then((entries) => {
-        showToast("삭제가 완료되었습니다.");
-        return renderGuestbook(entries);
-      })
-      .catch((err) => {
-        if (err instanceof WrongPasswordError) {
-          errorEl.textContent = "비밀번호가 일치하지 않습니다";
-          errorEl.hidden = false;
-        } else if (err instanceof NoPasswordSetError) {
-          errorEl.textContent = "비밀번호 없이 등록된 글은 삭제할 수 없습니다";
-          errorEl.hidden = false;
-        } else if (err instanceof WrongMemberPasswordError || err instanceof GuestbookNotOwnerError) {
-          errorEl.textContent = "회원 인증이 만료되었습니다. 다시 로그인해주세요.";
-          errorEl.hidden = false;
-          clearMemberSession();
-          void renderGuestbook();
-        } else {
-          console.error("방명록 삭제 실패:", err);
-        }
-      });
+    void withButtonLoading(button, "삭제 중...", () =>
+      (passwordInput ? deleteGuestbookEntry(id, passwordInput.value) : deleteGuestbookEntry(id, null, member!.name, memberPassword!))
+        .then((entries) => {
+          showToast("삭제가 완료되었습니다.");
+          return renderGuestbook(entries);
+        })
+        .catch((err) => {
+          if (err instanceof WrongPasswordError) {
+            errorEl.textContent = "비밀번호가 일치하지 않습니다";
+            errorEl.hidden = false;
+          } else if (err instanceof NoPasswordSetError) {
+            errorEl.textContent = "비밀번호 없이 등록된 글은 삭제할 수 없습니다";
+            errorEl.hidden = false;
+          } else if (err instanceof WrongMemberPasswordError || err instanceof GuestbookNotOwnerError) {
+            errorEl.textContent = "회원 인증이 만료되었습니다. 다시 로그인해주세요.";
+            errorEl.hidden = false;
+            clearMemberSession();
+            void renderGuestbook();
+          } else {
+            console.error("방명록 삭제 실패:", err);
+            errorEl.textContent = "처리 중 오류가 발생했습니다. 다시 시도해주세요.";
+            errorEl.hidden = false;
+          }
+        }),
+    );
     return;
   }
 
@@ -849,12 +880,17 @@ guestbookList.addEventListener("click", (event) => {
     const password = member ? "" : form.querySelector<HTMLInputElement>(".guestbook-reply-password")!.value;
     if (!name) return;
 
-    void addGuestbookEntry({ name, message, password, parentId: id, memberName: member?.name, memberPassword: memberPassword ?? undefined })
-      .then((entries) => {
-        showToast("답글이 등록되었습니다.");
-        return renderGuestbook(entries);
-      })
-      .catch((err) => console.error("답글 등록 실패:", err));
+    void withButtonLoading(button, "등록 중...", () =>
+      addGuestbookEntry({ name, message, password, parentId: id, memberName: member?.name, memberPassword: memberPassword ?? undefined })
+        .then((entries) => {
+          showToast("답글이 등록되었습니다.");
+          return renderGuestbook(entries);
+        })
+        .catch((err) => {
+          console.error("답글 등록 실패:", err);
+          window.alert("답글 등록 중 오류가 발생했습니다. 다시 시도해주세요.");
+        }),
+    );
   }
 });
 
@@ -1645,11 +1681,8 @@ membersDirectoryCloseButton.addEventListener("click", () => {
 });
 
 // --- BDJ Crews direct chat --------------------------------------------------------------------
-// One conversation open at a time (like the shared photo lightbox elsewhere in this file) rather
-// than a multi-window messenger — switching partners just reloads the panel against the new one.
-
-let activeChatPartnerId: number | null = null;
-let activeChatPartnerName: string | null = null;
+// activeChatPartnerId/activeChatPartnerName are declared up near `member`/`memberPassword` instead
+// of here — see the comment there for why.
 
 function formatMessageTime(dateIso: string): string {
   const d = new Date(dateIso);
@@ -2008,8 +2041,25 @@ void initAdminSession().then(() => {
   void renderBanner();
 });
 
-void reportVisit().then((count) => {
-  if (count !== null) visitorCountEl.textContent = count.toLocaleString();
+// A reload of an already-open tab shouldn't bump the visit counter again — only the very first load
+// in this browser session does. sessionStorage (unlike localStorage) is cleared once the tab/browser
+// is fully closed but survives a plain refresh, which is exactly the "once per real visit" line the
+// site owner asked for; the cached count itself is reused on later reloads so the number displayed
+// doesn't regress to "-" while waiting on a fetch that would just increment it again.
+const VISIT_COUNT_SESSION_KEY = "bdj-visit-count-cache";
+const cachedVisitCount = sessionStorage.getItem(VISIT_COUNT_SESSION_KEY);
+const visitCountPromise = cachedVisitCount
+  ? Promise.resolve(Number(cachedVisitCount))
+  : reportVisit().then((count) => {
+      if (count !== null) sessionStorage.setItem(VISIT_COUNT_SESSION_KEY, String(count));
+      return count;
+    });
+
+void Promise.all([visitCountPromise, countMembers()]).then(([visitCount, crewCount]) => {
+  if (visitCount !== null) {
+    document.querySelectorAll<HTMLElement>(".visitor-count").forEach((el) => (el.textContent = visitCount.toLocaleString()));
+  }
+  document.querySelectorAll<HTMLElement>(".crew-count").forEach((el) => (el.textContent = crewCount.toLocaleString()));
 });
 
 // --- Chatbot (Jaybot) ------------------------------------------------------------------------------
@@ -2094,14 +2144,26 @@ chatbotCloseButton.addEventListener("click", () => chatbotPanel.classList.remove
 // no address bar, no pull-to-refresh in some contexts — so there's otherwise no way to reload.
 // `navigator.standalone` is iOS Safari's older, non-standard equivalent of the same check.
 const pwaRefreshButton = document.querySelector<HTMLButtonElement>("#pwa-refresh-button")!;
+const exitSiteButton = document.querySelector<HTMLButtonElement>("#exit-site-button")!;
 const isStandaloneApp =
   window.matchMedia("(display-mode: standalone)").matches ||
   ("standalone" in navigator && (navigator as unknown as { standalone?: boolean }).standalone === true);
 if (isStandaloneApp) {
   pwaRefreshButton.style.display = "block";
+  // Same rationale as the refresh button above — standalone has no browser chrome (no tab close
+  // button) to fall back on, so it's the only mode where an in-app exit control is worth showing.
+  exitSiteButton.style.display = "block";
 }
 pwaRefreshButton.addEventListener("click", () => {
   window.location.reload();
+});
+exitSiteButton.addEventListener("click", () => {
+  if (!window.confirm("게임을 종료하고 사이트를 나가시겠습니까?")) return;
+  window.close();
+  // window.close() silently no-ops for a window the script didn't itself open — most standalone/PWA
+  // launches fall in that bucket, so this fallback at least leaves the game itself closed instead of
+  // doing nothing visible when the OS won't let the tab/window actually close.
+  window.location.href = "about:blank";
 });
 
 /** Standalone (home-screen icon) launch runs in WKWebView, not MobileSafari — and WKWebView has a
@@ -2373,8 +2435,10 @@ function playStep(
         trackInfoEl.style.display = "none";
       }
 
-      stopButton.onclick = () => {
-        stopped = true;
+      // Shared teardown for both a manual stop and a chart-load failure below — either way, the
+      // camera/hand-tracker/audio resources this step already acquired need to be released and the
+      // player returned to the start screen rather than left on a frozen loading message.
+      const abortWithMessage = (message: string) => {
         camera.stop();
         handTracker.dispose();
         audioEngine.stop();
@@ -2390,8 +2454,13 @@ function playStep(
         trackInfoEl.style.display = "none";
         calibrationStatus.style.display = "none";
         startOverlay.style.removeProperty("display");
-        hud.textContent = "종료됨";
+        hud.textContent = message;
         resolve({ aborted: true });
+      };
+
+      stopButton.onclick = () => {
+        stopped = true;
+        abortWithMessage("종료됨");
       };
 
       hud.textContent = songFile ? `STEP ${stepNumber} 로딩 중... (음원 분석해서 채보 생성)` : `STEP ${stepNumber} 로딩 중...`;
@@ -2403,7 +2472,17 @@ function playStep(
           })
         : audioEngine.loadClickTrack(TEST_BPM, TEST_BEAT_COUNT).then(() => buildTestChart(TEST_BPM, TEST_BEAT_COUNT, density));
 
-      const chart = await loadChart;
+      // Without this, a decode/analysis failure (e.g. an unsupported uploaded file) left the promise
+      // returned by playStep() permanently unsettled — the "STEP 로딩 중" message never changed and
+      // there was no way back to the start screen short of reloading the page.
+      let chart: Awaited<typeof loadChart>;
+      try {
+        chart = await loadChart;
+      } catch (err) {
+        console.error("채보 생성 실패:", err);
+        abortWithMessage(`음원 처리 실패: ${(err as Error).message}`);
+        return;
+      }
       if (stopped) return; // stop button hit while the chart was still loading
 
       const noteScheduler = new NoteScheduler(chart);
@@ -2642,6 +2721,13 @@ async function finalizeSession(
   camera: CameraManager,
   stepsCompleted: number,
 ): Promise<void> {
+  // Guests are excluded from the leaderboard entirely — never even reaches the qualify check below,
+  // regardless of score.
+  if (!member) {
+    camera.stop();
+    startOverlay.style.removeProperty("display");
+    return;
+  }
   if (!(await qualifiesForTop20(cumulativeScore))) {
     camera.stop();
     startOverlay.style.removeProperty("display");
@@ -2748,7 +2834,16 @@ async function runSession(
 
   hud.textContent = `리소스 로딩 중... (손 인식: ${delegate})`;
   const handTracker = new HandLandmarkerService();
-  await Promise.all([handTracker.initialize({ delegate }), sfxEngine.loadScratchSample("/audio/Hiphop_Deejaying.mp3")]);
+  // Own try/catch (rather than letting this reject up into the caller's single catch-all) so a hand-
+  // tracker/GPU-delegate init failure surfaces as what it actually is instead of being mislabeled as
+  // an audio-load failure — the two were sharing one message before this.
+  try {
+    await Promise.all([handTracker.initialize({ delegate }), sfxEngine.loadScratchSample("/audio/Hiphop_Deejaying.mp3")]);
+  } catch (err) {
+    hud.textContent = `리소스 로딩 실패: ${(err as Error).message}`;
+    startOverlay.style.removeProperty("display");
+    return;
+  }
 
   // Calibration only happens once, up front — re-running it before every step would add another
   // 15-20s wait to a run that may span several steps.
@@ -2782,7 +2877,9 @@ async function runSession(
 
     const speedIdx = SPEED_ORDER.indexOf(settings.speedKey);
     const difficultyIdx = DIFFICULTY_ORDER.indexOf(settings.difficultyKey);
-    const canContinue = speedIdx < SPEED_ORDER.length - 1 || difficultyIdx < DIFFICULTY_ORDER.length - 1;
+    // Guests never get to escalate past STEP 1, regardless of how much speed/difficulty headroom
+    // is left — only a logged-in member can continue.
+    const canContinue = member ? speedIdx < SPEED_ORDER.length - 1 || difficultyIdx < DIFFICULTY_ORDER.length - 1 : false;
 
     const choice = await showStepResults(step, outcome.finalScore, outcome.counts, cumulativeScore, canContinue);
 
@@ -2792,6 +2889,9 @@ async function runSession(
       // grain timer keeps firing against a closed context and throws on every tick indefinitely.
       sfxEngine.dispose();
       void audioCtx.close();
+      if (!member) {
+        window.alert("Guest 신분으로는 STEP 2로 넘어갈 수 없습니다.\n-Beejay-");
+      }
       await finalizeSession(cumulativeScore, settings, camera, step);
       return;
     }

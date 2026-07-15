@@ -324,9 +324,31 @@ body::before {
   margin: 0;
 }
 
-#visitor-count {
+.visitor-count,
+.crew-count {
   color: var(--color-cyber-cyan);
   font-weight: 700;
+}
+
+/* Desktop: "N Guests" stays on the title's own line; "n Crews" sits on the line below, aligned to
+   start directly under N — #visitor-welcome-ghost repeats the title text invisibly (same font, so
+   identical width) purely to push "n Crews" over to that exact horizontal position. */
+#visitor-welcome-desktop {
+  display: flex;
+  flex-direction: column;
+}
+
+#visitor-welcome-mobile {
+  display: none;
+}
+
+#visitor-welcome-line1,
+#visitor-welcome-line2 {
+  white-space: nowrap;
+}
+
+#visitor-welcome-ghost {
+  visibility: hidden;
 }
 
 /* --- Install-as-app guide ------------------------------------------------------------------- */
@@ -1764,6 +1786,15 @@ body::before {
   transform: scale(0.98);
 }
 
+/* Guests (not logged in) can't post to the guestbook — greyed out and inert rather than removed
+   entirely, so it's still visible as a feature that exists once they join the crew. */
+#guestbook-open-card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 #guestbook-card-title,
 #members-directory-card-title {
   font-family: var(--font-display);
@@ -2838,11 +2869,38 @@ select option:disabled {
   box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
 }
 
-/* Admin-configurable link buttons (see supabase social_links table) — rendered dynamically by
-   main.ts, one .social-link-button per row, stacked below the refresh button. */
-#social-links-container {
+/* Same gating/rationale as #pwa-refresh-button just above (standalone-only, shown via JS) — sits
+   directly under it, same size/shape, but inverted to white-fill/black-text so it reads as the
+   more consequential of the two actions. */
+#exit-site-button {
+  display: none;
   position: fixed;
   top: 54px;
+  right: 12px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  background: #ffffff;
+  color: #0a0a0a;
+  cursor: pointer;
+  z-index: 11;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+#exit-site-button:hover {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+}
+
+/* Admin-configurable link buttons (see supabase social_links table) — rendered dynamically by
+   main.ts, one .social-link-button per row, stacked below the refresh/exit buttons. */
+#social-links-container {
+  position: fixed;
+  top: 96px;
   right: 12px;
   display: flex;
   flex-direction: column;
@@ -3497,6 +3555,18 @@ select option:disabled {
     text-align: center;
   }
 
+  /* Mobile has no room for the desktop's column-aligned "n Crews" line — title alone on its own
+     line, "N Guests, n Crews" together on the next. */
+  #visitor-welcome-desktop {
+    display: none;
+  }
+
+  #visitor-welcome-mobile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
   .install-guide-card {
     width: 48px;
     padding: 3px 4px;
@@ -3550,6 +3620,15 @@ select option:disabled {
 
   #chatbot-toggle-tagline {
     display: none;
+  }
+
+  /* Desktop's 26px nowrap text runs wider than a 375px-ish portrait screen and clips at the edges —
+     shrink it and let it wrap onto 2 lines within a safe max-width instead. */
+  #calibration-status {
+    font-size: 15px;
+    white-space: normal;
+    max-width: calc(100vw - 48px);
+    padding: 12px 18px;
   }
 
   /* In-game HUD: #game-title/#hud-stack/#stop-button are 3 independently fixed-position elements

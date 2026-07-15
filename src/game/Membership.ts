@@ -163,6 +163,16 @@ export async function withdrawMember(name: string, password: string): Promise<vo
   if (error) throwMemberError(error);
 }
 
+/** Total registered member count, regardless of online status — public (no credentials needed),
+ *  unlike list_members()/members_public, since a bare headcount carries no personal information.
+ *  Returns 0 on any error rather than throwing, matching the same "never block rendering the start
+ *  screen over a stats fetch" tolerance as Visits.ts's reportVisit(). */
+export async function countMembers(): Promise<number> {
+  const { data, error } = await supabase.rpc("count_members");
+  if (error || typeof data !== "number") return 0;
+  return data;
+}
+
 /** Crew-only — requires the caller's own member credentials (verified server-side by
  *  list_members(), same re-verify-every-time pattern as every other member action), so a guest
  *  can never read this directly, even via the raw Supabase REST API. THROWS on error instead of

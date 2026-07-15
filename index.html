@@ -75,6 +75,7 @@
           </div>
         </div>
         <button id="pwa-refresh-button" type="button" title="새로고침">🔄 새로고침</button>
+        <button id="exit-site-button" type="button" title="종료">🚪 종료</button>
         <div id="social-links-container"></div>
         <div id="leaderboard-header">
           <div id="leaderboard-tagline-row">
@@ -178,9 +179,18 @@
           <span class="start-button-deco start-button-deco-right"></span>
         </div>
         <div id="welcome-guestbook-row">
-          <p id="visitor-welcome">Welcome to MastaBeejay World : <span id="visitor-count">-</span> Manias.</p>
+          <p id="visitor-welcome">
+            <span id="visitor-welcome-desktop">
+              <span id="visitor-welcome-line1">Welcome to MastaBeejay World : <span class="visitor-count">-</span> Guests</span>
+              <span id="visitor-welcome-line2"><span id="visitor-welcome-ghost" aria-hidden="true">Welcome to MastaBeejay World : </span><span class="crew-count">-</span> Crews</span>
+            </span>
+            <span id="visitor-welcome-mobile">
+              <span id="visitor-welcome-mobile-title">Welcome to MastaBeejay World :</span>
+              <span id="visitor-welcome-mobile-stats"><span class="visitor-count">-</span> Guests, <span class="crew-count">-</span> Crews</span>
+            </span>
+          </p>
           <button id="guestbook-open-card" type="button">
-            <span id="guestbook-card-title">Beejay's <span class="mobile-stack-line2">Guest Board</span></span>
+            <span id="guestbook-card-title">Beejay <span class="mobile-stack-line2">Crews Feed</span></span>
             <span id="guestbook-card-sub">방명록 보러가기</span>
           </button>
           <button id="members-directory-open-card" type="button">
@@ -481,7 +491,7 @@
       <div id="guestbook-overlay">
         <div id="guestbook-overlay-panel">
           <div id="guestbook-header-row">
-            <div id="guestbook-title" class="text-metallic-gold">Beejay's Guest Board</div>
+            <div id="guestbook-title" class="text-metallic-gold">Beejay Crews Feed</div>
             <button id="guestbook-close-button" type="button">✕ 닫기</button>
           </div>
           <div id="guestbook-scroll-body">
