@@ -335,17 +335,38 @@
             <div id="admin-website-links-list"></div>
             <div id="admin-website-link-form">
               <input type="url" id="admin-website-link-url" placeholder="https://..." />
-              <input type="text" id="admin-website-link-message" placeholder="배너에 표시할 글" maxlength="60" />
-              <label class="admin-website-field-label">글자 크기 <input type="number" id="admin-website-link-font-size" min="8" max="32" value="14" /></label>
+
+              <div class="admin-website-field-group">
+                <span class="admin-website-field-group-label">제목</span>
+                <input type="text" id="admin-website-link-title" placeholder="예: 인스타그램" maxlength="20" />
+                <label class="admin-website-field-label">크기 <input type="number" id="admin-website-link-title-font-size" min="8" max="32" value="16" /></label>
+                <label class="admin-website-field-label">
+                  글씨체
+                  <select id="admin-website-link-title-font-family">
+                    <option value="display">테크</option>
+                    <option value="body">기본</option>
+                    <option value="graffiti">그래피티</option>
+                  </select>
+                </label>
+                <label class="admin-website-field-label"><input type="checkbox" id="admin-website-link-title-bold" checked /> 굵게</label>
+              </div>
+
+              <div class="admin-website-field-group">
+                <span class="admin-website-field-group-label">내용</span>
+                <input type="text" id="admin-website-link-content" placeholder="예: 최신 소식을 확인하세요" maxlength="60" />
+                <label class="admin-website-field-label">크기 <input type="number" id="admin-website-link-content-font-size" min="8" max="32" value="12" /></label>
+                <label class="admin-website-field-label">
+                  글씨체
+                  <select id="admin-website-link-content-font-family">
+                    <option value="body">기본</option>
+                    <option value="display">테크</option>
+                    <option value="graffiti">그래피티</option>
+                  </select>
+                </label>
+                <label class="admin-website-field-label"><input type="checkbox" id="admin-website-link-content-bold" /> 굵게</label>
+              </div>
+
               <label class="admin-website-field-label">글자 색상 <input type="color" id="admin-website-link-font-color" value="#e8f4ff" /></label>
-              <label class="admin-website-field-label">
-                글씨체
-                <select id="admin-website-link-font-family">
-                  <option value="body">기본</option>
-                  <option value="display">테크</option>
-                  <option value="graffiti">그래피티</option>
-                </select>
-              </label>
               <label class="admin-website-field-label">테두리 색상 <input type="color" id="admin-website-link-border-color" value="#00f0ff" /></label>
               <label class="admin-website-field-label">
                 애니메이션
@@ -360,7 +381,9 @@
               <button id="admin-website-link-add-button" type="button">추가</button>
             </div>
             <span id="admin-website-link-error" class="admin-panel-inline-error" hidden></span>
-            <div class="admin-banner-field-label">최대 10개까지 등록 가능. 화면에 다 안 들어오면 스크롤로 볼 수 있습니다.</div>
+            <div class="admin-banner-field-label">
+              배너 크기는 가로 5cm x 세로 2cm 정도입니다. 제목은 10자, 내용은 20자 이내로 입력하시면 배너 안에 깔끔하게 들어갑니다 (입력 가능한 최대 글자수는 제목 20자, 내용 60자). 최대 10개까지 등록 가능하며, 화면에 다 안 들어오면 스크롤로 볼 수 있습니다.
+            </div>
           </div>
 
           <div class="admin-panel-section">

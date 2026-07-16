@@ -51,13 +51,14 @@ import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
 import { getOnlineMemberIds, trackMemberOnline, untrackMemberOnline } from "./game/Presence";
 import { ScoreManager } from "./game/ScoreManager";
-import { adminAddSocialLink, adminDeleteSocialLink, adminUpdateSocialLink, loadSocialLinks } from "./game/SocialLinks";
+import { adminAddSocialLink, adminDeleteSocialLink, adminUpdateSocialLink, loadSocialLinks, type SocialLink } from "./game/SocialLinks";
 import {
   adminAddWebsiteLink,
   adminDeleteWebsiteLink,
   adminUpdateWebsiteLink,
   loadWebsiteLinks,
   TooManyWebsiteLinksError,
+  type WebsiteLink,
   type WebsiteLinkAnimation,
   type WebsiteLinkFontFamily,
 } from "./game/WebsiteLinks";
@@ -254,10 +255,15 @@ const adminSocialLinkError = document.querySelector<HTMLSpanElement>("#admin-soc
 const websiteLinksContainer = document.querySelector<HTMLDivElement>("#website-links-container")!;
 const adminWebsiteLinksList = document.querySelector<HTMLDivElement>("#admin-website-links-list")!;
 const adminWebsiteLinkUrlInput = document.querySelector<HTMLInputElement>("#admin-website-link-url")!;
-const adminWebsiteLinkMessageInput = document.querySelector<HTMLInputElement>("#admin-website-link-message")!;
-const adminWebsiteLinkFontSizeInput = document.querySelector<HTMLInputElement>("#admin-website-link-font-size")!;
+const adminWebsiteLinkTitleInput = document.querySelector<HTMLInputElement>("#admin-website-link-title")!;
+const adminWebsiteLinkTitleFontSizeInput = document.querySelector<HTMLInputElement>("#admin-website-link-title-font-size")!;
+const adminWebsiteLinkTitleFontFamilySelect = document.querySelector<HTMLSelectElement>("#admin-website-link-title-font-family")!;
+const adminWebsiteLinkTitleBoldInput = document.querySelector<HTMLInputElement>("#admin-website-link-title-bold")!;
+const adminWebsiteLinkContentInput = document.querySelector<HTMLInputElement>("#admin-website-link-content")!;
+const adminWebsiteLinkContentFontSizeInput = document.querySelector<HTMLInputElement>("#admin-website-link-content-font-size")!;
+const adminWebsiteLinkContentFontFamilySelect = document.querySelector<HTMLSelectElement>("#admin-website-link-content-font-family")!;
+const adminWebsiteLinkContentBoldInput = document.querySelector<HTMLInputElement>("#admin-website-link-content-bold")!;
 const adminWebsiteLinkFontColorInput = document.querySelector<HTMLInputElement>("#admin-website-link-font-color")!;
-const adminWebsiteLinkFontFamilySelect = document.querySelector<HTMLSelectElement>("#admin-website-link-font-family")!;
 const adminWebsiteLinkBorderColorInput = document.querySelector<HTMLInputElement>("#admin-website-link-border-color")!;
 const adminWebsiteLinkAnimationSelect = document.querySelector<HTMLSelectElement>("#admin-website-link-animation")!;
 const adminWebsiteLinkAddButton = document.querySelector<HTMLButtonElement>("#admin-website-link-add-button")!;
@@ -1064,9 +1070,13 @@ function setAdminModeUI(active: boolean): void {
 
 /** Public top-right icon buttons — same for every visitor regardless of admin state. URLs are set
  *  via the `.href` DOM property, never interpolated into the HTML string, since a URL containing a
- *  `"` could otherwise break out of an `href="..."` attribute. */
-async function renderSocialLinks(): Promise<void> {
-  const links = await loadSocialLinks();
+ *  `"` could otherwise break out of an `href="..."` attribute.
+ *
+ *  Accepts an already-fetched list so admin add/edit/delete handlers can hand back the RPC's own
+ *  return value (every one of them already resolves to the fresh list) instead of this — and
+ *  renderAdminSocialLinksList — each independently re-querying the same rows right after. */
+async function renderSocialLinks(preloaded?: SocialLink[]): Promise<void> {
+  const links = preloaded ?? (await loadSocialLinks());
   socialLinksContainer.innerHTML = links
     .map((link) => {
       if (link.imageData) {
@@ -1087,9 +1097,10 @@ async function renderSocialLinks(): Promise<void> {
   });
 }
 
-/** Editable rows in the admin panel — same DOM-property pattern as renderSocialLinks for the URL. */
-async function renderAdminSocialLinksList(): Promise<void> {
-  const links = await loadSocialLinks();
+/** Editable rows in the admin panel — same DOM-property pattern as renderSocialLinks for the URL
+ *  (and the same optional-preloaded-list parameter, for the same reason). */
+async function renderAdminSocialLinksList(preloaded?: SocialLink[]): Promise<void> {
+  const links = preloaded ?? (await loadSocialLinks());
   const platformOptions = Object.entries(PLATFORM_ICONS)
     .map(([key, def]) => `<option value="${key}">${escapeHtml(def.label)}</option>`)
     .join("");
@@ -1102,6 +1113,8 @@ async function renderAdminSocialLinksList(): Promise<void> {
           ${preview}
           <select class="admin-social-link-edit-platform">${platformOptions}</select>
           <input type="url" class="admin-social-link-edit-url" />
+          <label class="admin-social-link-edit-image-trigger" for="admin-social-link-edit-image-${link.id}" title="이미지 변경">🖼️</label>
+          <input type="file" id="admin-social-link-edit-image-${link.id}" class="admin-social-link-edit-image-input" accept="image/jpeg,image/png,image/bmp" />
           <button type="button" data-action="save-link" data-id="${link.id}">저장</button>
           <button type="button" data-action="delete-link" data-id="${link.id}">삭제</button>
         </div>`;
@@ -1125,18 +1138,33 @@ const WEBSITE_LINK_FONT_CLASS: Record<WebsiteLinkFontFamily, string> = {
   graffiti: "website-link-font-graffiti",
 };
 
+const WEBSITE_LINK_FONT_FAMILY_OPTIONS = `
+  <option value="display">테크</option>
+  <option value="body">기본</option>
+  <option value="graffiti">그래피티</option>
+`;
+
 /** Public banners under the Jaybot launcher — same href-via-DOM-property pattern as
- *  renderSocialLinks. border/font color and font size are admin-chosen but validated server-side
- *  (hex-only, 8-32px range — see admin_add_website_link in supabase/schema.sql), so they're safe
- *  to interpolate directly into the style attribute; the message text still goes through
- *  escapeHtml like any other admin-authored text shown on this site (e.g. the notice banner). */
-async function renderWebsiteLinks(): Promise<void> {
-  const links = await loadWebsiteLinks();
+ *  renderSocialLinks. Colors/sizes are admin-chosen but validated server-side (hex-only, 8-32px
+ *  range — see admin_add_website_link in supabase/schema.sql), so they're safe to interpolate
+ *  directly into the style attribute; the title/content text still goes through escapeHtml like
+ *  any other admin-authored text shown on this site (e.g. the notice banner).
+ *
+ *  Same optional-preloaded-list parameter as renderSocialLinks, for the same reason. */
+async function renderWebsiteLinks(preloaded?: WebsiteLink[]): Promise<void> {
+  const links = preloaded ?? (await loadWebsiteLinks());
   websiteLinksContainer.innerHTML = links
     .map((link) => {
-      const fontClass = WEBSITE_LINK_FONT_CLASS[link.fontFamily] ?? WEBSITE_LINK_FONT_CLASS.body;
-      const style = `border-color:${link.borderColor}; color:${link.fontColor}; font-size:${link.fontSize}px; --wl-glow-color:${link.borderColor};`;
-      return `<a class="website-link-banner anim-${link.animation} ${fontClass}" target="_blank" rel="noopener noreferrer" data-link-id="${link.id}" style="${style}">${escapeHtml(link.message)}</a>`;
+      const titleFontClass = WEBSITE_LINK_FONT_CLASS[link.titleFontFamily] ?? WEBSITE_LINK_FONT_CLASS.body;
+      const contentFontClass = WEBSITE_LINK_FONT_CLASS[link.contentFontFamily] ?? WEBSITE_LINK_FONT_CLASS.body;
+      const bannerStyle = `border-color:${link.borderColor}; --wl-glow-color:${link.borderColor};`;
+      const titleStyle = `font-size:${link.titleFontSize}px; color:${link.fontColor}; font-weight:${link.titleBold ? 700 : 400};`;
+      const contentStyle = `font-size:${link.contentFontSize}px; color:${link.fontColor}; font-weight:${link.contentBold ? 700 : 400};`;
+      return `
+        <a class="website-link-banner anim-${link.animation}" target="_blank" rel="noopener noreferrer" data-link-id="${link.id}" style="${bannerStyle}">
+          <span class="website-link-title ${titleFontClass}" style="${titleStyle}">${escapeHtml(link.title)}</span>
+          ${link.content ? `<span class="website-link-content ${contentFontClass}" style="${contentStyle}">${escapeHtml(link.content)}</span>` : ""}
+        </a>`;
     })
     .join("");
   links.forEach((link) => {
@@ -1145,22 +1173,32 @@ async function renderWebsiteLinks(): Promise<void> {
   });
 }
 
-/** Editable rows in the admin panel — mirrors renderAdminSocialLinksList's shape. */
-async function renderAdminWebsiteLinksList(): Promise<void> {
-  const links = await loadWebsiteLinks();
+/** Editable rows in the admin panel — mirrors renderAdminSocialLinksList's shape (including the
+ *  optional-preloaded-list parameter), but with independent font-size/family/bold controls for
+ *  title and content (see the add-form's own .admin-website-field-group for why the two are split
+ *  apart). */
+async function renderAdminWebsiteLinksList(preloaded?: WebsiteLink[]): Promise<void> {
+  const links = preloaded ?? (await loadWebsiteLinks());
   adminWebsiteLinksList.innerHTML = links
     .map(
       (link) => `
         <div class="admin-website-link-row" data-id="${link.id}">
           <input type="url" class="admin-website-link-edit-url" />
-          <input type="text" class="admin-website-link-edit-message" maxlength="60" />
-          <input type="number" class="admin-website-link-edit-font-size" min="8" max="32" />
+          <div class="admin-website-field-group">
+            <span class="admin-website-field-group-label">제목</span>
+            <input type="text" class="admin-website-link-edit-title" maxlength="20" />
+            <input type="number" class="admin-website-link-edit-title-font-size" min="8" max="32" />
+            <select class="admin-website-link-edit-title-font-family">${WEBSITE_LINK_FONT_FAMILY_OPTIONS}</select>
+            <label class="admin-website-field-label"><input type="checkbox" class="admin-website-link-edit-title-bold" /> 굵게</label>
+          </div>
+          <div class="admin-website-field-group">
+            <span class="admin-website-field-group-label">내용</span>
+            <input type="text" class="admin-website-link-edit-content" maxlength="60" />
+            <input type="number" class="admin-website-link-edit-content-font-size" min="8" max="32" />
+            <select class="admin-website-link-edit-content-font-family">${WEBSITE_LINK_FONT_FAMILY_OPTIONS}</select>
+            <label class="admin-website-field-label"><input type="checkbox" class="admin-website-link-edit-content-bold" /> 굵게</label>
+          </div>
           <input type="color" class="admin-website-link-edit-font-color" />
-          <select class="admin-website-link-edit-font-family">
-            <option value="body">기본</option>
-            <option value="display">테크</option>
-            <option value="graffiti">그래피티</option>
-          </select>
           <input type="color" class="admin-website-link-edit-border-color" />
           <select class="admin-website-link-edit-animation">
             <option value="none">없음</option>
@@ -1178,10 +1216,15 @@ async function renderAdminWebsiteLinksList(): Promise<void> {
     const row = adminWebsiteLinksList.querySelector<HTMLDivElement>(`.admin-website-link-row[data-id="${link.id}"]`);
     if (!row) return;
     row.querySelector<HTMLInputElement>(".admin-website-link-edit-url")!.value = link.url;
-    row.querySelector<HTMLInputElement>(".admin-website-link-edit-message")!.value = link.message;
-    row.querySelector<HTMLInputElement>(".admin-website-link-edit-font-size")!.value = String(link.fontSize);
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-title")!.value = link.title;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-title-font-size")!.value = String(link.titleFontSize);
+    row.querySelector<HTMLSelectElement>(".admin-website-link-edit-title-font-family")!.value = link.titleFontFamily;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-title-bold")!.checked = link.titleBold;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-content")!.value = link.content;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-content-font-size")!.value = String(link.contentFontSize);
+    row.querySelector<HTMLSelectElement>(".admin-website-link-edit-content-font-family")!.value = link.contentFontFamily;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-content-bold")!.checked = link.contentBold;
     row.querySelector<HTMLInputElement>(".admin-website-link-edit-font-color")!.value = link.fontColor;
-    row.querySelector<HTMLSelectElement>(".admin-website-link-edit-font-family")!.value = link.fontFamily;
     row.querySelector<HTMLInputElement>(".admin-website-link-edit-border-color")!.value = link.borderColor;
     row.querySelector<HTMLSelectElement>(".admin-website-link-edit-animation")!.value = link.animation;
   });
@@ -2083,48 +2126,66 @@ adminSocialLinkAddButton.addEventListener("click", () => {
 
   void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
     .then((imageData) => adminAddSocialLink(platform, url, currentAdminPassword, imageData))
-    .then(() => {
+    .then((links) => {
       adminSocialLinkUrlInput.value = "";
       adminSocialLinkImageInput.value = "";
       adminSocialLinkImageFilename.textContent = "";
       showToast("추가가 완료되었습니다.");
-      return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
+      // adminAddSocialLink already returns the fresh list — reuse it for both renders instead of
+      // each independently re-querying the same rows right after.
+      return Promise.all([renderAdminSocialLinksList(links), renderSocialLinks(links)]);
     })
     .catch((err) => handleAdminPanelError(err, "링크 추가 실패:", adminSocialLinkError));
 });
+
+/** Shared by the add-form and every list row's save handler — same field set either way. */
+function readWebsiteLinkFontSize(input: HTMLInputElement, errorLabel: string): number | null {
+  const value = Number(input.value);
+  if (!Number.isFinite(value) || value < 8 || value > 32) {
+    adminWebsiteLinkError.textContent = `${errorLabel} 글자 크기는 8~32 사이여야 합니다.`;
+    adminWebsiteLinkError.hidden = false;
+    return null;
+  }
+  return value;
+}
 
 adminWebsiteLinkAddButton.addEventListener("click", () => {
   if (!adminPassword) return;
   const currentAdminPassword = adminPassword;
   const url = adminWebsiteLinkUrlInput.value.trim();
-  const message = adminWebsiteLinkMessageInput.value.trim();
+  const title = adminWebsiteLinkTitleInput.value.trim();
+  const content = adminWebsiteLinkContentInput.value.trim();
   adminWebsiteLinkError.hidden = true;
-  if (!url || !message) return;
+  if (!url || !title) return;
 
-  const fontSize = Number(adminWebsiteLinkFontSizeInput.value);
-  if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 32) {
-    adminWebsiteLinkError.textContent = "글자 크기는 8~32 사이여야 합니다.";
-    adminWebsiteLinkError.hidden = false;
-    return;
-  }
+  const titleFontSize = readWebsiteLinkFontSize(adminWebsiteLinkTitleFontSizeInput, "제목");
+  if (titleFontSize === null) return;
+  const contentFontSize = readWebsiteLinkFontSize(adminWebsiteLinkContentFontSizeInput, "내용");
+  if (contentFontSize === null) return;
 
   void adminAddWebsiteLink(
     {
       url,
-      message,
-      fontSize,
+      title,
+      titleFontSize,
+      titleFontFamily: adminWebsiteLinkTitleFontFamilySelect.value as WebsiteLinkFontFamily,
+      titleBold: adminWebsiteLinkTitleBoldInput.checked,
+      content,
+      contentFontSize,
+      contentFontFamily: adminWebsiteLinkContentFontFamilySelect.value as WebsiteLinkFontFamily,
+      contentBold: adminWebsiteLinkContentBoldInput.checked,
       fontColor: adminWebsiteLinkFontColorInput.value,
-      fontFamily: adminWebsiteLinkFontFamilySelect.value as WebsiteLinkFontFamily,
       borderColor: adminWebsiteLinkBorderColorInput.value,
       animation: adminWebsiteLinkAnimationSelect.value as WebsiteLinkAnimation,
     },
     currentAdminPassword,
   )
-    .then(() => {
+    .then((links) => {
       adminWebsiteLinkUrlInput.value = "";
-      adminWebsiteLinkMessageInput.value = "";
+      adminWebsiteLinkTitleInput.value = "";
+      adminWebsiteLinkContentInput.value = "";
       showToast("추가가 완료되었습니다.");
-      return Promise.all([renderAdminWebsiteLinksList(), renderWebsiteLinks()]);
+      return Promise.all([renderAdminWebsiteLinksList(links), renderWebsiteLinks(links)]);
     })
     .catch((err) => {
       if (err instanceof TooManyWebsiteLinksError) {
@@ -2178,24 +2239,44 @@ adminSocialLinksList.addEventListener("click", (event) => {
   const action = button.dataset.action;
 
   if (action === "save-link") {
+    const currentAdminPassword = adminPassword;
     const platform = row.querySelector<HTMLSelectElement>(".admin-social-link-edit-platform")!.value;
     const url = row.querySelector<HTMLInputElement>(".admin-social-link-edit-url")!.value.trim();
     if (!url) return;
-    void adminUpdateSocialLink(id, platform, url, adminPassword)
-      .then(() => {
+
+    // Left empty, the image stays whatever it already was (adminUpdateSocialLink/the RPC's
+    // coalesce-on-null both treat "no new file chosen" as "leave the existing image alone").
+    const imageInput = row.querySelector<HTMLInputElement>(".admin-social-link-edit-image-input")!;
+    const file = imageInput.files?.[0] ?? null;
+    if (file) {
+      if (!SNS_LINK_IMAGE_TYPES.includes(file.type)) {
+        adminSocialLinkError.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
+        adminSocialLinkError.hidden = false;
+        return;
+      }
+      if (file.size > SNS_LINK_IMAGE_MAX_BYTES) {
+        adminSocialLinkError.textContent = `파일이 너무 큽니다 (최대 3MB): ${file.name}`;
+        adminSocialLinkError.hidden = false;
+        return;
+      }
+    }
+
+    void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
+      .then((imageData) => adminUpdateSocialLink(id, platform, url, currentAdminPassword, imageData))
+      .then((links) => {
         showToast("수정이 완료되었습니다.");
-        return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
+        return Promise.all([renderAdminSocialLinksList(links), renderSocialLinks(links)]);
       })
-      .catch((err) => handleAdminPanelError(err, "링크 수정 실패:"));
+      .catch((err) => handleAdminPanelError(err, "링크 수정 실패:", adminSocialLinkError));
     return;
   }
 
   if (action === "delete-link") {
     if (!window.confirm("이 링크 버튼을 삭제하시겠습니까?")) return;
     void adminDeleteSocialLink(id, adminPassword)
-      .then(() => {
+      .then((links) => {
         showToast("삭제가 완료되었습니다.");
-        return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
+        return Promise.all([renderAdminSocialLinksList(links), renderSocialLinks(links)]);
       })
       .catch((err) => handleAdminPanelError(err, "링크 삭제 실패:"));
   }
@@ -2209,26 +2290,38 @@ adminWebsiteLinksList.addEventListener("click", (event) => {
   const action = button.dataset.action;
 
   if (action === "save-website-link") {
+    const currentAdminPassword = adminPassword;
     const url = row.querySelector<HTMLInputElement>(".admin-website-link-edit-url")!.value.trim();
-    const message = row.querySelector<HTMLInputElement>(".admin-website-link-edit-message")!.value.trim();
-    const fontSize = Number(row.querySelector<HTMLInputElement>(".admin-website-link-edit-font-size")!.value);
-    if (!url || !message || !Number.isFinite(fontSize) || fontSize < 8 || fontSize > 32) return;
+    const title = row.querySelector<HTMLInputElement>(".admin-website-link-edit-title")!.value.trim();
+    const content = row.querySelector<HTMLInputElement>(".admin-website-link-edit-content")!.value.trim();
+    if (!url || !title) return;
+
+    const titleFontSize = readWebsiteLinkFontSize(row.querySelector<HTMLInputElement>(".admin-website-link-edit-title-font-size")!, "제목");
+    if (titleFontSize === null) return;
+    const contentFontSize = readWebsiteLinkFontSize(row.querySelector<HTMLInputElement>(".admin-website-link-edit-content-font-size")!, "내용");
+    if (contentFontSize === null) return;
+
     void adminUpdateWebsiteLink(
       id,
       {
         url,
-        message,
-        fontSize,
+        title,
+        titleFontSize,
+        titleFontFamily: row.querySelector<HTMLSelectElement>(".admin-website-link-edit-title-font-family")!.value as WebsiteLinkFontFamily,
+        titleBold: row.querySelector<HTMLInputElement>(".admin-website-link-edit-title-bold")!.checked,
+        content,
+        contentFontSize,
+        contentFontFamily: row.querySelector<HTMLSelectElement>(".admin-website-link-edit-content-font-family")!.value as WebsiteLinkFontFamily,
+        contentBold: row.querySelector<HTMLInputElement>(".admin-website-link-edit-content-bold")!.checked,
         fontColor: row.querySelector<HTMLInputElement>(".admin-website-link-edit-font-color")!.value,
-        fontFamily: row.querySelector<HTMLSelectElement>(".admin-website-link-edit-font-family")!.value as WebsiteLinkFontFamily,
         borderColor: row.querySelector<HTMLInputElement>(".admin-website-link-edit-border-color")!.value,
         animation: row.querySelector<HTMLSelectElement>(".admin-website-link-edit-animation")!.value as WebsiteLinkAnimation,
       },
-      adminPassword,
+      currentAdminPassword,
     )
-      .then(() => {
+      .then((links) => {
         showToast("수정이 완료되었습니다.");
-        return Promise.all([renderAdminWebsiteLinksList(), renderWebsiteLinks()]);
+        return Promise.all([renderAdminWebsiteLinksList(links), renderWebsiteLinks(links)]);
       })
       .catch((err) => handleAdminPanelError(err, "Website 링크 수정 실패:"));
     return;
@@ -2237,9 +2330,9 @@ adminWebsiteLinksList.addEventListener("click", (event) => {
   if (action === "delete-website-link") {
     if (!window.confirm("이 Website 링크를 삭제하시겠습니까?")) return;
     void adminDeleteWebsiteLink(id, adminPassword)
-      .then(() => {
+      .then((links) => {
         showToast("삭제가 완료되었습니다.");
-        return Promise.all([renderAdminWebsiteLinksList(), renderWebsiteLinks()]);
+        return Promise.all([renderAdminWebsiteLinksList(links), renderWebsiteLinks(links)]);
       })
       .catch((err) => handleAdminPanelError(err, "Website 링크 삭제 실패:"));
   }

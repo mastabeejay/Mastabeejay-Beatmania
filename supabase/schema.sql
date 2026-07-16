@@ -134,18 +134,26 @@ alter table social_links add column if not exists image_data text;
 -- New table -----------------------------------------------------------------------------------
 
 -- "Website" banners: admin-managed clickable rectangles shown below the Jaybot launcher on the
--- start screen (see #website-links-container in index.html), each carrying its own short message
--- and styling rather than a platform icon — for linking to things that aren't really "SNS" (a
--- personal site, a store page, etc.). font_family/animation are validated in the RPC functions
--- below (a small fixed set) rather than a table CHECK, since a CHECK wouldn't retroactively apply
--- to a table that already exists from an earlier run.
+-- start screen (see #website-links-container in index.html), each carrying its own title + content
+-- text and styling rather than a platform icon — for linking to things that aren't really "SNS" (a
+-- personal site, a store page, etc.). Title and content are styled independently (own font/size/
+-- bold each) since a banner reads better with a short bold headline plus smaller detail text below
+-- it, same as e.g. the leaderboard's own title-plus-subtext rows. font_color/border_color apply to
+-- both (the user asked to vary font/size/bold per field, not color). font_family/animation are
+-- validated in the RPC functions below (a small fixed set) rather than a table CHECK, since a CHECK
+-- wouldn't retroactively apply to a table that already exists from an earlier run.
 create table if not exists website_links (
   id bigint generated always as identity primary key,
   url text not null,
-  message text not null,
-  font_size integer not null default 14,
+  title text not null,
+  title_font_size integer not null default 16,
+  title_font_family text not null default 'display',
+  title_bold boolean not null default true,
+  content text not null default '',
+  content_font_size integer not null default 12,
+  content_font_family text not null default 'body',
+  content_bold boolean not null default false,
   font_color text not null default '#e8f4ff',
-  font_family text not null default 'body',
   border_color text not null default '#00f0ff',
   animation text not null default 'none',
   sort_order integer not null default 0,
@@ -847,12 +855,15 @@ end;
 $$;
 
 -- "Website" banners (see website_links' own comment above) — max 10 rows total, enforced here since
--- there's no natural cap otherwise (unlike site_banner_images' hardcoded 4). font_size/font_family/
--- border_color/font_color/animation are all validated here rather than a table CHECK, same rationale
--- as elsewhere in this file (a CHECK wouldn't retroactively apply to an already-existing table).
+-- there's no natural cap otherwise (unlike site_banner_images' hardcoded 4). title/content each get
+-- their own font_size/font_family/bold validated the same way; font_color/border_color/animation
+-- apply to the whole banner. None of this is a table CHECK, same rationale as elsewhere in this
+-- file (a CHECK wouldn't retroactively apply to an already-existing table).
 create or replace function admin_add_website_link(
-  p_url text, p_message text, p_font_size integer, p_font_color text, p_font_family text,
-  p_border_color text, p_animation text, p_admin_password text
+  p_url text,
+  p_title text, p_title_font_size integer, p_title_font_family text, p_title_bold boolean,
+  p_content text, p_content_font_size integer, p_content_font_family text, p_content_bold boolean,
+  p_font_color text, p_border_color text, p_animation text, p_admin_password text
 )
 returns setof website_links
 language plpgsql security definer set search_path = public, extensions as $$
@@ -863,10 +874,10 @@ begin
   if (select count(*) from website_links) >= 10 then
     raise exception 'too_many_links';
   end if;
-  if p_font_size < 8 or p_font_size > 32 then
+  if p_title_font_size < 8 or p_title_font_size > 32 or p_content_font_size < 8 or p_content_font_size > 32 then
     raise exception 'invalid_font_size';
   end if;
-  if p_font_family not in ('body', 'display', 'graffiti') then
+  if p_title_font_family not in ('body', 'display', 'graffiti') or p_content_font_family not in ('body', 'display', 'graffiti') then
     raise exception 'invalid_font_family';
   end if;
   if p_animation not in ('none', 'pulse', 'bounce', 'fade', 'glow') then
@@ -875,9 +886,15 @@ begin
   if p_font_color !~ '^#[0-9a-fA-F]{6}$' or p_border_color !~ '^#[0-9a-fA-F]{6}$' then
     raise exception 'invalid_color';
   end if;
-  insert into website_links (url, message, font_size, font_color, font_family, border_color, animation, sort_order)
+  insert into website_links (
+    url, title, title_font_size, title_font_family, title_bold,
+    content, content_font_size, content_font_family, content_bold,
+    font_color, border_color, animation, sort_order
+  )
   values (
-    left(p_url, 500), left(p_message, 60), p_font_size, p_font_color, p_font_family, p_border_color, p_animation,
+    left(p_url, 500), left(p_title, 20), p_title_font_size, p_title_font_family, p_title_bold,
+    left(p_content, 60), p_content_font_size, p_content_font_family, p_content_bold,
+    p_font_color, p_border_color, p_animation,
     coalesce((select max(sort_order) + 1 from website_links), 0)
   );
   return query select * from website_links order by sort_order;
@@ -885,8 +902,10 @@ end;
 $$;
 
 create or replace function admin_update_website_link(
-  p_id bigint, p_url text, p_message text, p_font_size integer, p_font_color text, p_font_family text,
-  p_border_color text, p_animation text, p_admin_password text
+  p_id bigint, p_url text,
+  p_title text, p_title_font_size integer, p_title_font_family text, p_title_bold boolean,
+  p_content text, p_content_font_size integer, p_content_font_family text, p_content_bold boolean,
+  p_font_color text, p_border_color text, p_animation text, p_admin_password text
 )
 returns setof website_links
 language plpgsql security definer set search_path = public, extensions as $$
@@ -894,10 +913,10 @@ begin
   if not admin_login(p_admin_password) then
     raise exception 'wrong_password';
   end if;
-  if p_font_size < 8 or p_font_size > 32 then
+  if p_title_font_size < 8 or p_title_font_size > 32 or p_content_font_size < 8 or p_content_font_size > 32 then
     raise exception 'invalid_font_size';
   end if;
-  if p_font_family not in ('body', 'display', 'graffiti') then
+  if p_title_font_family not in ('body', 'display', 'graffiti') or p_content_font_family not in ('body', 'display', 'graffiti') then
     raise exception 'invalid_font_family';
   end if;
   if p_animation not in ('none', 'pulse', 'bounce', 'fade', 'glow') then
@@ -907,8 +926,10 @@ begin
     raise exception 'invalid_color';
   end if;
   update website_links set
-    url = left(p_url, 500), message = left(p_message, 60), font_size = p_font_size, font_color = p_font_color,
-    font_family = p_font_family, border_color = p_border_color, animation = p_animation
+    url = left(p_url, 500),
+    title = left(p_title, 20), title_font_size = p_title_font_size, title_font_family = p_title_font_family, title_bold = p_title_bold,
+    content = left(p_content, 60), content_font_size = p_content_font_size, content_font_family = p_content_font_family, content_bold = p_content_bold,
+    font_color = p_font_color, border_color = p_border_color, animation = p_animation
   where id = p_id;
   return query select * from website_links order by sort_order;
 end;
@@ -1043,6 +1064,6 @@ grant execute on function admin_set_banner(text, text, text, text) to anon, auth
 grant execute on function admin_set_chatbot_mode(text, text) to anon, authenticated;
 grant execute on function admin_add_banner_images(text[], text) to anon, authenticated;
 grant execute on function admin_delete_banner_image(bigint, text) to anon, authenticated;
-grant execute on function admin_add_website_link(text, text, integer, text, text, text, text, text) to anon, authenticated;
-grant execute on function admin_update_website_link(bigint, text, text, integer, text, text, text, text, text) to anon, authenticated;
+grant execute on function admin_add_website_link(text, text, integer, text, boolean, text, integer, text, boolean, text, text, text, text) to anon, authenticated;
+grant execute on function admin_update_website_link(bigint, text, text, integer, text, boolean, text, integer, text, boolean, text, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_website_link(bigint, text) to anon, authenticated;
