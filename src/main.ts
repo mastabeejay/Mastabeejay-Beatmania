@@ -1021,7 +1021,7 @@ guestbookTitle.addEventListener("click", () => {
   guestbookScrollBody.scrollTo({ top: 0, behavior: "smooth" });
 });
 
-const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: string; steps: string[] }> = {
+const INSTALL_GUIDES: Record<"windows" | "macos" | "linux" | "ios" | "android" | "chromeos", { title: string; steps: string[] }> = {
   windows: {
     title: "🖥️ Windows에 설치하기",
     steps: [
@@ -1039,6 +1039,16 @@ const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: s
       "나타나는 창에서 '설치' 버튼을 클릭하세요.",
       "Dock이나 런치패드에 BDJ 아이콘이 생깁니다. 클릭하면 바로 게임이 실행됩니다.",
       "참고: 사파리(Safari)를 쓰신다면 macOS Sonoma(14) 이상에서 메뉴바의 '파일' → 'Dock에 추가'로도 설치할 수 있어요.",
+    ],
+  },
+  linux: {
+    title: "🐧 Linux에 설치하기",
+    steps: [
+      "크롬(Chrome) 또는 크로미움(Chromium) 브라우저로 이 사이트에 접속하세요.",
+      "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 '설치'를 찾아 클릭하세요.",
+      "나타나는 창에서 '설치' 버튼을 클릭하세요.",
+      "앱 목록(프로그램 런처)에 BDJ 아이콘이 생깁니다. 클릭하면 브라우저 주소창 없이 바로 게임이 실행됩니다.",
+      "참고: 파이어폭스(Firefox)는 앱 설치 기능이 없으므로 크롬 계열 브라우저를 사용해 주세요.",
     ],
   },
   ios: {
@@ -1059,6 +1069,15 @@ const INSTALL_GUIDES: Record<"windows" | "macos" | "ios" | "android", { title: s
       "메뉴에서 '앱 설치' 또는 '홈 화면에 추가'를 찾아 탭하세요. 화면 하단에 자동으로 설치 안내 배너가 뜨면 그걸 탭해도 됩니다.",
       "'설치' 버튼을 한 번 더 탭해서 확인하세요.",
       "홈 화면에 BDJ 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
+    ],
+  },
+  chromeos: {
+    title: "🌐 ChromeOS(크롬북)에 설치하기",
+    steps: [
+      "크롬북의 크롬(Chrome) 브라우저로 이 사이트에 접속하세요.",
+      "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 '설치'를 찾아 클릭하세요.",
+      "나타나는 창에서 '설치' 버튼을 클릭하세요.",
+      "런처(화면 왼쪽 아래 ○ 버튼)에 BDJ 아이콘이 생깁니다. 아이콘을 마우스 오른쪽 클릭해서 '선반에 고정'하면 더 편하게 실행할 수 있어요.",
     ],
   },
 };

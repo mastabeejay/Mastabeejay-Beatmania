@@ -390,9 +390,13 @@ body::before {
   z-index: 11;
 }
 
+/* 3 cards across x 2 rows (Windows/macOS/Linux over Android/iOS/ChromeOS) — a 6-card vertical
+   column would climb halfway up the screen, and the bottom-right corner has the horizontal room
+   (the footer is centered, the notice board stops above). Mobile switches this back to one
+   flex row of all 6 — see that breakpoint. */
 #install-guide-cards {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, 74px);
   gap: 6px;
 }
 
@@ -434,15 +438,13 @@ body::before {
   color: var(--color-cyber-cyan);
 }
 
-/* One label for the whole card row instead of every card repeating "설치 방법 보기" — sits directly
-   above the Windows card on desktop (both #install-guide-section and #install-guide-cards are
-   columns there), and to its immediate left on mobile (see that breakpoint). Matches
-   .install-guide-card's own width so text-align:center actually centers it over that card column
-   instead of just flush-aligning to the column's right edge (#install-guide-section's
-   align-items:flex-end) — mobile resets this back to auto width, since there the label sits beside
-   a narrower row of cards instead of above a column of them. */
+/* One label for the whole card grid instead of every card repeating "설치 방법 보기" — sits centered
+   above the 3x2 grid on desktop (stretch makes it span the section's full width, which the grid
+   defines, so text-align:center lands over the grid's middle rather than flush against the
+   section's align-items:flex-end edge), and to the row's immediate left on mobile (see that
+   breakpoint, which resets the stretch since there the label sits beside the cards, not above). */
 #install-guide-label {
-  width: 74px;
+  align-self: stretch;
   font-size: 12px;
   letter-spacing: 0.04em;
   text-align: center;
@@ -3923,14 +3925,17 @@ select option:disabled {
     align-items: center;
   }
 
-  /* Desktop's fixed 74px (matching .install-guide-card, for centering above the Windows card in a
-     column) would just add dead space between the label and that same card here, where they sit
-     side by side in a row instead. */
+  /* Desktop's stretch (for centering over the 3x2 grid) would stretch the label vertically here,
+     where the section is a row and the label sits beside the cards instead of above them. */
   #install-guide-label {
+    align-self: center;
     width: auto;
   }
 
+  /* Back to one flex row of all 6 cards — the desktop 3x2 grid would stack two rows into the
+     scrollable column where horizontal space is the cheaper dimension. */
   #install-guide-cards {
+    display: flex;
     flex-direction: row;
     gap: 4px;
   }
