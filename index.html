@@ -77,6 +77,7 @@
         <button id="pwa-refresh-button" type="button" title="새로고침">🔄 새로고침</button>
         <button id="exit-site-button" type="button" title="종료">🚪 종료</button>
         <div id="social-links-container"></div>
+        <div id="website-links-container"></div>
         <div id="leaderboard-header">
           <div id="leaderboard-tagline-row">
             <div id="leaderboard-tagline" class="text-metallic">Masta Beejay Beat Breaker</div>
@@ -305,7 +306,7 @@
           </div>
 
           <div class="admin-panel-section">
-            <div class="admin-panel-section-title">링크 버튼 관리</div>
+            <div class="admin-panel-section-title">SNS 관리</div>
             <div id="admin-social-links-list"></div>
             <div id="admin-social-link-form">
               <select id="admin-social-link-platform">
@@ -320,8 +321,46 @@
                 <option value="custom">자유(등록)</option>
               </select>
               <input type="url" id="admin-social-link-url" placeholder="https://..." />
+              <label id="admin-social-link-image-trigger" class="song-file-label" for="admin-social-link-image-input">🖼️ 이미지 (선택)</label>
+              <input type="file" id="admin-social-link-image-input" accept="image/jpeg,image/png,image/bmp" />
+              <span id="admin-social-link-image-filename"></span>
               <button id="admin-social-link-add-button" type="button">추가</button>
             </div>
+            <span id="admin-social-link-error" class="admin-panel-inline-error" hidden></span>
+            <div class="admin-banner-field-label">이미지를 등록하면 플랫폼 아이콘 대신 그 이미지가 버튼에 표시됩니다 (JPG/JPEG/BMP/PNG, 최대 3MB, 선택 사항).</div>
+          </div>
+
+          <div class="admin-panel-section">
+            <div class="admin-panel-section-title">Website 관리</div>
+            <div id="admin-website-links-list"></div>
+            <div id="admin-website-link-form">
+              <input type="url" id="admin-website-link-url" placeholder="https://..." />
+              <input type="text" id="admin-website-link-message" placeholder="배너에 표시할 글" maxlength="60" />
+              <label class="admin-website-field-label">글자 크기 <input type="number" id="admin-website-link-font-size" min="8" max="32" value="14" /></label>
+              <label class="admin-website-field-label">글자 색상 <input type="color" id="admin-website-link-font-color" value="#e8f4ff" /></label>
+              <label class="admin-website-field-label">
+                글씨체
+                <select id="admin-website-link-font-family">
+                  <option value="body">기본</option>
+                  <option value="display">테크</option>
+                  <option value="graffiti">그래피티</option>
+                </select>
+              </label>
+              <label class="admin-website-field-label">테두리 색상 <input type="color" id="admin-website-link-border-color" value="#00f0ff" /></label>
+              <label class="admin-website-field-label">
+                애니메이션
+                <select id="admin-website-link-animation">
+                  <option value="none">없음</option>
+                  <option value="pulse">펄스</option>
+                  <option value="bounce">바운스</option>
+                  <option value="fade">페이드</option>
+                  <option value="glow">글로우</option>
+                </select>
+              </label>
+              <button id="admin-website-link-add-button" type="button">추가</button>
+            </div>
+            <span id="admin-website-link-error" class="admin-panel-inline-error" hidden></span>
+            <div class="admin-banner-field-label">최대 10개까지 등록 가능. 화면에 다 안 들어오면 스크롤로 볼 수 있습니다.</div>
           </div>
 
           <div class="admin-panel-section">

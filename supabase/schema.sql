@@ -125,6 +125,34 @@ create table if not exists social_links (
   created_at timestamptz not null default now()
 );
 
+-- Optional admin-uploaded image (data: URL, same base64-in-Postgres pattern as the banner images
+-- and guestbook attachments) shown INSTEAD of the platform's built-in SVG icon when present — lets
+-- the admin brand a link button with their own artwork rather than being limited to the fixed
+-- platform glyph set.
+alter table social_links add column if not exists image_data text;
+
+-- New table -----------------------------------------------------------------------------------
+
+-- "Website" banners: admin-managed clickable rectangles shown below the Jaybot launcher on the
+-- start screen (see #website-links-container in index.html), each carrying its own short message
+-- and styling rather than a platform icon — for linking to things that aren't really "SNS" (a
+-- personal site, a store page, etc.). font_family/animation are validated in the RPC functions
+-- below (a small fixed set) rather than a table CHECK, since a CHECK wouldn't retroactively apply
+-- to a table that already exists from an earlier run.
+create table if not exists website_links (
+  id bigint generated always as identity primary key,
+  url text not null,
+  message text not null,
+  font_size integer not null default 14,
+  font_color text not null default '#e8f4ff',
+  font_family text not null default 'body',
+  border_color text not null default '#00f0ff',
+  animation text not null default 'none',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table website_links enable row level security;
+
 -- Singleton banner shown on the start screen, editable only by the admin — a plain notice message,
 -- a big graffiti-style tag, or an uploaded image set, never more than one at once (display_mode
 -- picks which, if any). display_mode is constrained by admin_set_banner() below, not a table CHECK
@@ -184,6 +212,10 @@ create policy "public read leaderboard" on leaderboard for select using (true);
 drop policy if exists "public read social_links" on social_links;
 create policy "public read social_links" on social_links for select using (true);
 grant select on social_links to anon, authenticated;
+
+drop policy if exists "public read website_links" on website_links;
+create policy "public read website_links" on website_links for select using (true);
+grant select on website_links to anon, authenticated;
 
 drop policy if exists "public read site_notice" on site_notice;
 create policy "public read site_notice" on site_notice for select using (true);
@@ -769,26 +801,35 @@ begin
 end;
 $$;
 
-create or replace function admin_add_social_link(p_platform text, p_url text, p_admin_password text)
+-- Signature gained a trailing param (p_image_data) — drop the prior 3-arg overloads first.
+drop function if exists admin_add_social_link(text, text, text);
+drop function if exists admin_update_social_link(bigint, text, text, text);
+
+-- p_image_data is optional — when supplied (a data: URL, same base64-in-Postgres pattern as the
+-- banner images) it's shown INSTEAD of the platform's built-in SVG icon on the public button; when
+-- omitted the platform icon still applies, unchanged from before this column existed.
+create or replace function admin_add_social_link(p_platform text, p_url text, p_admin_password text, p_image_data text default null)
 returns setof social_links
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   if not admin_login(p_admin_password) then
     raise exception 'wrong_password';
   end if;
-  insert into social_links (platform, url) values (left(p_platform, 20), left(p_url, 500));
+  insert into social_links (platform, url, image_data) values (left(p_platform, 20), left(p_url, 500), p_image_data);
   return query select * from social_links order by id;
 end;
 $$;
 
-create or replace function admin_update_social_link(p_id bigint, p_platform text, p_url text, p_admin_password text)
+-- p_image_data left null means "leave the existing image alone" (coalesce keeps it) — same
+-- leave-untouched-on-null convention as edit_guestbook_entry's attachment handling.
+create or replace function admin_update_social_link(p_id bigint, p_platform text, p_url text, p_admin_password text, p_image_data text default null)
 returns setof social_links
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   if not admin_login(p_admin_password) then
     raise exception 'wrong_password';
   end if;
-  update social_links set platform = left(p_platform, 20), url = left(p_url, 500) where id = p_id;
+  update social_links set platform = left(p_platform, 20), url = left(p_url, 500), image_data = coalesce(p_image_data, image_data) where id = p_id;
   return query select * from social_links order by id;
 end;
 $$;
@@ -802,6 +843,86 @@ begin
   end if;
   delete from social_links where id = p_id;
   return query select * from social_links order by id;
+end;
+$$;
+
+-- "Website" banners (see website_links' own comment above) — max 10 rows total, enforced here since
+-- there's no natural cap otherwise (unlike site_banner_images' hardcoded 4). font_size/font_family/
+-- border_color/font_color/animation are all validated here rather than a table CHECK, same rationale
+-- as elsewhere in this file (a CHECK wouldn't retroactively apply to an already-existing table).
+create or replace function admin_add_website_link(
+  p_url text, p_message text, p_font_size integer, p_font_color text, p_font_family text,
+  p_border_color text, p_animation text, p_admin_password text
+)
+returns setof website_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  if (select count(*) from website_links) >= 10 then
+    raise exception 'too_many_links';
+  end if;
+  if p_font_size < 8 or p_font_size > 32 then
+    raise exception 'invalid_font_size';
+  end if;
+  if p_font_family not in ('body', 'display', 'graffiti') then
+    raise exception 'invalid_font_family';
+  end if;
+  if p_animation not in ('none', 'pulse', 'bounce', 'fade', 'glow') then
+    raise exception 'invalid_animation';
+  end if;
+  if p_font_color !~ '^#[0-9a-fA-F]{6}$' or p_border_color !~ '^#[0-9a-fA-F]{6}$' then
+    raise exception 'invalid_color';
+  end if;
+  insert into website_links (url, message, font_size, font_color, font_family, border_color, animation, sort_order)
+  values (
+    left(p_url, 500), left(p_message, 60), p_font_size, p_font_color, p_font_family, p_border_color, p_animation,
+    coalesce((select max(sort_order) + 1 from website_links), 0)
+  );
+  return query select * from website_links order by sort_order;
+end;
+$$;
+
+create or replace function admin_update_website_link(
+  p_id bigint, p_url text, p_message text, p_font_size integer, p_font_color text, p_font_family text,
+  p_border_color text, p_animation text, p_admin_password text
+)
+returns setof website_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  if p_font_size < 8 or p_font_size > 32 then
+    raise exception 'invalid_font_size';
+  end if;
+  if p_font_family not in ('body', 'display', 'graffiti') then
+    raise exception 'invalid_font_family';
+  end if;
+  if p_animation not in ('none', 'pulse', 'bounce', 'fade', 'glow') then
+    raise exception 'invalid_animation';
+  end if;
+  if p_font_color !~ '^#[0-9a-fA-F]{6}$' or p_border_color !~ '^#[0-9a-fA-F]{6}$' then
+    raise exception 'invalid_color';
+  end if;
+  update website_links set
+    url = left(p_url, 500), message = left(p_message, 60), font_size = p_font_size, font_color = p_font_color,
+    font_family = p_font_family, border_color = p_border_color, animation = p_animation
+  where id = p_id;
+  return query select * from website_links order by sort_order;
+end;
+$$;
+
+create or replace function admin_delete_website_link(p_id bigint, p_admin_password text)
+returns setof website_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  delete from website_links where id = p_id;
+  return query select * from website_links order by sort_order;
 end;
 $$;
 
@@ -915,10 +1036,13 @@ grant execute on function send_direct_message(text, text, bigint, text) to anon,
 grant execute on function load_direct_messages(text, text, bigint) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
 grant execute on function admin_delete_leaderboard_entries(bigint[], text) to anon, authenticated;
-grant execute on function admin_add_social_link(text, text, text) to anon, authenticated;
-grant execute on function admin_update_social_link(bigint, text, text, text) to anon, authenticated;
+grant execute on function admin_add_social_link(text, text, text, text) to anon, authenticated;
+grant execute on function admin_update_social_link(bigint, text, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_social_link(bigint, text) to anon, authenticated;
 grant execute on function admin_set_banner(text, text, text, text) to anon, authenticated;
 grant execute on function admin_set_chatbot_mode(text, text) to anon, authenticated;
 grant execute on function admin_add_banner_images(text[], text) to anon, authenticated;
 grant execute on function admin_delete_banner_image(bigint, text) to anon, authenticated;
+grant execute on function admin_add_website_link(text, text, integer, text, text, text, text, text) to anon, authenticated;
+grant execute on function admin_update_website_link(bigint, text, text, integer, text, text, text, text, text) to anon, authenticated;
+grant execute on function admin_delete_website_link(bigint, text) to anon, authenticated;

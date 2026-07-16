@@ -52,6 +52,15 @@ import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
 import { getOnlineMemberIds, trackMemberOnline, untrackMemberOnline } from "./game/Presence";
 import { ScoreManager } from "./game/ScoreManager";
 import { adminAddSocialLink, adminDeleteSocialLink, adminUpdateSocialLink, loadSocialLinks } from "./game/SocialLinks";
+import {
+  adminAddWebsiteLink,
+  adminDeleteWebsiteLink,
+  adminUpdateWebsiteLink,
+  loadWebsiteLinks,
+  TooManyWebsiteLinksError,
+  type WebsiteLinkAnimation,
+  type WebsiteLinkFontFamily,
+} from "./game/WebsiteLinks";
 import { buildTestChart, DIFFICULTY_PRESETS, type ChartDensity } from "./game/testChart";
 import { SCRATCH_LANE } from "./game/types";
 import { reportVisit } from "./game/Visits";
@@ -238,7 +247,21 @@ const adminBannerSaveSuccess = document.querySelector<HTMLSpanElement>("#admin-b
 const adminSocialLinksList = document.querySelector<HTMLDivElement>("#admin-social-links-list")!;
 const adminSocialLinkPlatformSelect = document.querySelector<HTMLSelectElement>("#admin-social-link-platform")!;
 const adminSocialLinkUrlInput = document.querySelector<HTMLInputElement>("#admin-social-link-url")!;
+const adminSocialLinkImageInput = document.querySelector<HTMLInputElement>("#admin-social-link-image-input")!;
+const adminSocialLinkImageFilename = document.querySelector<HTMLSpanElement>("#admin-social-link-image-filename")!;
 const adminSocialLinkAddButton = document.querySelector<HTMLButtonElement>("#admin-social-link-add-button")!;
+const adminSocialLinkError = document.querySelector<HTMLSpanElement>("#admin-social-link-error")!;
+const websiteLinksContainer = document.querySelector<HTMLDivElement>("#website-links-container")!;
+const adminWebsiteLinksList = document.querySelector<HTMLDivElement>("#admin-website-links-list")!;
+const adminWebsiteLinkUrlInput = document.querySelector<HTMLInputElement>("#admin-website-link-url")!;
+const adminWebsiteLinkMessageInput = document.querySelector<HTMLInputElement>("#admin-website-link-message")!;
+const adminWebsiteLinkFontSizeInput = document.querySelector<HTMLInputElement>("#admin-website-link-font-size")!;
+const adminWebsiteLinkFontColorInput = document.querySelector<HTMLInputElement>("#admin-website-link-font-color")!;
+const adminWebsiteLinkFontFamilySelect = document.querySelector<HTMLSelectElement>("#admin-website-link-font-family")!;
+const adminWebsiteLinkBorderColorInput = document.querySelector<HTMLInputElement>("#admin-website-link-border-color")!;
+const adminWebsiteLinkAnimationSelect = document.querySelector<HTMLSelectElement>("#admin-website-link-animation")!;
+const adminWebsiteLinkAddButton = document.querySelector<HTMLButtonElement>("#admin-website-link-add-button")!;
+const adminWebsiteLinkError = document.querySelector<HTMLSpanElement>("#admin-website-link-error")!;
 const adminChangeCurrentPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-current-password")!;
 const adminChangeNewPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-new-password")!;
 const adminChangeConfirmPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-confirm-password")!;
@@ -1046,13 +1069,21 @@ async function renderSocialLinks(): Promise<void> {
   const links = await loadSocialLinks();
   socialLinksContainer.innerHTML = links
     .map((link) => {
+      if (link.imageData) {
+        return `<a class="social-link-button" target="_blank" rel="noopener noreferrer" data-link-id="${link.id}"><img class="social-link-image" alt="" /></a>`;
+      }
       const icon = getPlatformIcon(link.platform);
       return `<a class="social-link-button" target="_blank" rel="noopener noreferrer" title="${escapeHtml(icon.label)}" data-link-id="${link.id}">${icon.svg}</a>`;
     })
     .join("");
   links.forEach((link) => {
     const a = socialLinksContainer.querySelector<HTMLAnchorElement>(`a[data-link-id="${link.id}"]`);
-    if (a) a.href = link.url;
+    if (!a) return;
+    a.href = link.url;
+    if (link.imageData) {
+      const img = a.querySelector<HTMLImageElement>(".social-link-image");
+      if (img) img.src = link.imageData;
+    }
   });
 }
 
@@ -1065,9 +1096,10 @@ async function renderAdminSocialLinksList(): Promise<void> {
   adminSocialLinksList.innerHTML = links
     .map((link) => {
       const icon = getPlatformIcon(link.platform);
+      const preview = link.imageData ? `<img class="admin-social-link-image-thumb" alt="" />` : `<span class="admin-social-link-icon">${icon.svg}</span>`;
       return `
         <div class="admin-social-link-row" data-id="${link.id}">
-          <span class="admin-social-link-icon">${icon.svg}</span>
+          ${preview}
           <select class="admin-social-link-edit-platform">${platformOptions}</select>
           <input type="url" class="admin-social-link-edit-url" />
           <button type="button" data-action="save-link" data-id="${link.id}">저장</button>
@@ -1080,6 +1112,78 @@ async function renderAdminSocialLinksList(): Promise<void> {
     if (!row) return;
     row.querySelector<HTMLSelectElement>(".admin-social-link-edit-platform")!.value = link.platform;
     row.querySelector<HTMLInputElement>(".admin-social-link-edit-url")!.value = link.url;
+    if (link.imageData) {
+      const thumb = row.querySelector<HTMLImageElement>(".admin-social-link-image-thumb");
+      if (thumb) thumb.src = link.imageData;
+    }
+  });
+}
+
+const WEBSITE_LINK_FONT_CLASS: Record<WebsiteLinkFontFamily, string> = {
+  body: "website-link-font-body",
+  display: "website-link-font-display",
+  graffiti: "website-link-font-graffiti",
+};
+
+/** Public banners under the Jaybot launcher — same href-via-DOM-property pattern as
+ *  renderSocialLinks. border/font color and font size are admin-chosen but validated server-side
+ *  (hex-only, 8-32px range — see admin_add_website_link in supabase/schema.sql), so they're safe
+ *  to interpolate directly into the style attribute; the message text still goes through
+ *  escapeHtml like any other admin-authored text shown on this site (e.g. the notice banner). */
+async function renderWebsiteLinks(): Promise<void> {
+  const links = await loadWebsiteLinks();
+  websiteLinksContainer.innerHTML = links
+    .map((link) => {
+      const fontClass = WEBSITE_LINK_FONT_CLASS[link.fontFamily] ?? WEBSITE_LINK_FONT_CLASS.body;
+      const style = `border-color:${link.borderColor}; color:${link.fontColor}; font-size:${link.fontSize}px; --wl-glow-color:${link.borderColor};`;
+      return `<a class="website-link-banner anim-${link.animation} ${fontClass}" target="_blank" rel="noopener noreferrer" data-link-id="${link.id}" style="${style}">${escapeHtml(link.message)}</a>`;
+    })
+    .join("");
+  links.forEach((link) => {
+    const a = websiteLinksContainer.querySelector<HTMLAnchorElement>(`a[data-link-id="${link.id}"]`);
+    if (a) a.href = link.url;
+  });
+}
+
+/** Editable rows in the admin panel — mirrors renderAdminSocialLinksList's shape. */
+async function renderAdminWebsiteLinksList(): Promise<void> {
+  const links = await loadWebsiteLinks();
+  adminWebsiteLinksList.innerHTML = links
+    .map(
+      (link) => `
+        <div class="admin-website-link-row" data-id="${link.id}">
+          <input type="url" class="admin-website-link-edit-url" />
+          <input type="text" class="admin-website-link-edit-message" maxlength="60" />
+          <input type="number" class="admin-website-link-edit-font-size" min="8" max="32" />
+          <input type="color" class="admin-website-link-edit-font-color" />
+          <select class="admin-website-link-edit-font-family">
+            <option value="body">기본</option>
+            <option value="display">테크</option>
+            <option value="graffiti">그래피티</option>
+          </select>
+          <input type="color" class="admin-website-link-edit-border-color" />
+          <select class="admin-website-link-edit-animation">
+            <option value="none">없음</option>
+            <option value="pulse">펄스</option>
+            <option value="bounce">바운스</option>
+            <option value="fade">페이드</option>
+            <option value="glow">글로우</option>
+          </select>
+          <button type="button" data-action="save-website-link" data-id="${link.id}">저장</button>
+          <button type="button" data-action="delete-website-link" data-id="${link.id}">삭제</button>
+        </div>`,
+    )
+    .join("");
+  links.forEach((link) => {
+    const row = adminWebsiteLinksList.querySelector<HTMLDivElement>(`.admin-website-link-row[data-id="${link.id}"]`);
+    if (!row) return;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-url")!.value = link.url;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-message")!.value = link.message;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-font-size")!.value = String(link.fontSize);
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-font-color")!.value = link.fontColor;
+    row.querySelector<HTMLSelectElement>(".admin-website-link-edit-font-family")!.value = link.fontFamily;
+    row.querySelector<HTMLInputElement>(".admin-website-link-edit-border-color")!.value = link.borderColor;
+    row.querySelector<HTMLSelectElement>(".admin-website-link-edit-animation")!.value = link.animation;
   });
 }
 
@@ -1804,6 +1908,7 @@ adminPanelOpenButton.addEventListener("click", () => {
   });
   void renderAdminSocialLinksList();
   void renderAdminBannerImagesList();
+  void renderAdminWebsiteLinksList();
   adminPanelOverlay.style.display = "flex";
 });
 
@@ -1867,6 +1972,10 @@ adminBannerSaveButton.addEventListener("click", () => {
 const BANNER_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/bmp"];
 const BANNER_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 const BANNER_IMAGE_MAX_COUNT = 4;
+
+// No GIF here — an SNS button image is a small static icon replacement, not a banner.
+const SNS_LINK_IMAGE_TYPES = ["image/jpeg", "image/png", "image/bmp"];
+const SNS_LINK_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -1942,18 +2051,89 @@ adminBannerImagesList.addEventListener("click", (event) => {
     .catch((err) => handleAdminPanelError(err, "이미지 삭제 실패:"));
 });
 
+// Same "reflect back what got picked" purpose as adminBannerImagesInput's change listener — the
+// styled label hides the raw <input type="file">, so this is the only visible confirmation.
+adminSocialLinkImageInput.addEventListener("change", () => {
+  const file = adminSocialLinkImageInput.files?.[0];
+  adminSocialLinkImageFilename.textContent = file ? file.name : "";
+  adminSocialLinkError.hidden = true;
+});
+
 adminSocialLinkAddButton.addEventListener("click", () => {
   if (!adminPassword) return;
+  const currentAdminPassword = adminPassword;
   const platform = adminSocialLinkPlatformSelect.value;
   const url = adminSocialLinkUrlInput.value.trim();
+  adminSocialLinkError.hidden = true;
   if (!url) return;
-  void adminAddSocialLink(platform, url, adminPassword)
+
+  const file = adminSocialLinkImageInput.files?.[0] ?? null;
+  if (file) {
+    if (!SNS_LINK_IMAGE_TYPES.includes(file.type)) {
+      adminSocialLinkError.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
+      adminSocialLinkError.hidden = false;
+      return;
+    }
+    if (file.size > SNS_LINK_IMAGE_MAX_BYTES) {
+      adminSocialLinkError.textContent = `파일이 너무 큽니다 (최대 3MB): ${file.name}`;
+      adminSocialLinkError.hidden = false;
+      return;
+    }
+  }
+
+  void (file ? readFileAsDataUrl(file) : Promise.resolve(null))
+    .then((imageData) => adminAddSocialLink(platform, url, currentAdminPassword, imageData))
     .then(() => {
       adminSocialLinkUrlInput.value = "";
+      adminSocialLinkImageInput.value = "";
+      adminSocialLinkImageFilename.textContent = "";
       showToast("추가가 완료되었습니다.");
       return Promise.all([renderAdminSocialLinksList(), renderSocialLinks()]);
     })
-    .catch((err) => handleAdminPanelError(err, "링크 추가 실패:"));
+    .catch((err) => handleAdminPanelError(err, "링크 추가 실패:", adminSocialLinkError));
+});
+
+adminWebsiteLinkAddButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const currentAdminPassword = adminPassword;
+  const url = adminWebsiteLinkUrlInput.value.trim();
+  const message = adminWebsiteLinkMessageInput.value.trim();
+  adminWebsiteLinkError.hidden = true;
+  if (!url || !message) return;
+
+  const fontSize = Number(adminWebsiteLinkFontSizeInput.value);
+  if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 32) {
+    adminWebsiteLinkError.textContent = "글자 크기는 8~32 사이여야 합니다.";
+    adminWebsiteLinkError.hidden = false;
+    return;
+  }
+
+  void adminAddWebsiteLink(
+    {
+      url,
+      message,
+      fontSize,
+      fontColor: adminWebsiteLinkFontColorInput.value,
+      fontFamily: adminWebsiteLinkFontFamilySelect.value as WebsiteLinkFontFamily,
+      borderColor: adminWebsiteLinkBorderColorInput.value,
+      animation: adminWebsiteLinkAnimationSelect.value as WebsiteLinkAnimation,
+    },
+    currentAdminPassword,
+  )
+    .then(() => {
+      adminWebsiteLinkUrlInput.value = "";
+      adminWebsiteLinkMessageInput.value = "";
+      showToast("추가가 완료되었습니다.");
+      return Promise.all([renderAdminWebsiteLinksList(), renderWebsiteLinks()]);
+    })
+    .catch((err) => {
+      if (err instanceof TooManyWebsiteLinksError) {
+        adminWebsiteLinkError.textContent = "Website 링크는 최대 10개까지 등록할 수 있습니다.";
+        adminWebsiteLinkError.hidden = false;
+      } else {
+        handleAdminPanelError(err, "Website 링크 추가 실패:", adminWebsiteLinkError);
+      }
+    });
 });
 
 adminChangePasswordButton.addEventListener("click", () => {
@@ -2021,6 +2201,50 @@ adminSocialLinksList.addEventListener("click", (event) => {
   }
 });
 
+adminWebsiteLinksList.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
+  if (!button || !adminPassword) return;
+  const id = Number(button.dataset.id);
+  const row = button.closest<HTMLDivElement>(".admin-website-link-row")!;
+  const action = button.dataset.action;
+
+  if (action === "save-website-link") {
+    const url = row.querySelector<HTMLInputElement>(".admin-website-link-edit-url")!.value.trim();
+    const message = row.querySelector<HTMLInputElement>(".admin-website-link-edit-message")!.value.trim();
+    const fontSize = Number(row.querySelector<HTMLInputElement>(".admin-website-link-edit-font-size")!.value);
+    if (!url || !message || !Number.isFinite(fontSize) || fontSize < 8 || fontSize > 32) return;
+    void adminUpdateWebsiteLink(
+      id,
+      {
+        url,
+        message,
+        fontSize,
+        fontColor: row.querySelector<HTMLInputElement>(".admin-website-link-edit-font-color")!.value,
+        fontFamily: row.querySelector<HTMLSelectElement>(".admin-website-link-edit-font-family")!.value as WebsiteLinkFontFamily,
+        borderColor: row.querySelector<HTMLInputElement>(".admin-website-link-edit-border-color")!.value,
+        animation: row.querySelector<HTMLSelectElement>(".admin-website-link-edit-animation")!.value as WebsiteLinkAnimation,
+      },
+      adminPassword,
+    )
+      .then(() => {
+        showToast("수정이 완료되었습니다.");
+        return Promise.all([renderAdminWebsiteLinksList(), renderWebsiteLinks()]);
+      })
+      .catch((err) => handleAdminPanelError(err, "Website 링크 수정 실패:"));
+    return;
+  }
+
+  if (action === "delete-website-link") {
+    if (!window.confirm("이 Website 링크를 삭제하시겠습니까?")) return;
+    void adminDeleteWebsiteLink(id, adminPassword)
+      .then(() => {
+        showToast("삭제가 완료되었습니다.");
+        return Promise.all([renderAdminWebsiteLinksList(), renderWebsiteLinks()]);
+      })
+      .catch((err) => handleAdminPanelError(err, "Website 링크 삭제 실패:"));
+  }
+});
+
 /** A password carried over from a previous tab session (sessionStorage) is re-verified before
  *  trusting it — the owner may have rotated it in Supabase directly since then. */
 async function initAdminSession(): Promise<void> {
@@ -2038,6 +2262,7 @@ void initAdminSession().then(() => {
   void renderLeaderboard();
   void renderGuestbook();
   void renderSocialLinks();
+  void renderWebsiteLinks();
   void renderBanner();
 });
 
