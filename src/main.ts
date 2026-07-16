@@ -1,4 +1,5 @@
 import "./style.css";
+import { getLang, initI18n, LANGUAGES, onLangChange, setLang, t, type Lang, type TKey } from "./i18n";
 import { AudioEngine } from "./audio/AudioEngine";
 import { SfxEngine } from "./audio/SfxEngine";
 import { adminChangePassword, adminLogin, WrongAdminPasswordError } from "./game/Admin";
@@ -116,6 +117,34 @@ const DIFFICULTY_LABELS: Record<keyof typeof DIFFICULTY_PRESETS, string> = {
   extreme: "개어려움",
 };
 
+// The leaderboard's speed/difficulty/bgm columns store the Korean label above verbatim (SPEED_LABELS/
+// DIFFICULTY_LABELS), regardless of which language was active at submit time — changing that would
+// mean a schema migration and would leave every historical row stuck in whatever language it was
+// written in. Instead, storage stays fixed to Korean and only the leaderboard's DISPLAY reads through
+// this reverse lookup into the current language — same historical row, correctly localized every time
+// it's rendered, no migration needed.
+const SPEED_LABEL_TO_KEY: Record<string, TKey> = {
+  느림: "speedSlow", 보통: "speedNormal", 빠름: "speedFast", 개빠름: "speedExtreme",
+};
+const DIFFICULTY_LABEL_TO_KEY: Record<string, TKey> = {
+  쉬움: "difficultyEasy", 어려움: "difficultyHard", 개어려움: "difficultyExtreme",
+};
+function displaySpeed(stored: string): string {
+  const key = SPEED_LABEL_TO_KEY[stored];
+  return key ? t(key) : stored === "보통" ? t("speedNormal") : stored;
+}
+function displayDifficulty(stored: string): string {
+  const key = DIFFICULTY_LABEL_TO_KEY[stored];
+  return key ? t(key) : stored === "보통" ? t("difficultyNormal") : stored;
+}
+/** bgm is stored as "YBJ" (brand name, kept as-is) or the Korean words "자유"/"무반주" — same
+ *  reverse-lookup-for-display treatment as speed/difficulty above. */
+function displayBgm(stored: string): string {
+  if (stored === "자유") return t("bgmCustomDisplay");
+  if (stored === "무반주") return t("bgmNoneDisplay");
+  return stored;
+}
+
 // Ordering used to enforce the step-escalation rule: the next step's speed/difficulty must each be
 // >= the just-finished step's, and at least one of the two must be strictly greater.
 const SPEED_ORDER: (keyof typeof SPEED_PRESETS)[] = ["slow", "normal", "fast", "extreme"];
@@ -147,7 +176,7 @@ const resultsBreakdownEl = document.querySelector<HTMLDivElement>("#results-brea
 const resultsNextStepButton = document.querySelector<HTMLButtonElement>("#results-next-step-button")!;
 const resultsConfirmButton = document.querySelector<HTMLButtonElement>("#results-confirm-button")!;
 const stepSetupOverlay = document.querySelector<HTMLDivElement>("#step-setup-overlay")!;
-const stepSetupNumberEl = document.querySelector<HTMLSpanElement>("#step-setup-number")!;
+const stepSetupTitleEl = document.querySelector<HTMLDivElement>("#step-setup-title")!;
 const stepBgmModeDefaultRadio = document.querySelector<HTMLInputElement>("#step-bgm-mode-default")!;
 const stepSongFileInput = document.querySelector<HTMLInputElement>("#step-song-file-input")!;
 const stepSpeedSelect = document.querySelector<HTMLSelectElement>("#step-speed-select")!;
@@ -230,6 +259,7 @@ const photoCountdownNumberEl = document.querySelector<HTMLDivElement>("#photo-co
 const photoLightboxOverlay = document.querySelector<HTMLDivElement>("#photo-lightbox-overlay")!;
 const photoLightboxImage = document.querySelector<HTMLImageElement>("#photo-lightbox-image")!;
 const photoLightboxDownloadButton = document.querySelector<HTMLButtonElement>("#photo-lightbox-download-button")!;
+const languageSelectRow = document.querySelector<HTMLDivElement>("#language-select-row")!;
 const installGuideCards = document.querySelectorAll<HTMLButtonElement>(".install-guide-card");
 const installGuideOverlay = document.querySelector<HTMLDivElement>("#install-guide-overlay")!;
 const installGuideModalTitle = document.querySelector<HTMLDivElement>("#install-guide-modal-title")!;
@@ -315,6 +345,34 @@ const chatbotCloseButton = document.querySelector<HTMLButtonElement>("#chatbot-c
 const chatbotToggleButton = document.querySelector<HTMLButtonElement>("#chatbot-toggle-button")!;
 const ctx = canvas.getContext("2d")!;
 
+// --- Language selector (flag row under the "Masta Beejay Beat Breaker" tagline) -------------------
+// Rendered from LANGUAGES rather than hand-written in index.html so the flag/label/default-active
+// state all come from one source of truth (src/i18n/translations.ts). Each flag button's own
+// tooltip/label is that language's native name — a language switcher conventionally shows "Español"
+// rather than translating it, so visitors can find their language even if the current UI text is
+// unreadable to them.
+languageSelectRow.innerHTML = LANGUAGES.map(
+  (lang) => `<button type="button" class="lang-flag-btn" data-lang="${lang.code}" title="${lang.label}" aria-label="${lang.label}">${lang.flag}</button>`,
+).join("");
+function updateLanguageSelectorActiveState(): void {
+  const current = getLang();
+  languageSelectRow.querySelectorAll<HTMLButtonElement>(".lang-flag-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.lang === current);
+  });
+}
+updateLanguageSelectorActiveState();
+languageSelectRow.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".lang-flag-btn");
+  if (!button) return;
+  setLang(button.dataset.lang as Lang);
+});
+onLangChange(() => {
+  updateLanguageSelectorActiveState();
+  document.documentElement.lang = getLang();
+});
+document.documentElement.lang = getLang();
+initI18n();
+
 let selectedSongFile: File | null = null;
 let stepSelectedSongFile: File | null = null;
 
@@ -352,9 +410,9 @@ function setMembershipUI(): void {
   if (member) {
     membershipAvatar.style.backgroundImage = member.photoData ? `url(${member.photoData})` : "";
     membershipAvatar.classList.toggle("has-photo", !!member.photoData);
-    membershipAvatar.title = member.photoData ? "사진 크게 보기" : "";
+    membershipAvatar.title = member.photoData ? t("membershipPhotoTitle") : "";
     membershipNameLabel.textContent = member.name;
-    membershipNameLabel.title = "내 정보 보기/수정";
+    membershipNameLabel.title = t("membershipNameTitle");
     membershipAuthActions.hidden = true;
     membershipLogoutButton.hidden = false;
     trackMemberOnline(member.id);
@@ -363,7 +421,7 @@ function setMembershipUI(): void {
     membershipAvatar.style.backgroundImage = "";
     membershipAvatar.classList.remove("has-photo");
     membershipAvatar.title = "";
-    membershipNameLabel.textContent = "Guest";
+    membershipNameLabel.textContent = t("membershipGuestLabel");
     membershipNameLabel.title = "";
     membershipAuthActions.hidden = false;
     membershipLogoutButton.hidden = true;
@@ -376,20 +434,21 @@ function setMembershipUI(): void {
   // Guests can't use the guestbook at all — greyed out and inert (not just hidden) so it stays
   // visible as a reason to join the crew rather than looking like a missing feature.
   guestbookOpenCard.disabled = !member;
-  guestbookOpenCard.title = member ? "" : "BDJ Crew 로그인 후 이용 가능합니다";
+  guestbookOpenCard.title = member ? "" : t("membershipGuestbookLockedTitle");
 
   // Guestbook: a logged-in member's name is fixed and no per-row password is ever needed.
   guestbookNameInput.value = member?.name ?? "";
   guestbookNameInput.readOnly = !!member;
   guestbookPasswordInput.value = "";
   guestbookPasswordInput.disabled = !!member;
-  guestbookPasswordInput.placeholder = member ? "회원 로그인 — 비밀번호 불필요" : "비밀번호 (선택-수정/삭제 목적)";
+  guestbookPasswordInput.placeholder = member ? t("guestbookPwPlaceholderMember") : t("guestbookPwPlaceholderGuest");
 
   // Leaderboard's name-entry overlay is only ever shown well after this runs, but the input
   // persists in the DOM the whole time, so setting it here keeps it correct whenever it opens.
   nameEntryNameInput.value = member?.name ?? "";
   nameEntryNameInput.readOnly = !!member;
 }
+onLangChange(() => setMembershipUI());
 
 function clearMemberSession(): void {
   member = null;
@@ -432,7 +491,7 @@ async function renderLeaderboard(board?: LeaderboardEntry[]): Promise<void> {
   selectedLeaderboardIds.clear();
   leaderboardAdminDeleteButton.hidden = !adminPassword;
   if (board.length === 0) {
-    leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="10">기록이 없습니다 — 첫 기록의 주인공이 되어보세요!</td></tr>`;
+    leaderboardBody.innerHTML = `<tr id="leaderboard-empty"><td colspan="10">${t("leaderboardEmpty")}</td></tr>`;
     return;
   }
   leaderboardBody.innerHTML = board
@@ -441,13 +500,13 @@ async function renderLeaderboard(board?: LeaderboardEntry[]): Promise<void> {
         <tr data-id="${entry.id}">
           <td>${adminPassword ? `<input type="checkbox" class="leaderboard-select-checkbox" data-id="${entry.id}" /> ` : ""}${index + 1}</td>
           <td>${escapeHtml(entry.name)}</td>
-          <td>${entry.photo ? `<img class="leaderboard-photo-thumb" data-photo-index="${index}" alt="${escapeHtml(entry.name)} 사진" />` : `<span class="leaderboard-photo-empty">-</span>`}</td>
+          <td>${entry.photo ? `<img class="leaderboard-photo-thumb" data-photo-index="${index}" alt="${escapeHtml(t("lbPhotoAlt", { name: entry.name }))}" />` : `<span class="leaderboard-photo-empty">-</span>`}</td>
           <td>${escapeHtml(entry.message)}</td>
           <td>${entry.score}</td>
-          <td>${escapeHtml(entry.speed)}</td>
-          <td>${escapeHtml(entry.difficulty)}</td>
+          <td>${escapeHtml(displaySpeed(entry.speed))}</td>
+          <td>${escapeHtml(displayDifficulty(entry.difficulty))}</td>
           <td>${entry.step}</td>
-          <td>${escapeHtml(entry.bgm)}</td>
+          <td>${escapeHtml(displayBgm(entry.bgm))}</td>
           <td>${formatLocalDate(entry.dateIso)}</td>
         </tr>`,
     )
@@ -461,6 +520,7 @@ async function renderLeaderboard(board?: LeaderboardEntry[]): Promise<void> {
     if (img) img.src = entry.photo;
   });
 }
+onLangChange(() => void renderLeaderboard());
 
 leaderboardBody.addEventListener("click", (event) => {
   const img = (event.target as HTMLElement).closest<HTMLImageElement>(".leaderboard-photo-thumb");
@@ -601,7 +661,8 @@ function unmarkGuestbookHearted(id: number): void {
 function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): string {
   const hearted = getHeartedIds().has(entry.id);
   const isOwnEntry = member !== null && entry.memberId === member.id;
-  const passwordFieldHtml = isOwnEntry ? "" : `<input type="password" class="guestbook-inline-password" placeholder="비밀번호" maxlength="20" />`;
+  const passwordFieldHtml = isOwnEntry ? "" : `<input type="password" class="guestbook-inline-password" placeholder="${escapeHtml(t("passwordPlaceholder"))}" maxlength="20" />`;
+  const pwMismatchError = escapeHtml(t("pwMismatchError"));
   return `
     <div class="guestbook-entry${isReply ? " guestbook-reply" : ""}" data-id="${entry.id}">
       <div class="guestbook-entry-top">
@@ -615,37 +676,37 @@ function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): stri
       <div class="guestbook-entry-message">${escapeHtml(entry.message)}</div>
       ${
         entry.attachmentType === "image"
-          ? `<img class="guestbook-attachment-thumb" data-attachment-id="${entry.id}" alt="${escapeHtml(entry.name)} 첨부 사진" />`
+          ? `<img class="guestbook-attachment-thumb" data-attachment-id="${entry.id}" alt="${escapeHtml(t("guestbookAttachmentAlt", { name: entry.name }))}" />`
           : entry.attachmentType === "video"
             ? `<video class="guestbook-attachment-video" data-attachment-id="${entry.id}" controls></video>`
             : ""
       }
       <div class="guestbook-entry-actions">
-        <button type="button" class="guestbook-action-btn guestbook-heart-btn${hearted ? " guestbook-hearted" : ""}" data-action="heart" data-id="${entry.id}" title="${hearted ? "하트 취소" : "하트"}"><span class="guestbook-heart-icon">${hearted ? "❤️" : "🤍"}</span> <span class="guestbook-heart-count">${entry.heartCount}</span></button>
-        ${isReply ? "" : `<button type="button" class="guestbook-action-btn" data-action="reply" data-id="${entry.id}">답글쓰기</button>`}
-        <button type="button" class="guestbook-action-btn" data-action="edit" data-id="${entry.id}">수정</button>
-        <button type="button" class="guestbook-action-btn" data-action="delete" data-id="${entry.id}">삭제</button>
+        <button type="button" class="guestbook-action-btn guestbook-heart-btn${hearted ? " guestbook-hearted" : ""}" data-action="heart" data-id="${entry.id}" title="${hearted ? escapeHtml(t("guestbookHeartOnTitle")) : escapeHtml(t("guestbookHeartOffTitle"))}"><span class="guestbook-heart-icon">${hearted ? "❤️" : "🤍"}</span> <span class="guestbook-heart-count">${entry.heartCount}</span></button>
+        ${isReply ? "" : `<button type="button" class="guestbook-action-btn" data-action="reply" data-id="${entry.id}">${escapeHtml(t("guestbookReplyBtn"))}</button>`}
+        <button type="button" class="guestbook-action-btn" data-action="edit" data-id="${entry.id}">${escapeHtml(t("btnEdit"))}</button>
+        <button type="button" class="guestbook-action-btn" data-action="delete" data-id="${entry.id}">${escapeHtml(t("btnDelete"))}</button>
       </div>
       <div class="guestbook-inline-form" data-mode="edit" data-id="${entry.id}" hidden>
         <input type="text" class="guestbook-edit-message" maxlength="500" />
         <div class="guestbook-inline-attachment-row">
-          <label class="song-file-label guestbook-inline-attachment-label" for="guestbook-edit-attachment-${entry.id}">📎 사진/동영상 변경</label>
+          <label class="song-file-label guestbook-inline-attachment-label" for="guestbook-edit-attachment-${entry.id}">${escapeHtml(t("guestbookEditAttachmentLabel"))}</label>
           <input type="file" id="guestbook-edit-attachment-${entry.id}" class="guestbook-edit-attachment-input" accept="image/*,video/*" />
           <span class="guestbook-edit-attachment-filename"></span>
         </div>
         ${passwordFieldHtml}
-        <span class="guestbook-inline-error" hidden>비밀번호가 일치하지 않습니다</span>
+        <span class="guestbook-inline-error" hidden>${pwMismatchError}</span>
         <div class="guestbook-inline-actions">
-          <button type="button" class="guestbook-confirm-btn" data-action="save" data-id="${entry.id}">저장</button>
-          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
+          <button type="button" class="guestbook-confirm-btn" data-action="save" data-id="${entry.id}">${escapeHtml(t("btnSave"))}</button>
+          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">${escapeHtml(t("btnCancel"))}</button>
         </div>
       </div>
       <div class="guestbook-inline-form" data-mode="delete" data-id="${entry.id}" hidden>
         ${passwordFieldHtml}
-        <span class="guestbook-inline-error" hidden>비밀번호가 일치하지 않습니다</span>
+        <span class="guestbook-inline-error" hidden>${pwMismatchError}</span>
         <div class="guestbook-inline-actions">
-          <button type="button" class="guestbook-confirm-btn" data-action="confirm-delete" data-id="${entry.id}">삭제 확인</button>
-          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
+          <button type="button" class="guestbook-confirm-btn" data-action="confirm-delete" data-id="${entry.id}">${escapeHtml(t("btnConfirmDelete"))}</button>
+          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">${escapeHtml(t("btnCancel"))}</button>
         </div>
       </div>
       ${
@@ -653,19 +714,19 @@ function renderGuestbookEntryHtml(entry: GuestbookEntry, isReply: boolean): stri
           ? ""
           : member
             ? `<div class="guestbook-inline-form" data-mode="reply" data-id="${entry.id}" hidden>
-        <input type="text" class="guestbook-reply-message" placeholder="답글을 남겨주세요" maxlength="80" />
+        <input type="text" class="guestbook-reply-message" placeholder="${escapeHtml(t("guestbookReplyPlaceholder"))}" maxlength="80" />
         <div class="guestbook-inline-actions">
-          <button type="button" class="guestbook-confirm-btn" data-action="submit-reply" data-id="${entry.id}">등록</button>
-          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
+          <button type="button" class="guestbook-confirm-btn" data-action="submit-reply" data-id="${entry.id}">${escapeHtml(t("btnRegister"))}</button>
+          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">${escapeHtml(t("btnCancel"))}</button>
         </div>
       </div>`
             : `<div class="guestbook-inline-form" data-mode="reply" data-id="${entry.id}" hidden>
-        <input type="text" class="guestbook-reply-name" placeholder="이름" maxlength="12" />
-        <input type="text" class="guestbook-reply-message" placeholder="답글을 남겨주세요" maxlength="80" />
-        <input type="password" class="guestbook-reply-password" placeholder="비밀번호 (수정/삭제용)" maxlength="20" />
+        <input type="text" class="guestbook-reply-name" placeholder="${escapeHtml(t("namePlaceholder"))}" maxlength="12" />
+        <input type="text" class="guestbook-reply-message" placeholder="${escapeHtml(t("guestbookReplyPlaceholder"))}" maxlength="80" />
+        <input type="password" class="guestbook-reply-password" placeholder="${escapeHtml(t("guestbookReplyPasswordPlaceholder"))}" maxlength="20" />
         <div class="guestbook-inline-actions">
-          <button type="button" class="guestbook-confirm-btn" data-action="submit-reply" data-id="${entry.id}">등록</button>
-          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">취소</button>
+          <button type="button" class="guestbook-confirm-btn" data-action="submit-reply" data-id="${entry.id}">${escapeHtml(t("btnRegister"))}</button>
+          <button type="button" class="guestbook-cancel-btn" data-action="cancel" data-id="${entry.id}">${escapeHtml(t("btnCancel"))}</button>
         </div>
       </div>`
       }
@@ -680,7 +741,7 @@ async function renderGuestbook(entries?: GuestbookEntry[]): Promise<void> {
   selectedGuestbookIds.clear();
   guestbookAdminDeleteButton.hidden = !adminPassword;
   if (entries.length === 0) {
-    guestbookList.innerHTML = `<p id="guestbook-empty">아직 방명록이 없습니다 — 첫 글을 남겨보세요!</p>`;
+    guestbookList.innerHTML = `<p id="guestbook-empty">${t("guestbookEmptyMsg")}</p>`;
     return;
   }
 
@@ -723,6 +784,9 @@ async function renderGuestbook(entries?: GuestbookEntry[]): Promise<void> {
     }
   }
 }
+onLangChange(() => {
+  if (guestbookOverlay.style.display !== "none") void renderGuestbook();
+});
 
 function hideAllGuestbookForms(): void {
   guestbookList.querySelectorAll<HTMLDivElement>(".guestbook-inline-form").forEach((form) => {
@@ -817,7 +881,7 @@ guestbookList.addEventListener("click", (event) => {
     // No password field at all means this entry belongs to the logged-in member — ownership is
     // already proven by being logged in, so there's nothing to alert about here.
     if (passwordInput && !passwordInput.value) {
-      window.alert("비밀번호가 일치하여야 수정이 가능합니다.");
+      window.alert(t("guestbookSaveNoPwAlert"));
       return;
     }
 
@@ -827,7 +891,7 @@ guestbookList.addEventListener("click", (event) => {
     if (!attachmentValidation.valid) return;
     const attachmentType = attachmentValidation.type;
 
-    void withButtonLoading(button, "저장 중...", () =>
+    void withButtonLoading(button, t("membershipProfileLoadingText"), () =>
       (file ? readFileAsDataUrl(file) : Promise.resolve(null))
         .then((attachmentData) =>
           passwordInput
@@ -835,24 +899,24 @@ guestbookList.addEventListener("click", (event) => {
             : editGuestbookEntry(id, message, null, attachmentData, attachmentType, member!.name, memberPassword!),
         )
         .then((entries) => {
-          showToast("수정이 완료되었습니다.");
+          showToast(t("toastUpdated"));
           return renderGuestbook(entries);
         })
         .catch((err) => {
           if (err instanceof WrongPasswordError) {
-            errorEl.textContent = "비밀번호가 일치하지 않습니다";
+            errorEl.textContent = t("pwMismatchError");
             errorEl.hidden = false;
           } else if (err instanceof NoPasswordSetError) {
-            errorEl.textContent = "비밀번호 없이 등록된 글은 수정할 수 없습니다";
+            errorEl.textContent = t("guestbookErrorNoPwEdit");
             errorEl.hidden = false;
           } else if (err instanceof WrongMemberPasswordError || err instanceof GuestbookNotOwnerError) {
-            errorEl.textContent = "회원 인증이 만료되었습니다. 다시 로그인해주세요.";
+            errorEl.textContent = t("guestbookErrorMemberExpired");
             errorEl.hidden = false;
             clearMemberSession();
             void renderGuestbook();
           } else {
             console.error("방명록 수정 실패:", err);
-            errorEl.textContent = "처리 중 오류가 발생했습니다. 다시 시도해주세요.";
+            errorEl.textContent = t("genericRetryError");
             errorEl.hidden = false;
           }
         }),
@@ -872,7 +936,7 @@ guestbookList.addEventListener("click", (event) => {
         else markGuestbookHearted(id);
         iconEl.textContent = hearted ? "🤍" : "❤️";
         countEl.textContent = String(newCount);
-        button.title = hearted ? "하트" : "하트 취소";
+        button.title = hearted ? t("guestbookHeartOffTitle") : t("guestbookHeartOnTitle");
         button.classList.toggle("guestbook-hearted", !hearted);
       })
       .catch((err) => console.error("방명록 하트 실패:", err));
@@ -884,27 +948,27 @@ guestbookList.addEventListener("click", (event) => {
     const passwordInput = form.querySelector<HTMLInputElement>(".guestbook-inline-password");
     const errorEl = form.querySelector<HTMLSpanElement>(".guestbook-inline-error")!;
     if (passwordInput && !passwordInput.value) return;
-    void withButtonLoading(button, "삭제 중...", () =>
+    void withButtonLoading(button, t("deletingText"), () =>
       (passwordInput ? deleteGuestbookEntry(id, passwordInput.value) : deleteGuestbookEntry(id, null, member!.name, memberPassword!))
         .then((entries) => {
-          showToast("삭제가 완료되었습니다.");
+          showToast(t("toastDeleted"));
           return renderGuestbook(entries);
         })
         .catch((err) => {
           if (err instanceof WrongPasswordError) {
-            errorEl.textContent = "비밀번호가 일치하지 않습니다";
+            errorEl.textContent = t("pwMismatchError");
             errorEl.hidden = false;
           } else if (err instanceof NoPasswordSetError) {
-            errorEl.textContent = "비밀번호 없이 등록된 글은 삭제할 수 없습니다";
+            errorEl.textContent = t("guestbookErrorNoPwDelete");
             errorEl.hidden = false;
           } else if (err instanceof WrongMemberPasswordError || err instanceof GuestbookNotOwnerError) {
-            errorEl.textContent = "회원 인증이 만료되었습니다. 다시 로그인해주세요.";
+            errorEl.textContent = t("guestbookErrorMemberExpired");
             errorEl.hidden = false;
             clearMemberSession();
             void renderGuestbook();
           } else {
             console.error("방명록 삭제 실패:", err);
-            errorEl.textContent = "처리 중 오류가 발생했습니다. 다시 시도해주세요.";
+            errorEl.textContent = t("genericRetryError");
             errorEl.hidden = false;
           }
         }),
@@ -924,15 +988,15 @@ guestbookList.addEventListener("click", (event) => {
     const password = member ? "" : form.querySelector<HTMLInputElement>(".guestbook-reply-password")!.value;
     if (!name) return;
 
-    void withButtonLoading(button, "등록 중...", () =>
+    void withButtonLoading(button, t("registeringText"), () =>
       addGuestbookEntry({ name, message, password, parentId: id, memberName: member?.name, memberPassword: memberPassword ?? undefined })
         .then((entries) => {
-          showToast("답글이 등록되었습니다.");
+          showToast(t("guestbookReplyToast"));
           return renderGuestbook(entries);
         })
         .catch((err) => {
           console.error("답글 등록 실패:", err);
-          window.alert("답글 등록 중 오류가 발생했습니다. 다시 시도해주세요.");
+          window.alert(t("guestbookReplyAlertError"));
         }),
     );
   }
@@ -955,13 +1019,13 @@ function validateAttachmentFile(file: File | null, errorEl: HTMLSpanElement, all
   if (GUESTBOOK_IMAGE_TYPES.includes(file.type)) type = "image";
   else if (allowVideo && GUESTBOOK_VIDEO_TYPES.includes(file.type)) type = "video";
   else {
-    errorEl.textContent = `지원하지 않는 파일 형식입니다: ${file.name}`;
+    errorEl.textContent = t("guestbookAttachmentUnsupported", { name: file.name });
     errorEl.hidden = false;
     return { valid: false };
   }
   const maxBytes = type === "image" ? GUESTBOOK_IMAGE_MAX_BYTES : GUESTBOOK_VIDEO_MAX_BYTES;
   if (file.size > maxBytes) {
-    errorEl.textContent = `파일이 너무 큽니다 (최대 ${maxBytes / (1024 * 1024)}MB): ${file.name}`;
+    errorEl.textContent = t("guestbookAttachmentTooLarge", { mb: maxBytes / (1024 * 1024), name: file.name });
     errorEl.hidden = false;
     return { valid: false };
   }
@@ -999,7 +1063,7 @@ guestbookForm.addEventListener("submit", (event) => {
       guestbookPasswordInput.value = "";
       guestbookAttachmentInput.value = "";
       guestbookAttachmentFilename.textContent = "";
-      showToast("등록이 완료되었습니다.");
+      showToast(t("guestbookAddToast"));
       return renderGuestbook(entries);
     })
     .catch((err) => console.error("방명록 등록 실패:", err));
@@ -1016,84 +1080,41 @@ guestbookCloseButton.addEventListener("click", () => {
 });
 
 guestbookTitle.style.cursor = "pointer";
-guestbookTitle.title = "맨 위로 이동";
+guestbookTitle.title = t("guestbookScrollTopTitle");
 guestbookTitle.addEventListener("click", () => {
   guestbookScrollBody.scrollTo({ top: 0, behavior: "smooth" });
 });
 
-const INSTALL_GUIDES: Record<"windows" | "macos" | "linux" | "ios" | "android" | "chromeos", { title: string; steps: string[] }> = {
-  windows: {
-    title: "🖥️ Windows에 설치하기",
-    steps: [
-      "크롬(Chrome) 또는 엣지(Edge) 브라우저로 이 사이트에 접속하세요.",
-      "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 '설치'를 찾아 클릭하세요.",
-      "나타나는 창에서 '설치' 버튼을 클릭하세요.",
-      "바탕화면이나 시작 메뉴에 BDJ 아이콘이 생깁니다. 더블클릭하면 브라우저 주소창 없이 바로 게임이 실행됩니다.",
-    ],
-  },
-  macos: {
-    title: "💻 macOS에 설치하기",
-    steps: [
-      "크롬(Chrome) 또는 엣지(Edge) 브라우저로 이 사이트에 접속하세요.",
-      "주소창 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 메뉴에서 '설치'를 찾아 클릭하세요.",
-      "나타나는 창에서 '설치' 버튼을 클릭하세요.",
-      "Dock이나 런치패드에 BDJ 아이콘이 생깁니다. 클릭하면 바로 게임이 실행됩니다.",
-      "참고: 사파리(Safari)를 쓰신다면 macOS Sonoma(14) 이상에서 메뉴바의 '파일' → 'Dock에 추가'로도 설치할 수 있어요.",
-    ],
-  },
-  linux: {
-    title: "🐧 Linux에 설치하기",
-    steps: [
-      "크롬(Chrome) 또는 크로미움(Chromium) 브라우저로 이 사이트에 접속하세요.",
-      "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 '설치'를 찾아 클릭하세요.",
-      "나타나는 창에서 '설치' 버튼을 클릭하세요.",
-      "앱 목록(프로그램 런처)에 BDJ 아이콘이 생깁니다. 클릭하면 브라우저 주소창 없이 바로 게임이 실행됩니다.",
-      "참고: 파이어폭스(Firefox)는 앱 설치 기능이 없으므로 크롬 계열 브라우저를 사용해 주세요.",
-    ],
-  },
-  ios: {
-    title: "📱 iPhone에 설치하기",
-    steps: [
-      "반드시 사파리(Safari) 브라우저로 이 사이트에 접속하세요. 다른 브라우저(크롬 등)에서는 이 기능이 보이지 않습니다.",
-      "화면 하단(또는 상단) 가운데의 공유 버튼(네모 안에 위쪽 화살표, □↑ 모양)을 탭하세요.",
-      "위로 열리는 메뉴를 아래로 스크롤해서 '홈 화면에 추가'를 찾아 탭하세요.",
-      "오른쪽 위의 '추가'를 탭하세요.",
-      "홈 화면에 BDJ 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
-    ],
-  },
-  android: {
-    title: "🤖 Android에 설치하기",
-    steps: [
-      "안드로이드 폰의 크롬(Chrome) 앱으로 이 사이트에 접속하세요.",
-      "화면 오른쪽 위의 점 3개(⋮) 메뉴를 탭하세요.",
-      "메뉴에서 '앱 설치' 또는 '홈 화면에 추가'를 찾아 탭하세요. 화면 하단에 자동으로 설치 안내 배너가 뜨면 그걸 탭해도 됩니다.",
-      "'설치' 버튼을 한 번 더 탭해서 확인하세요.",
-      "홈 화면에 BDJ 아이콘이 생깁니다. 아이콘을 탭하면 바로 게임이 실행됩니다.",
-    ],
-  },
-  chromeos: {
-    title: "🌐 ChromeOS(크롬북)에 설치하기",
-    steps: [
-      "크롬북의 크롬(Chrome) 브라우저로 이 사이트에 접속하세요.",
-      "주소창(맨 위 URL 입력창) 오른쪽 끝의 설치 아이콘(⊕ 모양)을 클릭하세요. 안 보이면 오른쪽 위 점 3개(⋮) 메뉴에서 '설치'를 찾아 클릭하세요.",
-      "나타나는 창에서 '설치' 버튼을 클릭하세요.",
-      "런처(화면 왼쪽 아래 ○ 버튼)에 BDJ 아이콘이 생깁니다. 아이콘을 마우스 오른쪽 클릭해서 '선반에 고정'하면 더 편하게 실행할 수 있어요.",
-    ],
-  },
+const INSTALL_GUIDES: Record<"windows" | "macos" | "linux" | "ios" | "android" | "chromeos", { titleKey: TKey; stepKeys: TKey[] }> = {
+  windows: { titleKey: "installWinTitle", stepKeys: ["installWinStep1", "installWinStep2", "installWinStep3", "installWinStep4"] },
+  macos: { titleKey: "installMacTitle", stepKeys: ["installMacStep1", "installMacStep2", "installMacStep3", "installMacStep4", "installMacStep5"] },
+  linux: { titleKey: "installLinuxTitle", stepKeys: ["installLinuxStep1", "installLinuxStep2", "installLinuxStep3", "installLinuxStep4", "installLinuxStep5"] },
+  ios: { titleKey: "installIosTitle", stepKeys: ["installIosStep1", "installIosStep2", "installIosStep3", "installIosStep4", "installIosStep5"] },
+  android: { titleKey: "installAndroidTitle", stepKeys: ["installAndroidStep1", "installAndroidStep2", "installAndroidStep3", "installAndroidStep4", "installAndroidStep5"] },
+  chromeos: { titleKey: "installChromeosTitle", stepKeys: ["installChromeosStep1", "installChromeosStep2", "installChromeosStep3", "installChromeosStep4"] },
 };
 
+let openInstallGuidePlatform: keyof typeof INSTALL_GUIDES | null = null;
+function renderInstallGuideModal(platform: keyof typeof INSTALL_GUIDES): void {
+  const guide = INSTALL_GUIDES[platform];
+  installGuideModalTitle.textContent = t(guide.titleKey);
+  installGuideModalSteps.innerHTML = guide.stepKeys.map((key) => `<li>${escapeHtml(t(key))}</li>`).join("");
+}
 installGuideCards.forEach((card) => {
   card.addEventListener("click", () => {
     const platform = card.dataset.platform as keyof typeof INSTALL_GUIDES;
-    const guide = INSTALL_GUIDES[platform];
-    installGuideModalTitle.textContent = guide.title;
-    installGuideModalSteps.innerHTML = guide.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("");
+    openInstallGuidePlatform = platform;
+    renderInstallGuideModal(platform);
     installGuideOverlay.style.display = "flex";
   });
+});
+onLangChange(() => {
+  if (openInstallGuidePlatform) renderInstallGuideModal(openInstallGuidePlatform);
 });
 
 installGuideCloseButton.addEventListener("click", () => {
   installGuideOverlay.style.display = "none";
+  openInstallGuidePlatform = null;
 });
 
 function setAdminModeUI(active: boolean): void {
@@ -1540,7 +1561,7 @@ membershipLoginSubmit.addEventListener("click", () => {
   const password = membershipLoginPasswordInput.value;
   membershipLoginError.hidden = true;
   if (!name || !password) return;
-  void withButtonLoading(membershipLoginSubmit, "로그인 중...", () =>
+  void withButtonLoading(membershipLoginSubmit, t("membershipLoginLoadingText"), () =>
     memberLogin(name, password)
       .then((loggedInMember) => {
         member = loggedInMember;
@@ -1553,10 +1574,10 @@ membershipLoginSubmit.addEventListener("click", () => {
       })
       .catch((err) => {
         if (err instanceof WrongMemberPasswordError) {
-          membershipLoginError.textContent = "이름 또는 비밀번호가 일치하지 않습니다";
+          membershipLoginError.textContent = t("membershipLoginErrorMismatch");
         } else {
           console.error("멤버십 로그인 실패:", err);
-          membershipLoginError.textContent = "로그인에 실패했습니다. 잠시 후 다시 시도해주세요.";
+          membershipLoginError.textContent = t("membershipLoginErrorGeneric");
         }
         membershipLoginError.hidden = false;
       }),
@@ -1565,7 +1586,7 @@ membershipLoginSubmit.addEventListener("click", () => {
 
 membershipLogoutButton.addEventListener("click", () => {
   clearMemberSession();
-  showToast("로그아웃되었습니다.");
+  showToast(t("membershipLogoutToast"));
   void renderGuestbook();
   void renderLeaderboard();
 });
@@ -1606,27 +1627,27 @@ membershipSignupSubmit.addEventListener("click", () => {
   membershipSignupError.hidden = true;
 
   if (!name || !password) {
-    membershipSignupError.textContent = "이름과 비밀번호를 입력해주세요.";
+    membershipSignupError.textContent = t("membershipSignupErrorMissing");
     membershipSignupError.hidden = false;
     return;
   }
   // Popups (not the inline error span) per how this was asked for — distinct enough from the rest
   // of this form's validation that a modal interruption is warranted.
   if (!MEMBER_NAME_KOREAN_ONLY_PATTERN.test(name)) {
-    window.alert("이름은 한글로만 입력해주세요.");
+    window.alert(t("membershipSignupErrorNameNotKorean"));
     return;
   }
   if (!MEMBER_PASSWORD_DIGITS_ONLY_PATTERN.test(password)) {
-    window.alert("비밀번호는 숫자로만 입력해주세요.");
+    window.alert(t("membershipSignupErrorPasswordDigitsOnly"));
     return;
   }
   if (password !== passwordConfirm) {
-    membershipSignupError.textContent = "비밀번호가 서로 일치하지 않습니다.";
+    membershipSignupError.textContent = t("membershipSignupErrorPasswordMismatch");
     membershipSignupError.hidden = false;
     return;
   }
   if (!membershipSignupGenderMale.checked && !membershipSignupGenderFemale.checked) {
-    membershipSignupError.textContent = "성별을 선택해주세요.";
+    membershipSignupError.textContent = t("membershipSignupErrorGenderRequired");
     membershipSignupError.hidden = false;
     return;
   }
@@ -1640,7 +1661,7 @@ membershipSignupSubmit.addEventListener("click", () => {
   const phone = membershipSignupPhoneInput.value.trim() || null;
   const email = membershipSignupEmailInput.value.trim() || null;
 
-  void withButtonLoading(membershipSignupSubmit, "가입 처리 중...", () =>
+  void withButtonLoading(membershipSignupSubmit, t("membershipSignupLoadingText"), () =>
     (file ? readFileAsDataUrl(file) : Promise.resolve(null))
       .then((photoData) => memberSignup({ name, password, photoData, gender, birthdate, phone, email }))
       .then((newMember) => {
@@ -1654,10 +1675,10 @@ membershipSignupSubmit.addEventListener("click", () => {
       })
       .catch((err) => {
         if (err instanceof NameTakenError) {
-          membershipSignupError.textContent = "이미 사용 중인 이름입니다. 다른 이름을 입력해주세요.";
+          membershipSignupError.textContent = t("membershipSignupErrorNameTaken");
         } else {
           console.error("멤버십 가입 실패:", err);
-          membershipSignupError.textContent = "가입에 실패했습니다. 잠시 후 다시 시도해주세요.";
+          membershipSignupError.textContent = t("membershipSignupErrorGeneric");
         }
         membershipSignupError.hidden = false;
       }),
@@ -1667,7 +1688,7 @@ membershipSignupSubmit.addEventListener("click", () => {
 membershipAvatar.addEventListener("click", () => {
   if (!member || !member.photoData) return;
   photoLightboxImage.src = member.photoData;
-  photoLightboxImage.alt = `${member.name} 프로필 사진`;
+  photoLightboxImage.alt = t("photoLightboxProfileAlt", { name: member.name });
   photoLightboxOverlay.style.display = "flex";
 });
 
@@ -1705,12 +1726,12 @@ membershipProfileSubmit.addEventListener("click", () => {
   membershipProfileError.hidden = true;
 
   if (!password) {
-    membershipProfileError.textContent = "비밀번호를 입력해주세요.";
+    membershipProfileError.textContent = t("membershipProfileErrorPwRequired");
     membershipProfileError.hidden = false;
     return;
   }
   if (!membershipProfileGenderMale.checked && !membershipProfileGenderFemale.checked) {
-    membershipProfileError.textContent = "성별을 선택해주세요.";
+    membershipProfileError.textContent = t("membershipSignupErrorGenderRequired");
     membershipProfileError.hidden = false;
     return;
   }
@@ -1719,7 +1740,7 @@ membershipProfileSubmit.addEventListener("click", () => {
   // confirm field — a typo here is low-stakes (just edit the profile again), and dropping it
   // removes exactly the "do all 3 password fields need the same value?" confusion this caused.
   if (newPassword && !MEMBER_PASSWORD_DIGITS_ONLY_PATTERN.test(newPassword)) {
-    window.alert("새 비밀번호는 숫자로만 입력해주세요.");
+    window.alert(t("membershipProfileErrorNewPwDigitsOnly"));
     return;
   }
 
@@ -1735,7 +1756,7 @@ membershipProfileSubmit.addEventListener("click", () => {
   // one, otherwise the same current password used to authorize this save.
   const effectivePassword = newPassword || password;
 
-  void withButtonLoading(membershipProfileSubmit, "저장 중...", () =>
+  void withButtonLoading(membershipProfileSubmit, t("membershipProfileLoadingText"), () =>
     (file ? readFileAsDataUrl(file) : Promise.resolve(null))
       .then((photoData) => updateMemberProfile(currentName, password, { gender, birthdate, phone, email, photoData, newPassword: newPassword || null }))
       .then((updatedMember) => {
@@ -1755,13 +1776,13 @@ membershipProfileSubmit.addEventListener("click", () => {
       })
       .catch((err) => {
         if (err instanceof WrongMemberPasswordError) {
-          membershipProfileError.textContent = "비밀번호가 일치하지 않습니다.";
+          membershipProfileError.textContent = t("membershipProfileErrorPwMismatch");
           membershipProfileError.hidden = false;
         } else {
           console.error("내 정보 수정 실패:", err);
           // Include the underlying message — a bare "실패했습니다" hides exactly the detail needed to
           // tell a missing DB function apart from a network blip when the user reports it.
-          membershipProfileError.textContent = `수정에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
+          membershipProfileError.textContent = t("membershipProfileErrorSaveFailed", { msg: err instanceof Error ? err.message : String(err) });
           membershipProfileError.hidden = false;
         }
       }),
@@ -1777,28 +1798,28 @@ membershipProfileWithdrawButton.addEventListener("click", () => {
   membershipProfileError.hidden = true;
 
   if (!password) {
-    membershipProfileError.textContent = "비밀번호를 입력해주세요.";
+    membershipProfileError.textContent = t("membershipProfileErrorPwRequired");
     membershipProfileError.hidden = false;
     return;
   }
-  if (!window.confirm("정말 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return;
+  if (!window.confirm(t("membershipProfileWithdrawConfirm"))) return;
 
   const currentName = member.name;
   void withdrawMember(currentName, password)
     .then(() => {
       clearMemberSession();
       membershipProfileOverlay.style.display = "none";
-      showToast("탈퇴가 완료되었습니다.");
+      showToast(t("membershipWithdrawToast"));
       void renderGuestbook();
       void renderLeaderboard();
     })
     .catch((err) => {
       if (err instanceof WrongMemberPasswordError) {
-        membershipProfileError.textContent = "비밀번호가 일치하지 않습니다.";
+        membershipProfileError.textContent = t("membershipProfileErrorPwMismatch");
         membershipProfileError.hidden = false;
       } else {
         console.error("회원 탈퇴 실패:", err);
-        membershipProfileError.textContent = `탈퇴에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
+        membershipProfileError.textContent = t("membershipWithdrawErrorTemplate", { msg: err instanceof Error ? err.message : String(err) });
         membershipProfileError.hidden = false;
       }
     });
@@ -1810,7 +1831,7 @@ membershipProfileWithdrawButton.addEventListener("click", () => {
  *  re-renders. onlineIds is a snapshot of getOnlineMemberIds() taken once per renderMembersDirectory()
  *  call — same one-shot-per-open pattern as the roster fetch itself, not a live-updating subscription. */
 function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, signupOrder: number, onlineIds: Set<number>): string {
-  const genderLabel = entry.gender === "male" ? "남" : entry.gender === "female" ? "여" : "-";
+  const genderLabel = entry.gender === "male" ? t("genderMaleLabel") : entry.gender === "female" ? t("genderFemaleLabel") : "-";
   const isOnline = onlineIds.has(entry.id);
   // Chat only ever makes sense against another online member — clicking your own row, or anyone
   // offline, does nothing (no trigger class/attributes at all in that case).
@@ -1827,7 +1848,7 @@ function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, signupOrde
       <td>${entry.phone ? escapeHtml(entry.phone) : "-"}</td>
       <td>${entry.email ? escapeHtml(entry.email) : "-"}</td>
       <td>${formatLocalDate(entry.dateIso)}</td>
-      <td class="members-directory-online${isOnline ? " is-online" : ""}${chatClass}"${chatAttrs}>${isOnline ? "🟢 접속중" : "⚪ -"}</td>
+      <td class="members-directory-online${isOnline ? " is-online" : ""}${chatClass}"${chatAttrs}>${isOnline ? t("crewsOnlineNow") : t("crewsOfflineNow")}</td>
     </tr>`;
 }
 
@@ -1866,20 +1887,20 @@ async function renderMembersDirectory(): Promise<void> {
   // first so a guest sees an explanatory message instead of a request that's just going to be
   // rejected server-side anyway (list_members() also enforces this — see its own comment).
   if (!member || !memberPassword) {
-    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">로그인한 회원만 볼 수 있습니다.</td></tr>`;
+    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoginRequiredRow")}</td></tr>`;
     return;
   }
 
   // The roster fetch (photos included) can take a real moment — without this, the popup just sat
   // there unchanged until it landed, indistinguishable from the click not having registered.
-  membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">불러오는 중...</td></tr>`;
+  membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoadingRow")}</td></tr>`;
 
   let members: MemberDirectoryEntry[];
   try {
     members = await loadMembers(member.name, memberPassword);
   } catch (err) {
     if (err instanceof WrongMemberPasswordError) {
-      membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">회원 인증이 만료되었습니다. 다시 로그인해주세요.</td></tr>`;
+      membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("guestbookErrorMemberExpired")}</td></tr>`;
       clearMemberSession();
       return;
     }
@@ -1887,11 +1908,11 @@ async function renderMembersDirectory(): Promise<void> {
     // would hide a real problem (most likely the members_public/list_members migration not having
     // been run yet).
     console.error("회원 명부 조회 실패:", err);
-    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">명부를 불러오지 못했습니다.</td></tr>`;
+    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoadFailedRow")}</td></tr>`;
     return;
   }
   if (members.length === 0) {
-    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">아직 가입한 회원이 없습니다.</td></tr>`;
+    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsEmptyRow")}</td></tr>`;
     return;
   }
   const onlineIds = getOnlineMemberIds();
@@ -1909,6 +1930,9 @@ async function renderMembersDirectory(): Promise<void> {
     if (avatar) avatar.style.backgroundImage = `url(${entry.photoData})`;
   }
 }
+onLangChange(() => {
+  if (membersDirectoryOverlay.style.display !== "none") void renderMembersDirectory();
+});
 
 membersDirectoryOpenCard.addEventListener("click", () => {
   membersDirectoryOverlay.style.display = "flex";
@@ -1916,7 +1940,7 @@ membersDirectoryOpenCard.addEventListener("click", () => {
 });
 
 membersDirectoryRefreshButton.addEventListener("click", () => {
-  void withButtonLoading(membersDirectoryRefreshButton, "🔄 새로고침 중...", renderMembersDirectory);
+  void withButtonLoading(membersDirectoryRefreshButton, t("crewsRefreshingText"), renderMembersDirectory);
 });
 
 membersDirectoryCloseButton.addEventListener("click", () => {
@@ -1934,7 +1958,7 @@ function formatMessageTime(dateIso: string): string {
 
 function renderDirectChatMessages(messages: DirectMessage[]): void {
   if (messages.length === 0) {
-    directChatMessages.innerHTML = `<p id="direct-chat-empty">아직 대화가 없습니다. 첫 메시지를 보내보세요!</p>`;
+    directChatMessages.innerHTML = `<p id="direct-chat-empty">${t("directChatEmptyMsg")}</p>`;
     return;
   }
   directChatMessages.innerHTML = messages
@@ -1952,9 +1976,9 @@ async function openDirectChat(partnerId: number, partnerName: string): Promise<v
   if (!member || !memberPassword) return;
   activeChatPartnerId = partnerId;
   activeChatPartnerName = partnerName;
-  directChatTitle.textContent = `${partnerName}님과의 대화`;
+  directChatTitle.textContent = t("directChatTitleTemplate", { name: partnerName });
   directChatOverlay.style.display = "flex";
-  directChatMessages.innerHTML = `<p id="direct-chat-empty">불러오는 중...</p>`;
+  directChatMessages.innerHTML = `<p id="direct-chat-empty">${t("crewsLoadingRow")}</p>`;
   try {
     const messages = await loadDirectMessages(member.name, memberPassword, partnerId);
     // The panel may have been switched to a different partner while this was in flight.
@@ -1962,10 +1986,15 @@ async function openDirectChat(partnerId: number, partnerName: string): Promise<v
   } catch (err) {
     console.error("대화 불러오기 실패:", err);
     if (activeChatPartnerId === partnerId) {
-      directChatMessages.innerHTML = `<p id="direct-chat-empty">대화를 불러오지 못했습니다.</p>`;
+      directChatMessages.innerHTML = `<p id="direct-chat-empty">${t("directChatLoadFailedMsg")}</p>`;
     }
   }
 }
+onLangChange(() => {
+  if (directChatOverlay.style.display !== "none" && activeChatPartnerId != null && activeChatPartnerName) {
+    directChatTitle.textContent = t("directChatTitleTemplate", { name: activeChatPartnerName });
+  }
+});
 
 membersDirectoryList.addEventListener("click", (event) => {
   const target = (event.target as HTMLElement).closest<HTMLElement>("[data-chat-member-id]");
@@ -1986,7 +2015,7 @@ function sendActiveDirectChatMessage(): void {
   if (!text || !member || !memberPassword || activeChatPartnerId == null || !activeChatPartnerName) return;
   const partnerId = activeChatPartnerId;
   directChatInput.value = "";
-  void withButtonLoading(directChatSendButton, "전송 중...", () =>
+  void withButtonLoading(directChatSendButton, t("directChatSendingText"), () =>
     sendDirectMessage(member!.name, memberPassword!, partnerId, text)
       .then(() => {
         notifyNewMessage(partnerId, member!.id, member!.name);
@@ -1996,7 +2025,7 @@ function sendActiveDirectChatMessage(): void {
       })
       .catch((err) => {
         console.error("메시지 전송 실패:", err);
-        window.alert("메시지 전송에 실패했습니다.");
+        window.alert(t("directChatSendFailedAlert"));
       }),
   );
 }
@@ -2549,9 +2578,12 @@ let chatbotAdminMode: ChatbotMode = "gemini";
 /** Shown in the panel header so it's visible which brain is answering: Gemini normally, the fixed
  *  FQA when the admin pinned that mode or when the free-tier quota is exhausted (or no key is
  *  configured). Tracks what actually happened on the most recent message. */
+let chatbotLastAnswerWasAi = false;
 function setChatbotModeLabel(aiMode: boolean): void {
-  chatbotMode.textContent = aiMode ? "AI Gemini 모드" : "Local FQA 모드";
+  chatbotLastAnswerWasAi = aiMode;
+  chatbotMode.textContent = aiMode ? t("chatbotModeGemini") : t("chatbotModeFaq");
 }
+onLangChange(() => setChatbotModeLabel(chatbotLastAnswerWasAi));
 
 function chatbotAiModeActive(): boolean {
   return chatbotAdminMode === "gemini" && isGeminiConfigured;
@@ -2573,7 +2605,7 @@ function appendChatbotMessage(text: string, role: "user" | "model"): void {
 function answerFromFaq(question: string): void {
   setChatbotModeLabel(false);
   const faqAnswer = matchFaq(question);
-  appendChatbotMessage(faqAnswer ?? "죄송해요, 그 질문은 아직 답해드리기 어려워요. 다른 방식으로 물어봐 주시겠어요?", "model");
+  appendChatbotMessage(faqAnswer ?? t("chatbotFaqFallback"), "model");
 }
 
 /** Gemini first (free tier) unless the admin pinned FQA mode; on any Gemini failure — quota hit,
@@ -2591,7 +2623,7 @@ async function sendChatbotMessage(): Promise<void> {
       answerFromFaq(question);
       return;
     }
-    const answer = await askGemini(chatbotHistory, question);
+    const answer = await askGemini(chatbotHistory, question, getLang());
     chatbotHistory.push({ role: "user", text: question }, { role: "model", text: answer });
     setChatbotModeLabel(true);
     appendChatbotMessage(answer, "model");
@@ -2635,7 +2667,7 @@ pwaRefreshButton.addEventListener("click", () => {
 });
 const exitFallbackOverlay = document.querySelector<HTMLDivElement>("#exit-fallback-overlay")!;
 exitSiteButton.addEventListener("click", () => {
-  if (!window.confirm("게임을 종료하고 사이트를 나가시겠습니까?")) return;
+  if (!window.confirm(t("exitConfirmMsg"))) return;
   // `open("", "_self")` re-targets this window as "opened by script" first — several Android
   // WebView/Chrome builds only allow a page to window.close() itself when that's true, and
   // otherwise silently no-op it (this is why it worked on PC — a desktop PWA's window already
@@ -2796,12 +2828,12 @@ function capturePhoto(videoEl: HTMLVideoElement, score: number): string {
  *  most players never noticed which rank they'd hit, or had time to pose, before the photo fired. */
 function runPhotoCountdown(videoEl: HTMLVideoElement, rank: number, score: number): Promise<string> {
   return new Promise((resolve) => {
-    photoCountdownDescEl.textContent = `${rank}위 입성을 축하합니다! 기념촬영을 하겠습니다.`;
+    photoCountdownDescEl.textContent = t("photoCountdownRankTemplate", { rank });
     photoCountdownNumberEl.textContent = "";
     photoCountdownOverlay.style.display = "flex";
 
     setTimeout(() => {
-      photoCountdownDescEl.textContent = "DJ의 자세를 잡아주세요";
+      photoCountdownDescEl.textContent = t("photoCountdownPoseMsg");
 
       setTimeout(() => {
         let count = 5;
@@ -2946,10 +2978,10 @@ function playStep(
 
       stopButton.onclick = () => {
         stopped = true;
-        abortWithMessage("종료됨");
+        abortWithMessage(t("hudStoppedMsg"));
       };
 
-      hud.textContent = songFile ? `STEP ${stepNumber} 로딩 중... (음원 분석해서 채보 생성)` : `STEP ${stepNumber} 로딩 중...`;
+      hud.textContent = songFile ? t("hudStepLoadingChartTemplate", { n: stepNumber }) : t("hudStepLoadingTemplate", { n: stepNumber });
 
       const loadChart = songFile
         ? buildChartFromFile(audioCtx, songFile, density).then((built) => {
@@ -2966,7 +2998,7 @@ function playStep(
         chart = await loadChart;
       } catch (err) {
         console.error("채보 생성 실패:", err);
-        abortWithMessage(`음원 처리 실패: ${(err as Error).message}`);
+        abortWithMessage(t("hudChartFailedTemplate", { msg: (err as Error).message }));
         return;
       }
       if (stopped) return; // stop button hit while the chart was still loading
@@ -3024,7 +3056,7 @@ function playStep(
           // Surfaced directly in the HUD (not just console.error) because a phone has no devtools —
           // this is the only way to see what actually failed on a device we can't remote-debug.
           lastDetectError = (err as Error).message;
-          hud.textContent = `손 인식 오류 (프레임 ${framesSeen}): ${lastDetectError}`;
+          hud.textContent = t("hudDetectErrorTemplate", { n: framesSeen, msg: lastDetectError });
           return;
         }
         latestHands = result.hands;
@@ -3060,7 +3092,7 @@ function playStep(
         const scratchStatus = scratchDetector.isEngaged()
           ? `engaged (${scratchEvent?.direction ?? "none"}, ${(scratchEvent?.scratchVelocityPerSec ?? 0).toFixed(1)}/s)`
           : "idle";
-        hud.textContent = `STEP: ${stepNumber}\nDelegate: ${delegate}\nFPS: ${fps}\n프레임 수신: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n감지된 손: ${result.hands.length}\n누름 횟수: ${pressCount}\n스크래치: ${scratchStatus}\nAudioCtx: ${audioCtx.state}`;
+        hud.textContent = `STEP: ${stepNumber}\nDelegate: ${delegate}\nFPS: ${fps}\n${t("hudDebugFramesLabel")}: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n${t("hudDebugHandsLabel")}: ${result.hands.length}\n${t("hudDebugPressesLabel")}: ${pressCount}\n${t("hudDebugScratchLabel")}: ${scratchStatus}\nAudioCtx: ${audioCtx.state}`;
       });
 
       // iOS Safari can leave the AudioContext "suspended" right before a step starts — re-resuming
@@ -3138,11 +3170,11 @@ function showStepResults(
   canContinue: boolean,
 ): Promise<"continue" | "end"> {
   return new Promise((resolve) => {
-    resultsStepLabelEl.textContent = `STEP ${stepNumber} 완료`;
+    resultsStepLabelEl.textContent = t("resultsStepCompleteTemplate", { n: stepNumber });
     resultsScoreEl.textContent = String(cumulativeScore);
-    resultsBreakdownEl.textContent = `이번 STEP 점수 ${stepScore}  ·  Excellent ${counts.Excellent}   Great ${counts.Great}   Good ${counts.Good}   Bad ${counts.Bad}`;
+    resultsBreakdownEl.textContent = `${t("resultsBreakdownLabel")} ${stepScore}  ·  Excellent ${counts.Excellent}   Great ${counts.Great}   Good ${counts.Good}   Bad ${counts.Bad}`;
     resultsNextStepButton.style.display = canContinue ? "inline-block" : "none";
-    resultsConfirmButton.textContent = canContinue ? "종료하고 순위 확인" : "확인";
+    resultsConfirmButton.textContent = canContinue ? t("resultsConfirmBtnContinue") : t("resultsConfirmBtnFinal");
     resultsOverlay.style.display = "flex";
 
     resultsNextStepButton.onclick = () => {
@@ -3161,7 +3193,7 @@ function showStepResults(
  *  increase — enforced live via disabled <option>s and a validity check gating the start button. */
 function showStepSetup(stepNumber: number, prevSettings: StepSettings): Promise<StepSettings> {
   return new Promise((resolve) => {
-    stepSetupNumberEl.textContent = String(stepNumber);
+    stepSetupTitleEl.textContent = t("stepSetupTitleTemplate", { n: stepNumber });
     stepSelectedSongFile = null;
     stepSongFileInput.value = "";
     stepBgmModeDefaultRadio.checked = true;
@@ -3208,7 +3240,7 @@ function showStepSetup(stepNumber: number, prevSettings: StepSettings): Promise<
         })
         .catch((err) => {
           stepStartButton.disabled = false;
-          hud.textContent = `음원 로드 실패: ${(err as Error).message}`;
+          hud.textContent = t("hudAudioLoadFailedTemplate", { msg: (err as Error).message });
         });
     };
   });
@@ -3288,13 +3320,13 @@ async function runSession(
   initialSettings: StepSettings,
   enableCalibration: boolean,
 ): Promise<void> {
-  hud.textContent = "카메라 권한을 요청하는 중...";
+  hud.textContent = t("hudCameraPermission");
 
   const camera = new CameraManager(video);
   try {
     await camera.start();
   } catch (err) {
-    hud.textContent = `카메라 접근 실패: ${(err as Error).message}`;
+    hud.textContent = t("hudCameraFailedTemplate", { msg: (err as Error).message });
     startOverlay.style.removeProperty("display");
     return;
   }
@@ -3335,7 +3367,7 @@ async function runSession(
   const delegate: "GPU" | "CPU" =
     delegateOverride === "CPU" || delegateOverride === "GPU" ? delegateOverride : isSafari ? "CPU" : "GPU";
 
-  hud.textContent = `리소스 로딩 중... (손 인식: ${delegate})`;
+  hud.textContent = t("hudResourceLoadingTemplate", { delegate });
   const handTracker = new HandLandmarkerService();
   // Own try/catch (rather than letting this reject up into the caller's single catch-all) so a hand-
   // tracker/GPU-delegate init failure surfaces as what it actually is instead of being mislabeled as
@@ -3343,7 +3375,7 @@ async function runSession(
   try {
     await Promise.all([handTracker.initialize({ delegate }), sfxEngine.loadScratchSample("/audio/Hiphop_Deejaying.mp3")]);
   } catch (err) {
-    hud.textContent = `리소스 로딩 실패: ${(err as Error).message}`;
+    hud.textContent = t("hudResourceFailedTemplate", { msg: (err as Error).message });
     startOverlay.style.removeProperty("display");
     return;
   }
@@ -3393,7 +3425,7 @@ async function runSession(
       sfxEngine.dispose();
       void audioCtx.close();
       if (!member) {
-        window.alert("Guest 신분으로는 STEP 2로 넘어갈 수 없습니다.\n-Beejay-");
+        window.alert(t("guestStepLimitAlert"));
       }
       await finalizeSession(cumulativeScore, settings, camera, step);
       return;
@@ -3422,7 +3454,7 @@ startButton.addEventListener("click", () => {
       runSession(sfxEngine, audioCtx, buildStepSettings(speedKey, difficultyKey, resolved.songFile, resolved.defaultTrack), enableCalibration),
     )
     .catch((err) => {
-      hud.textContent = `음원 로드 실패: ${(err as Error).message}`;
+      hud.textContent = t("hudAudioLoadFailedTemplate", { msg: (err as Error).message });
       startOverlay.style.removeProperty("display");
     });
 });

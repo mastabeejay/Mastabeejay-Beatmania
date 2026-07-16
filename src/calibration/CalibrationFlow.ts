@@ -3,6 +3,7 @@ import type { CameraManager } from "../camera/CameraManager";
 import { GestureDetector } from "../handTracking/GestureDetector";
 import type { HandLandmarkerService } from "../handTracking/HandLandmarkerService";
 import type { KeyZone } from "../handTracking/ZoneLayout";
+import { t } from "../i18n";
 import { FingerCalibrator } from "./FingerCalibrator";
 
 const REST_PHASE_MS = 2000;
@@ -18,7 +19,7 @@ function runRestPhase(camera: CameraManager, handTracker: HandLandmarkerService,
       calibrator.addRestSample(result.hands);
 
       const remainingSec = Math.max(0, Math.ceil((deadline - performance.now()) / 1000));
-      onStatus(`왼손 5손가락을 편하게 펴서 보여주세요... ${remainingSec}`);
+      onStatus(t("calibrationRestPromptTemplate", { sec: remainingSec }));
 
       if (performance.now() >= deadline) resolve();
     });
@@ -39,7 +40,7 @@ function runPressPrompt(
   return new Promise((resolve) => {
     const deadline = performance.now() + PRESS_PROMPT_TIMEOUT_MS;
     let settled = false;
-    onStatus(`${round + 1}/${PRESS_ROUNDS} 라운드 — ${lane + 1}번 건반을 누르세요!`);
+    onStatus(t("calibrationPressPromptTemplate", { round: round + 1, total: PRESS_ROUNDS, lane: lane + 1 }));
 
     camera.onFrame((videoEl, metadata) => {
       if (settled) return;
@@ -77,6 +78,6 @@ export async function runFingerCalibration(
     }
   }
 
-  onStatus("보정 완료!");
+  onStatus(t("calibrationDoneMsg"));
   return calibrator.computeZones();
 }

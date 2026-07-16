@@ -1911,6 +1911,38 @@ body::before {
   letter-spacing: 0.05em;
 }
 
+/* Flag row rendered from LANGUAGES (main.ts) — sits directly below the tagline/P2B row, per the
+   site owner's placement request. Default (Korean) is visually marked active on load. */
+#language-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lang-flag-btn {
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(6, 10, 18, 0.5);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.lang-flag-btn:hover {
+  background: rgba(0, 240, 255, 0.16);
+  transform: scale(1.08);
+}
+
+.lang-flag-btn.active {
+  border-color: rgba(0, 240, 255, 0.7);
+  background: rgba(0, 240, 255, 0.22);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.45);
+}
+
 #p2b-badge {
   width: 128px;
   height: auto;

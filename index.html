@@ -47,35 +47,35 @@
       <div id="game-title" class="text-metallic">Beejay's Deejay Jackey</div>
       <div id="footer-row">
         <div id="game-subtitle">Produced by Beejay (Yim Bongjin) in 2026</div>
-        <button id="admin-login-link" type="button">🔐 관리자</button>
-        <button id="admin-logout-button" type="button" hidden>🔓 관리자 모드 (로그아웃)</button>
-        <button id="admin-panel-open-button" type="button" hidden>⚙️ 관리자 패널</button>
+        <button id="admin-login-link" type="button" data-i18n="adminLoginBtn">🔐 관리자</button>
+        <button id="admin-logout-button" type="button" hidden data-i18n="adminLogoutBtn">🔓 관리자 모드 (로그아웃)</button>
+        <button id="admin-panel-open-button" type="button" hidden data-i18n="adminPanelOpenBtn">⚙️ 관리자 패널</button>
       </div>
-      <button id="stop-button" type="button">⏹ 종료</button>
+      <button id="stop-button" type="button" data-i18n="stopBtnLabel">⏹ 종료</button>
       <div id="calibration-status"></div>
       <div id="start-overlay">
         <div id="top-status-row">
-          <button id="chatbot-toggle-button" type="button" aria-label="제이봇 열기">
+          <button id="chatbot-toggle-button" type="button" aria-label="제이봇 열기" data-i18n-title="jaybotOpenAriaLabel">
             <span id="chatbot-toggle-main">
               <img id="chatbot-toggle-icon" src="/icons/jaybot.png" alt="" />
               <span id="chatbot-toggle-label">Jaybot</span>
             </span>
-            <span id="chatbot-toggle-tagline">BDJ에 대한 궁금증은<br />저 Jaybot에게 물어봐 주세요.</span>
+            <span id="chatbot-toggle-tagline" data-i18n-html="jaybotTagline">BDJ에 대한 궁금증은<br />저 Jaybot에게 물어봐 주세요.</span>
           </button>
           <div id="membership-row">
             <div id="membership-main">
-              <div id="membership-avatar" title="사진 크게 보기"></div>
-              <span id="membership-name-label" title="내 가입정보 보기/수정">Guest</span>
+              <div id="membership-avatar" data-i18n-title="membershipPhotoTitle" title="사진 크게 보기"></div>
+              <span id="membership-name-label" data-i18n-title="membershipNameTitle" title="내 가입정보 보기/수정">Guest</span>
             </div>
             <div id="membership-auth-actions">
-              <button id="membership-login-button" type="button">Log in</button>
-              <button id="membership-signup-button" type="button">Join Crew</button>
+              <button id="membership-login-button" type="button" data-i18n="membershipLoginBtn">Log in</button>
+              <button id="membership-signup-button" type="button" data-i18n="membershipJoinBtn">Join Crew</button>
             </div>
-            <button id="membership-logout-button" type="button" hidden>로그아웃</button>
+            <button id="membership-logout-button" type="button" hidden data-i18n="membershipLogoutBtn">로그아웃</button>
           </div>
         </div>
-        <button id="pwa-refresh-button" type="button" title="새로고침">🔄 새로고침</button>
-        <button id="exit-site-button" type="button" title="종료">🚪 종료</button>
+        <button id="pwa-refresh-button" type="button" title="새로고침" data-i18n="pwaRefreshBtn" data-i18n-title="pwaRefreshTitleAttr">🔄 새로고침</button>
+        <button id="exit-site-button" type="button" title="종료" data-i18n="exitSiteBtn" data-i18n-title="exitSiteTitleAttr">🚪 종료</button>
         <div id="social-links-container"></div>
         <div id="beejay-bros-panel">
           <div id="beejay-bros-panel-inner">
@@ -107,24 +107,25 @@
               <text x="55" y="27" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="14" fill="#4a2f00">P2B 2.51</text>
             </svg>
           </div>
+          <div id="language-select-row" role="radiogroup" aria-label="Language"></div>
         </div>
         <div id="leaderboard-section">
-          <div id="leaderboard-title" class="text-metallic-gold">BEST 20 RECORD</div>
+          <div id="leaderboard-title" class="text-metallic-gold" data-i18n="leaderboardTitle">BEST 20 RECORD</div>
           <button id="leaderboard-admin-delete-button" type="button" hidden>🗑️ 선택 삭제</button>
           <div id="leaderboard-panel">
             <table id="leaderboard-table">
               <thead>
                 <tr>
-                  <th>순위</th>
-                  <th>이름</th>
-                  <th>사진</th>
-                  <th>메세지</th>
-                  <th>점수</th>
-                  <th>속도</th>
-                  <th>난이도</th>
+                  <th data-i18n="lbHeaderRank">순위</th>
+                  <th data-i18n="lbHeaderName">이름</th>
+                  <th data-i18n="lbHeaderPhoto">사진</th>
+                  <th data-i18n="lbHeaderMessage">메세지</th>
+                  <th data-i18n="lbHeaderScore">점수</th>
+                  <th data-i18n="lbHeaderSpeed">속도</th>
+                  <th data-i18n="lbHeaderDifficulty">난이도</th>
                   <th>Step</th>
                   <th>BGM</th>
-                  <th>기록일</th>
+                  <th data-i18n="lbHeaderDate">기록일</th>
                 </tr>
               </thead>
               <tbody id="leaderboard-body"></tbody>
@@ -133,86 +134,86 @@
         </div>
         <div id="main-controls-row">
           <div class="control-group" id="track-group">
-            <div class="control-group-title">Track</div>
+            <div class="control-group-title" data-i18n="trackGroupTitle">Track</div>
             <div class="control-group-body">
               <div id="bgm-mode-select" class="bgm-mode-select">
                 <label>
                   <input type="radio" name="bgm-mode" id="bgm-mode-test" value="test" />
-                  <span>무반주 <span class="mobile-stack-line2">연습</span></span>
+                  <span><span data-i18n="bgmTestLine1">무반주</span> <span class="mobile-stack-line2" data-i18n="bgmTestLine2">연습</span></span>
                 </label>
                 <label>
                   <input type="radio" name="bgm-mode" id="bgm-mode-default" value="default" checked />
-                  <span>YBJ <span class="mobile-stack-line2">힙합</span></span>
+                  <span><span data-i18n="bgmDefaultLine1">YBJ</span> <span class="mobile-stack-line2" data-i18n="bgmDefaultLine2">힙합</span></span>
                 </label>
               </div>
-              <label id="song-file-label" class="song-file-label" for="song-file-input"><span id="song-file-icon">🎵</span> <span id="song-file-text">자유 <span class="mobile-stack-line2">음원</span></span></label>
+              <label id="song-file-label" class="song-file-label" for="song-file-input"><span id="song-file-icon">🎵</span> <span id="song-file-text"><span data-i18n="songFileLine1">자유</span> <span class="mobile-stack-line2" data-i18n="songFileLine2">음원</span></span></label>
               <input type="file" id="song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
             </div>
           </div>
           <div class="control-group" id="level-group">
-            <div class="control-group-title">Level</div>
+            <div class="control-group-title" data-i18n="levelGroupTitle">Level</div>
             <div class="control-group-body">
-              <label class="settings-select-label">속도
+              <label class="settings-select-label"><span data-i18n="speedFieldLabel">속도</span>
                 <select id="speed-select">
-                  <option value="slow">느림</option>
-                  <option value="normal" selected>보통</option>
-                  <option value="fast">빠름</option>
-                  <option value="extreme">개빠름</option>
+                  <option value="slow" data-i18n="speedSlow">느림</option>
+                  <option value="normal" selected data-i18n="speedNormal">보통</option>
+                  <option value="fast" data-i18n="speedFast">빠름</option>
+                  <option value="extreme" data-i18n="speedExtreme">개빠름</option>
                 </select>
               </label>
-              <label class="settings-select-label">난이도
+              <label class="settings-select-label"><span data-i18n="difficultyFieldLabel">난이도</span>
                 <select id="difficulty-select">
-                  <option value="easy" selected>쉬움</option>
-                  <option value="normal">보통</option>
-                  <option value="hard">어려움</option>
-                  <option value="extreme">개어려움</option>
+                  <option value="easy" selected data-i18n="difficultyEasy">쉬움</option>
+                  <option value="normal" data-i18n="difficultyNormal">보통</option>
+                  <option value="hard" data-i18n="difficultyHard">어려움</option>
+                  <option value="extreme" data-i18n="difficultyExtreme">개어려움</option>
                 </select>
               </label>
             </div>
           </div>
           <div class="control-group" id="option-group">
-            <div class="control-group-title">Option</div>
+            <div class="control-group-title" data-i18n="optionGroupTitle">Option</div>
             <div class="control-group-body">
               <label id="calibration-toggle-label">
                 <input type="checkbox" id="calibration-toggle" />
-                <span id="calibration-toggle-text">Finger Learning</span>
+                <span id="calibration-toggle-text" data-i18n="calibrationCheckboxLabel">Finger Learning</span>
               </label>
             </div>
           </div>
         </div>
         <div id="start-button-row">
           <span class="start-button-deco start-button-deco-left"></span>
-          <button id="start-button" type="button">Let's Start BDJ</button>
+          <button id="start-button" type="button" data-i18n="startButtonLabel">Let's Start BDJ</button>
           <span class="start-button-deco start-button-deco-right"></span>
         </div>
         <div id="welcome-guestbook-row">
           <p id="visitor-welcome">
             <span id="visitor-welcome-desktop">
-              <span id="visitor-welcome-line1">Welcome to MastaBeejay World : <span class="visitor-count">-</span> Guests</span>
-              <span id="visitor-welcome-line2"><span id="visitor-welcome-ghost" aria-hidden="true">Welcome to MastaBeejay World : </span><span class="crew-count">-</span> Crews</span>
+              <span id="visitor-welcome-line1"><span data-i18n="welcomePrefix">Welcome to MastaBeejay World :</span> <span class="visitor-count">-</span> <span data-i18n="guestsSuffix">Guests</span></span>
+              <span id="visitor-welcome-line2"><span id="visitor-welcome-ghost" aria-hidden="true" data-i18n="welcomePrefix">Welcome to MastaBeejay World :</span> <span class="crew-count">-</span> <span data-i18n="crewsSuffix">Crews</span></span>
             </span>
             <span id="visitor-welcome-mobile">
-              <span id="visitor-welcome-mobile-title">Welcome to MastaBeejay World :</span>
-              <span id="visitor-welcome-mobile-stats"><span class="visitor-count">-</span> Guests, <span class="crew-count">-</span> Crews</span>
+              <span id="visitor-welcome-mobile-title" data-i18n="welcomePrefix">Welcome to MastaBeejay World :</span>
+              <span id="visitor-welcome-mobile-stats"><span class="visitor-count">-</span> <span data-i18n="guestsSuffix">Guests</span>, <span class="crew-count">-</span> <span data-i18n="crewsSuffix">Crews</span></span>
             </span>
           </p>
           <button id="guestbook-open-card" type="button">
-            <span id="guestbook-card-title">Beejay <span class="mobile-stack-line2">Crews Feed</span></span>
-            <span id="guestbook-card-sub">방명록 보러가기</span>
+            <span id="guestbook-card-title"><span data-i18n="guestbookCardLine1">Beejay</span> <span class="mobile-stack-line2" data-i18n="guestbookCardLine2">Crews Feed</span></span>
+            <span id="guestbook-card-sub" data-i18n="guestbookCardSub">방명록 보러가기</span>
           </button>
           <button id="members-directory-open-card" type="button">
-            <span id="members-directory-card-title">BDJ <span class="mobile-stack-line2">Crews</span></span>
-            <span id="members-directory-card-sub">회원 명부 보기</span>
+            <span id="members-directory-card-title"><span data-i18n="crewsCardLine1">BDJ</span> <span class="mobile-stack-line2" data-i18n="crewsCardLine2">Crews</span></span>
+            <span id="members-directory-card-sub" data-i18n="crewsCardSub">회원 명부 보기</span>
           </button>
         </div>
         <div id="notice-board" hidden>
-          <div id="notice-board-label">📢 NOTICE</div>
+          <div id="notice-board-label" data-i18n="noticeLabel">📢 NOTICE</div>
           <div id="notice-board-text"></div>
           <div id="notice-board-graffiti"></div>
           <div id="notice-board-images"></div>
         </div>
         <div id="install-guide-section">
-          <div id="install-guide-label" class="text-metallic-gold">설치방법</div>
+          <div id="install-guide-label" class="text-metallic-gold" data-i18n="installSectionLabel">설치방법</div>
           <div id="install-guide-cards">
             <button type="button" class="install-guide-card" data-platform="windows">
               <span class="install-guide-card-icon">🖥️</span>
@@ -245,18 +246,18 @@
             <div id="chatbot-header-left">
               <img id="chatbot-header-icon" src="/icons/jaybot.png" alt="Jaybot" />
               <div id="chatbot-header-text">
-                <span id="chatbot-title">Jaybot (제이봇)</span>
+                <span id="chatbot-title" data-i18n="chatbotTitleLabel">Jaybot (제이봇)</span>
                 <span id="chatbot-mode"></span>
               </div>
             </div>
-            <button id="chatbot-close-button" type="button" aria-label="닫기">✕</button>
+            <button id="chatbot-close-button" type="button" aria-label="닫기" data-i18n-title="chatbotCloseAriaLabel">✕</button>
           </div>
           <div id="chatbot-messages">
-            <div class="chatbot-message chatbot-message-bot">안녕하세요, 제이봇입니다! BDJ 플레이 방법이나 기능에 대해 무엇이든 물어보세요.</div>
+            <div class="chatbot-message chatbot-message-bot" data-i18n="chatbotGreeting">안녕하세요, 제이봇입니다! BDJ 플레이 방법이나 기능에 대해 무엇이든 물어보세요.</div>
           </div>
           <div id="chatbot-input-row">
-            <input type="text" id="chatbot-input" placeholder="게임에 대해 물어보세요..." maxlength="300" />
-            <button id="chatbot-send-button" type="button">전송</button>
+            <input type="text" id="chatbot-input" placeholder="게임에 대해 물어보세요..." maxlength="300" data-i18n-placeholder="chatbotInputPlaceholder" />
+            <button id="chatbot-send-button" type="button" data-i18n="chatbotSendBtn">전송</button>
           </div>
         </div>
       </div>
@@ -429,125 +430,125 @@
       </div>
       <div id="membership-login-overlay">
         <div id="membership-login-panel">
-          <div id="membership-login-title" class="text-metallic-gold">BDJ Membership 로그인</div>
-          <input type="text" id="membership-login-name" placeholder="이름" maxlength="20" />
-          <input type="password" id="membership-login-password" placeholder="비밀번호" maxlength="60" />
+          <div id="membership-login-title" class="text-metallic-gold" data-i18n="membershipLoginTitle">BDJ Membership 로그인</div>
+          <input type="text" id="membership-login-name" placeholder="이름" maxlength="20" data-i18n-placeholder="namePlaceholder" />
+          <input type="password" id="membership-login-password" placeholder="비밀번호" maxlength="60" data-i18n-placeholder="passwordPlaceholder" />
           <span id="membership-login-error" class="admin-panel-inline-error" hidden></span>
           <div id="membership-login-actions">
-            <button type="button" id="membership-login-submit">로그인</button>
-            <button type="button" id="membership-login-cancel">취소</button>
+            <button type="button" id="membership-login-submit" data-i18n="membershipLoginBtn">로그인</button>
+            <button type="button" id="membership-login-cancel" data-i18n="btnCancel">취소</button>
           </div>
         </div>
       </div>
       <div id="membership-signup-overlay">
         <div id="membership-signup-panel">
-          <div id="membership-signup-title" class="text-metallic-gold">BDJ Membership 가입</div>
+          <div id="membership-signup-title" class="text-metallic-gold" data-i18n="membershipSignupTitle">BDJ Membership 가입</div>
           <label class="admin-banner-field-label">
-            이름 (한글실명)
-            <input type="text" id="membership-signup-name" maxlength="20" placeholder="이름" />
+            <span data-i18n="membershipSignupNameLabel">이름 (한글실명)</span>
+            <input type="text" id="membership-signup-name" maxlength="20" placeholder="이름" data-i18n-placeholder="namePlaceholder" />
           </label>
           <label class="admin-banner-field-label">
-            비밀번호
-            <input type="password" id="membership-signup-password" maxlength="60" placeholder="비밀번호" />
+            <span data-i18n="passwordPlaceholder">비밀번호</span>
+            <input type="password" id="membership-signup-password" maxlength="60" placeholder="비밀번호" data-i18n-placeholder="passwordPlaceholder" />
           </label>
           <label class="admin-banner-field-label">
-            비밀번호 확인
-            <input type="password" id="membership-signup-password-confirm" maxlength="60" placeholder="비밀번호 확인" />
+            <span data-i18n="membershipSignupPasswordConfirmLabel">비밀번호 확인</span>
+            <input type="password" id="membership-signup-password-confirm" maxlength="60" placeholder="비밀번호 확인" data-i18n-placeholder="membershipSignupPasswordConfirmLabel" />
           </label>
-          <p id="membership-signup-optional-hint">선택항목을 입력하지 않으면 회원명부에서 해당 정보는 보이지 않습니다.</p>
+          <p id="membership-signup-optional-hint" data-i18n="membershipSignupOptionalHint">선택항목을 입력하지 않으면 회원명부에서 해당 정보는 보이지 않습니다.</p>
           <div id="membership-signup-photo-row">
-            <label id="membership-signup-photo-label" class="song-file-label" for="membership-signup-photo-input">📷 사진 등록 (선택)</label>
+            <label id="membership-signup-photo-label" class="song-file-label" for="membership-signup-photo-input" data-i18n="membershipSignupPhotoLabel">📷 사진 등록 (선택)</label>
             <input type="file" id="membership-signup-photo-input" accept="image/*" />
             <span id="membership-signup-photo-filename"></span>
           </div>
           <div id="membership-signup-gender-row">
-            <span id="membership-signup-gender-label">성별 (필수)</span>
-            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-male" value="male" required /> 남</label>
-            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-female" value="female" required /> 여</label>
+            <span id="membership-signup-gender-label" data-i18n="membershipSignupGenderLabel">성별 (필수)</span>
+            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-male" value="male" required /> <span data-i18n="genderMaleLabel">남</span></label>
+            <label><input type="radio" name="membership-signup-gender" id="membership-signup-gender-female" value="female" required /> <span data-i18n="genderFemaleLabel">여</span></label>
           </div>
           <label class="admin-banner-field-label">
-            생년월일 (선택)
+            <span data-i18n="membershipSignupBirthdateLabel">생년월일 (선택)</span>
             <input type="date" id="membership-signup-birthdate" />
           </label>
           <label class="admin-banner-field-label">
-            전화번호 (선택)
-            <input type="tel" id="membership-signup-phone" maxlength="20" placeholder="전화번호" />
+            <span data-i18n="membershipSignupPhoneLabel">전화번호 (선택)</span>
+            <input type="tel" id="membership-signup-phone" maxlength="20" placeholder="전화번호" data-i18n-placeholder="crewsHeaderPhone" />
           </label>
           <label class="admin-banner-field-label">
-            Email (선택)
+            <span data-i18n="membershipSignupEmailLabel">Email (선택)</span>
             <input type="email" id="membership-signup-email" maxlength="100" placeholder="Email" />
           </label>
           <span id="membership-signup-error" class="admin-panel-inline-error" hidden></span>
           <div id="membership-signup-actions">
-            <button type="button" id="membership-signup-submit">가입</button>
-            <button type="button" id="membership-signup-cancel">취소</button>
+            <button type="button" id="membership-signup-submit" data-i18n="membershipJoinBtn">가입</button>
+            <button type="button" id="membership-signup-cancel" data-i18n="btnCancel">취소</button>
           </div>
         </div>
       </div>
       <div id="membership-profile-overlay">
         <div id="membership-profile-panel">
-          <div id="membership-profile-title" class="text-metallic-gold">내 정보</div>
+          <div id="membership-profile-title" class="text-metallic-gold" data-i18n="membershipProfileTitle">내 정보</div>
           <div id="membership-profile-photo-row">
-            <label id="membership-profile-photo-label" class="song-file-label" for="membership-profile-photo-input">📷 사진 변경</label>
+            <label id="membership-profile-photo-label" class="song-file-label" for="membership-profile-photo-input" data-i18n="membershipProfilePhotoLabel">📷 사진 변경</label>
             <input type="file" id="membership-profile-photo-input" accept="image/*" />
             <span id="membership-profile-photo-filename"></span>
           </div>
           <div id="membership-profile-gender-row">
-            <span id="membership-profile-gender-label">성별 (필수)</span>
-            <label><input type="radio" name="membership-profile-gender" id="membership-profile-gender-male" value="male" required /> 남</label>
-            <label><input type="radio" name="membership-profile-gender" id="membership-profile-gender-female" value="female" required /> 여</label>
+            <span id="membership-profile-gender-label" data-i18n="membershipSignupGenderLabel">성별 (필수)</span>
+            <label><input type="radio" name="membership-profile-gender" id="membership-profile-gender-male" value="male" required /> <span data-i18n="genderMaleLabel">남</span></label>
+            <label><input type="radio" name="membership-profile-gender" id="membership-profile-gender-female" value="female" required /> <span data-i18n="genderFemaleLabel">여</span></label>
           </div>
           <label class="admin-banner-field-label">
-            생년월일 (선택)
+            <span data-i18n="membershipSignupBirthdateLabel">생년월일 (선택)</span>
             <input type="date" id="membership-profile-birthdate" />
           </label>
           <label class="admin-banner-field-label">
-            전화번호 (선택)
-            <input type="tel" id="membership-profile-phone" maxlength="20" placeholder="전화번호" />
+            <span data-i18n="membershipSignupPhoneLabel">전화번호 (선택)</span>
+            <input type="tel" id="membership-profile-phone" maxlength="20" placeholder="전화번호" data-i18n-placeholder="crewsHeaderPhone" />
           </label>
           <label class="admin-banner-field-label">
-            Email (선택)
+            <span data-i18n="membershipSignupEmailLabel">Email (선택)</span>
             <input type="email" id="membership-profile-email" maxlength="100" placeholder="Email" />
           </label>
           <label class="admin-banner-field-label">
-            새 비밀번호 (선택, 변경 시에만 입력)
+            <span data-i18n="membershipProfileNewPasswordLabel">새 비밀번호 (선택, 변경 시에만 입력)</span>
             <input type="password" id="membership-profile-new-password" maxlength="60" placeholder="새 비밀번호" />
           </label>
           <label class="admin-banner-field-label">
-            현재 비밀번호 (저장하려면 입력)
+            <span data-i18n="membershipProfileCurrentPasswordLabel">현재 비밀번호 (저장하려면 입력)</span>
             <input type="password" id="membership-profile-password" maxlength="60" placeholder="현재 비밀번호" />
           </label>
-          <span id="membership-profile-success" class="admin-panel-inline-success" hidden>변경 적용이 되었습니다.</span>
+          <span id="membership-profile-success" class="admin-panel-inline-success" hidden data-i18n="membershipProfileSuccessMsg">변경 적용이 되었습니다.</span>
           <span id="membership-profile-error" class="admin-panel-inline-error" hidden></span>
           <div id="membership-profile-actions">
-            <button type="button" id="membership-profile-submit">저장</button>
-            <button type="button" id="membership-profile-cancel">취소/종료</button>
+            <button type="button" id="membership-profile-submit" data-i18n="btnSave">저장</button>
+            <button type="button" id="membership-profile-cancel" data-i18n="membershipProfileCancelBtn">취소/종료</button>
           </div>
-          <button type="button" id="membership-profile-withdraw-button">회원 탈퇴</button>
+          <button type="button" id="membership-profile-withdraw-button" data-i18n="membershipProfileWithdrawBtn">회원 탈퇴</button>
         </div>
       </div>
       <div id="members-directory-overlay">
         <div id="members-directory-panel">
           <div id="members-directory-header-row">
-            <div id="members-directory-title" class="text-metallic-gold">BDJ Crews</div>
+            <div id="members-directory-title" class="text-metallic-gold" data-i18n="crewsDirectoryTitle">BDJ Crews</div>
             <div id="members-directory-header-actions">
-              <button id="members-directory-refresh-button" type="button" title="접속현황 새로고침">🔄 새로고침</button>
-              <button id="members-directory-close-button" type="button">✕ 닫기</button>
+              <button id="members-directory-refresh-button" type="button" title="접속현황 새로고침" data-i18n="pwaRefreshBtn" data-i18n-title="crewsRefreshBtnTitle">🔄 새로고침</button>
+              <button id="members-directory-close-button" type="button" data-i18n="btnCloseX">✕ 닫기</button>
             </div>
           </div>
           <div id="members-directory-scroll-body">
             <table id="members-directory-table">
               <thead>
                 <tr>
-                  <th>번호</th>
+                  <th data-i18n="crewsHeaderNo">번호</th>
                   <th></th>
-                  <th>이름</th>
-                  <th>성별</th>
-                  <th>생년월일</th>
-                  <th>전화번호</th>
-                  <th>이메일</th>
-                  <th>가입일</th>
-                  <th>접속현황</th>
+                  <th data-i18n="lbHeaderName">이름</th>
+                  <th data-i18n="crewsHeaderGender">성별</th>
+                  <th data-i18n="crewsHeaderBirthdate">생년월일</th>
+                  <th data-i18n="crewsHeaderPhone">전화번호</th>
+                  <th data-i18n="crewsHeaderEmail">이메일</th>
+                  <th data-i18n="crewsHeaderJoinDate">가입일</th>
+                  <th data-i18n="crewsHeaderOnlineStatus">접속현황</th>
                 </tr>
               </thead>
               <tbody id="members-directory-list"></tbody>
@@ -559,12 +560,12 @@
         <div id="direct-chat-panel">
           <div id="direct-chat-header-row">
             <div id="direct-chat-title" class="text-metallic-gold"></div>
-            <button id="direct-chat-close-button" type="button">✕ 닫기</button>
+            <button id="direct-chat-close-button" type="button" data-i18n="btnCloseX">✕ 닫기</button>
           </div>
           <div id="direct-chat-messages"></div>
           <div id="direct-chat-input-row">
-            <input type="text" id="direct-chat-input" maxlength="500" placeholder="메시지 입력..." />
-            <button id="direct-chat-send-button" type="button">전송</button>
+            <input type="text" id="direct-chat-input" maxlength="500" placeholder="메시지 입력..." data-i18n-placeholder="directChatInputPlaceholder" />
+            <button id="direct-chat-send-button" type="button" data-i18n="chatbotSendBtn">전송</button>
           </div>
         </div>
       </div>
@@ -572,32 +573,32 @@
         <div id="install-guide-overlay-panel">
           <div id="install-guide-modal-title" class="text-metallic-gold"></div>
           <ol id="install-guide-modal-steps"></ol>
-          <p id="install-guide-modal-footer">
+          <p id="install-guide-modal-footer" data-i18n="installFooterHint">
             💡 이 아이콘은 실시간 웹사이트로 연결되는 바로가기예요. 나중에 게임이 업데이트되어도 다시 설치할 필요 없이 항상 최신 버전이 그대로 열립니다.
           </p>
-          <button id="install-guide-close-button" type="button">닫기</button>
+          <button id="install-guide-close-button" type="button" data-i18n="installCloseBtn">닫기</button>
         </div>
       </div>
       <div id="guestbook-overlay">
         <div id="guestbook-overlay-panel">
           <div id="guestbook-header-row">
-            <div id="guestbook-title" class="text-metallic-gold">Beejay Crews Feed</div>
-            <button id="guestbook-close-button" type="button">✕ 닫기</button>
+            <div id="guestbook-title" class="text-metallic-gold" data-i18n="guestbookOverlayTitle">Beejay Crews Feed</div>
+            <button id="guestbook-close-button" type="button" data-i18n="btnCloseX">✕ 닫기</button>
           </div>
           <div id="guestbook-scroll-body">
             <form id="guestbook-form">
               <div class="guestbook-form-row">
-                <input type="text" id="guestbook-name" placeholder="이름" maxlength="12" required />
-                <input type="password" id="guestbook-password" placeholder="비밀번호 (선택-수정/삭제 목적)" maxlength="20" />
+                <input type="text" id="guestbook-name" placeholder="이름" maxlength="12" required data-i18n-placeholder="namePlaceholder" />
+                <input type="password" id="guestbook-password" placeholder="비밀번호 (선택-수정/삭제 목적)" maxlength="20" data-i18n-placeholder="guestbookMainPasswordPlaceholder" />
               </div>
-              <textarea id="guestbook-message" placeholder="메세지를 남겨주세요" maxlength="500" required></textarea>
+              <textarea id="guestbook-message" placeholder="메세지를 남겨주세요" maxlength="500" required data-i18n-placeholder="guestbookMessagePlaceholder"></textarea>
               <div class="guestbook-form-row">
                 <div id="guestbook-attachment-row">
-                  <label id="guestbook-attachment-label" class="song-file-label" for="guestbook-attachment-input">📎 파일첨부</label>
+                  <label id="guestbook-attachment-label" class="song-file-label" for="guestbook-attachment-input" data-i18n="guestbookAttachmentLabel">📎 파일첨부</label>
                   <input type="file" id="guestbook-attachment-input" accept="image/*,video/*" />
                   <span id="guestbook-attachment-filename"></span>
                 </div>
-                <button type="submit" id="guestbook-submit">등록</button>
+                <button type="submit" id="guestbook-submit" data-i18n="btnRegister">등록</button>
               </div>
               <span id="guestbook-attachment-error" class="guestbook-inline-error" hidden></span>
             </form>
@@ -607,58 +608,58 @@
         </div>
       </div>
       <div id="results-overlay">
-        <div id="results-title" class="text-metallic">RESULT</div>
+        <div id="results-title" class="text-metallic" data-i18n="resultsTitle">RESULT</div>
         <div id="results-step-label"></div>
-        <div id="results-score-label">TOTAL SCORE</div>
+        <div id="results-score-label" data-i18n="resultsScoreLabel">TOTAL SCORE</div>
         <div id="results-score">0</div>
         <div id="results-breakdown"></div>
         <div id="results-actions">
-          <button id="results-next-step-button" type="button">다음 Step 진행</button>
+          <button id="results-next-step-button" type="button" data-i18n="resultsNextStepBtn">다음 Step 진행</button>
           <button id="results-confirm-button" type="button">확인</button>
         </div>
       </div>
       <div id="step-setup-overlay">
-        <div id="step-setup-title" class="text-metallic-gold">STEP <span id="step-setup-number"></span> 준비</div>
-        <p id="step-setup-hint">속도 또는 난이도 중 하나는 반드시 이전 단계보다 높아야 진행할 수 있습니다.</p>
+        <div id="step-setup-title" class="text-metallic-gold"></div>
+        <p id="step-setup-hint" data-i18n="stepSetupHint">속도 또는 난이도 중 하나는 반드시 이전 단계보다 높아야 진행할 수 있습니다.</p>
         <div id="step-setup-row">
           <div id="step-bgm-mode-select" class="bgm-mode-select">
             <label>
               <input type="radio" name="step-bgm-mode" id="step-bgm-mode-test" value="test" />
-              <span>무반주 <span class="mobile-stack-line2">연습</span></span>
+              <span><span data-i18n="bgmTestLine1">무반주</span> <span class="mobile-stack-line2" data-i18n="bgmTestLine2">연습</span></span>
             </label>
             <label>
               <input type="radio" name="step-bgm-mode" id="step-bgm-mode-default" value="default" checked />
-              <span>YBJ <span class="mobile-stack-line2">힙합</span></span>
+              <span><span data-i18n="bgmDefaultLine1">YBJ</span> <span class="mobile-stack-line2" data-i18n="bgmDefaultLine2">힙합</span></span>
             </label>
           </div>
-          <label id="step-song-file-label" class="song-file-label" for="step-song-file-input"><span id="step-song-file-icon">🎵</span> <span>자유 <span class="mobile-stack-line2">음원</span></span></label>
+          <label id="step-song-file-label" class="song-file-label" for="step-song-file-input"><span id="step-song-file-icon">🎵</span> <span><span data-i18n="songFileLine1">자유</span> <span class="mobile-stack-line2" data-i18n="songFileLine2">음원</span></span></label>
           <input type="file" id="step-song-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" />
-          <label class="settings-select-label">속도
+          <label class="settings-select-label"><span data-i18n="speedFieldLabel">속도</span>
             <select id="step-speed-select">
-              <option value="slow">느림</option>
-              <option value="normal">보통</option>
-              <option value="fast">빠름</option>
-              <option value="extreme">개빠름</option>
+              <option value="slow" data-i18n="speedSlow">느림</option>
+              <option value="normal" data-i18n="speedNormal">보통</option>
+              <option value="fast" data-i18n="speedFast">빠름</option>
+              <option value="extreme" data-i18n="speedExtreme">개빠름</option>
             </select>
           </label>
-          <label class="settings-select-label">난이도
+          <label class="settings-select-label"><span data-i18n="difficultyFieldLabel">난이도</span>
             <select id="step-difficulty-select">
-              <option value="easy">쉬움</option>
-              <option value="normal">보통</option>
-              <option value="hard">어려움</option>
-              <option value="extreme">개어려움</option>
+              <option value="easy" data-i18n="difficultyEasy">쉬움</option>
+              <option value="normal" data-i18n="difficultyNormal">보통</option>
+              <option value="hard" data-i18n="difficultyHard">어려움</option>
+              <option value="extreme" data-i18n="difficultyExtreme">개어려움</option>
             </select>
           </label>
         </div>
-        <p id="step-setup-warning" hidden>속도 또는 난이도 중 하나는 반드시 이전 단계보다 높아야 합니다.</p>
-        <button id="step-start-button" type="button" disabled>STEP 시작</button>
+        <p id="step-setup-warning" hidden data-i18n="stepSetupWarning">속도 또는 난이도 중 하나는 반드시 이전 단계보다 높아야 합니다.</p>
+        <button id="step-start-button" type="button" disabled data-i18n="stepStartBtn">STEP 시작</button>
       </div>
       <div id="name-entry-overlay">
-        <div id="name-entry-title" class="text-metallic-gold">TOP 20 진입!</div>
-        <p id="name-entry-desc">이름과 메세지를 남겨주세요</p>
-        <input type="text" id="name-entry-name" maxlength="12" placeholder="이름" />
-        <input type="text" id="name-entry-message" maxlength="40" placeholder="한마디 메세지" />
-        <button id="name-entry-submit" type="button">등록</button>
+        <div id="name-entry-title" class="text-metallic-gold" data-i18n="nameEntryTitle">TOP 20 진입!</div>
+        <p id="name-entry-desc" data-i18n="nameEntryDesc">이름과 메세지를 남겨주세요</p>
+        <input type="text" id="name-entry-name" maxlength="12" placeholder="이름" data-i18n-placeholder="namePlaceholder" />
+        <input type="text" id="name-entry-message" maxlength="40" placeholder="한마디 메세지" data-i18n-placeholder="nameEntryMessagePlaceholder" />
+        <button id="name-entry-submit" type="button" data-i18n="btnRegister">등록</button>
       </div>
       <div id="photo-countdown-overlay">
         <div id="photo-countdown-desc"></div>
@@ -666,11 +667,11 @@
       </div>
       <div id="photo-lightbox-overlay">
         <img id="photo-lightbox-image" src="" alt="Best 20 기념 사진" />
-        <button id="photo-lightbox-download-button" type="button">⬇ Download</button>
+        <button id="photo-lightbox-download-button" type="button" data-i18n="photoLightboxDownloadBtn">⬇ Download</button>
       </div>
       <div id="toast" role="status" hidden></div>
       <div id="exit-fallback-overlay">
-        <div id="exit-fallback-message">게임이 종료되었습니다.<br />이 창을 닫아주세요.</div>
+        <div id="exit-fallback-message" data-i18n-html="exitFallbackMsg">게임이 종료되었습니다.<br />이 창을 닫아주세요.</div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
