@@ -44,6 +44,14 @@ import {
   type MemberDirectoryEntry,
   type MemberGender,
 } from "./game/Membership";
+import {
+  adminAddBeejayBrosLink,
+  adminDeleteBeejayBrosLink,
+  adminUpdateBeejayBrosLink,
+  loadBeejayBrosLinks,
+  TooManyBeejayBrosLinksError,
+  type BeejayBrosLink,
+} from "./game/BeejayBrosLinks";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
 import { adminAddBannerImages, adminDeleteBannerImage, loadBannerImages, type BannerImage } from "./game/BannerImages";
 import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
@@ -268,6 +276,13 @@ const adminWebsiteLinkBorderColorInput = document.querySelector<HTMLInputElement
 const adminWebsiteLinkAnimationSelect = document.querySelector<HTMLSelectElement>("#admin-website-link-animation")!;
 const adminWebsiteLinkAddButton = document.querySelector<HTMLButtonElement>("#admin-website-link-add-button")!;
 const adminWebsiteLinkError = document.querySelector<HTMLSpanElement>("#admin-website-link-error")!;
+const beejayBrosPanel = document.querySelector<HTMLDivElement>("#beejay-bros-panel")!;
+const beejayBrosLinksContainer = document.querySelector<HTMLDivElement>("#beejay-bros-links-container")!;
+const adminBeejayBrosLinkList = document.querySelector<HTMLDivElement>("#admin-beejay-bros-link-list")!;
+const adminBeejayBrosLinkUrlInput = document.querySelector<HTMLInputElement>("#admin-beejay-bros-link-url")!;
+const adminBeejayBrosLinkTextInput = document.querySelector<HTMLInputElement>("#admin-beejay-bros-link-text")!;
+const adminBeejayBrosLinkAddButton = document.querySelector<HTMLButtonElement>("#admin-beejay-bros-link-add-button")!;
+const adminBeejayBrosLinkError = document.querySelector<HTMLSpanElement>("#admin-beejay-bros-link-error")!;
 const adminChangeCurrentPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-current-password")!;
 const adminChangeNewPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-new-password")!;
 const adminChangeConfirmPasswordInput = document.querySelector<HTMLInputElement>("#admin-change-confirm-password")!;
@@ -1230,6 +1245,68 @@ async function renderAdminWebsiteLinksList(preloaded?: WebsiteLink[]): Promise<v
   });
 }
 
+/** Auto-shrinks one Beejay Bros button's text to fit its fixed ~4cm x 1.2cm box — same
+ *  measure-and-shrink technique as fitGraffitiFontSize (offsetHeight against the padded box), just
+ *  applied per-banner and over a much smaller size range. Measured rather than derived from a
+ *  character-count formula since actual rendered width depends on the glyph mix (Korean/English),
+ *  not just length. */
+function fitBeejayBrosLinkText(banner: HTMLElement, textEl: HTMLElement): void {
+  const MAX_FONT_PX = 15;
+  const MIN_FONT_PX = 9;
+  const bannerStyle = getComputedStyle(banner);
+  const availableHeight = banner.clientHeight - parseFloat(bannerStyle.paddingTop) - parseFloat(bannerStyle.paddingBottom);
+  let fontSize = MAX_FONT_PX;
+  textEl.style.fontSize = `${fontSize}px`;
+  while (fontSize > MIN_FONT_PX && textEl.offsetHeight > availableHeight) {
+    fontSize -= 1;
+    textEl.style.fontSize = `${fontSize}px`;
+  }
+}
+
+/** Public "Beejay Bros" link buttons in the right margin, below the login widget — same
+ *  href-via-DOM-property + optional-preloaded-list pattern as renderWebsiteLinks/renderSocialLinks.
+ *  The whole panel (gold metallic frame included) hides itself when there are no links yet, rather
+ *  than showing an empty bordered box. */
+async function renderBeejayBrosLinks(preloaded?: BeejayBrosLink[]): Promise<void> {
+  const links = preloaded ?? (await loadBeejayBrosLinks());
+  beejayBrosPanel.hidden = links.length === 0;
+  beejayBrosLinksContainer.innerHTML = links
+    .map((link) => `<a class="beejay-bros-link-banner" target="_blank" rel="noopener noreferrer" data-link-id="${link.id}"><span class="beejay-bros-link-text"></span></a>`)
+    .join("");
+  links.forEach((link) => {
+    const a = beejayBrosLinksContainer.querySelector<HTMLAnchorElement>(`a[data-link-id="${link.id}"]`);
+    if (!a) return;
+    a.href = link.url;
+    const textEl = a.querySelector<HTMLSpanElement>(".beejay-bros-link-text")!;
+    textEl.textContent = link.text;
+    fitBeejayBrosLinkText(a, textEl);
+  });
+}
+
+/** Editable rows in the admin panel — mirrors renderAdminWebsiteLinksList's shape, minus the
+ *  per-row styling controls that feature has (this one has no admin-configurable font/color/
+ *  animation — see beejay_bros_links' own schema comment for why). */
+async function renderAdminBeejayBrosLinksList(preloaded?: BeejayBrosLink[]): Promise<void> {
+  const links = preloaded ?? (await loadBeejayBrosLinks());
+  adminBeejayBrosLinkList.innerHTML = links
+    .map(
+      (link) => `
+        <div class="admin-beejay-bros-link-row" data-id="${link.id}">
+          <input type="url" class="admin-beejay-bros-link-edit-url" />
+          <input type="text" class="admin-beejay-bros-link-edit-text" maxlength="40" />
+          <button type="button" data-action="save-beejay-bros-link" data-id="${link.id}">저장</button>
+          <button type="button" data-action="delete-beejay-bros-link" data-id="${link.id}">삭제</button>
+        </div>`,
+    )
+    .join("");
+  links.forEach((link) => {
+    const row = adminBeejayBrosLinkList.querySelector<HTMLDivElement>(`.admin-beejay-bros-link-row[data-id="${link.id}"]`);
+    if (!row) return;
+    row.querySelector<HTMLInputElement>(".admin-beejay-bros-link-edit-url")!.value = link.url;
+    row.querySelector<HTMLInputElement>(".admin-beejay-bros-link-edit-text")!.value = link.text;
+  });
+}
+
 /** Thumbnail rows in the admin panel showing which images are currently uploaded, each with its own
  *  delete button — mirrors renderAdminSocialLinksList's list-of-rows pattern. */
 async function renderAdminBannerImagesList(): Promise<void> {
@@ -1952,6 +2029,7 @@ adminPanelOpenButton.addEventListener("click", () => {
   void renderAdminSocialLinksList();
   void renderAdminBannerImagesList();
   void renderAdminWebsiteLinksList();
+  void renderAdminBeejayBrosLinksList();
   adminPanelOverlay.style.display = "flex";
 });
 
@@ -2163,22 +2241,24 @@ adminWebsiteLinkAddButton.addEventListener("click", () => {
   const contentFontSize = readWebsiteLinkFontSize(adminWebsiteLinkContentFontSizeInput, "내용");
   if (contentFontSize === null) return;
 
-  void adminAddWebsiteLink(
-    {
-      url,
-      title,
-      titleFontSize,
-      titleFontFamily: adminWebsiteLinkTitleFontFamilySelect.value as WebsiteLinkFontFamily,
-      titleBold: adminWebsiteLinkTitleBoldInput.checked,
-      content,
-      contentFontSize,
-      contentFontFamily: adminWebsiteLinkContentFontFamilySelect.value as WebsiteLinkFontFamily,
-      contentBold: adminWebsiteLinkContentBoldInput.checked,
-      fontColor: adminWebsiteLinkFontColorInput.value,
-      borderColor: adminWebsiteLinkBorderColorInput.value,
-      animation: adminWebsiteLinkAnimationSelect.value as WebsiteLinkAnimation,
-    },
-    currentAdminPassword,
+  void withButtonLoading(adminWebsiteLinkAddButton, "추가 적용 중입니다", () =>
+    adminAddWebsiteLink(
+      {
+        url,
+        title,
+        titleFontSize,
+        titleFontFamily: adminWebsiteLinkTitleFontFamilySelect.value as WebsiteLinkFontFamily,
+        titleBold: adminWebsiteLinkTitleBoldInput.checked,
+        content,
+        contentFontSize,
+        contentFontFamily: adminWebsiteLinkContentFontFamilySelect.value as WebsiteLinkFontFamily,
+        contentBold: adminWebsiteLinkContentBoldInput.checked,
+        fontColor: adminWebsiteLinkFontColorInput.value,
+        borderColor: adminWebsiteLinkBorderColorInput.value,
+        animation: adminWebsiteLinkAnimationSelect.value as WebsiteLinkAnimation,
+      },
+      currentAdminPassword,
+    ),
   )
     .then((links) => {
       adminWebsiteLinkUrlInput.value = "";
@@ -2195,6 +2275,64 @@ adminWebsiteLinkAddButton.addEventListener("click", () => {
         handleAdminPanelError(err, "Website 링크 추가 실패:", adminWebsiteLinkError);
       }
     });
+});
+
+adminBeejayBrosLinkAddButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const currentAdminPassword = adminPassword;
+  const url = adminBeejayBrosLinkUrlInput.value.trim();
+  const text = adminBeejayBrosLinkTextInput.value.trim();
+  adminBeejayBrosLinkError.hidden = true;
+  if (!url || !text) return;
+
+  void withButtonLoading(adminBeejayBrosLinkAddButton, "추가 적용 중입니다", () => adminAddBeejayBrosLink(url, text, currentAdminPassword))
+    .then((links) => {
+      adminBeejayBrosLinkUrlInput.value = "";
+      adminBeejayBrosLinkTextInput.value = "";
+      showToast("추가가 완료되었습니다.");
+      return Promise.all([renderAdminBeejayBrosLinksList(links), renderBeejayBrosLinks(links)]);
+    })
+    .catch((err) => {
+      if (err instanceof TooManyBeejayBrosLinksError) {
+        adminBeejayBrosLinkError.textContent = "Beejay Bros 링크는 최대 10개까지 등록할 수 있습니다.";
+        adminBeejayBrosLinkError.hidden = false;
+      } else {
+        handleAdminPanelError(err, "Beejay Bros 링크 추가 실패:", adminBeejayBrosLinkError);
+      }
+    });
+});
+
+adminBeejayBrosLinkList.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
+  if (!button || !adminPassword) return;
+  const id = Number(button.dataset.id);
+  const row = button.closest<HTMLDivElement>(".admin-beejay-bros-link-row")!;
+  const action = button.dataset.action;
+
+  if (action === "save-beejay-bros-link") {
+    const currentAdminPassword = adminPassword;
+    const url = row.querySelector<HTMLInputElement>(".admin-beejay-bros-link-edit-url")!.value.trim();
+    const text = row.querySelector<HTMLInputElement>(".admin-beejay-bros-link-edit-text")!.value.trim();
+    if (!url || !text) return;
+
+    void adminUpdateBeejayBrosLink(id, url, text, currentAdminPassword)
+      .then((links) => {
+        showToast("수정이 완료되었습니다.");
+        return Promise.all([renderAdminBeejayBrosLinksList(links), renderBeejayBrosLinks(links)]);
+      })
+      .catch((err) => handleAdminPanelError(err, "Beejay Bros 링크 수정 실패:"));
+    return;
+  }
+
+  if (action === "delete-beejay-bros-link") {
+    if (!window.confirm("이 Beejay Bros 링크를 삭제하시겠습니까?")) return;
+    void adminDeleteBeejayBrosLink(id, adminPassword)
+      .then((links) => {
+        showToast("삭제가 완료되었습니다.");
+        return Promise.all([renderAdminBeejayBrosLinksList(links), renderBeejayBrosLinks(links)]);
+      })
+      .catch((err) => handleAdminPanelError(err, "Beejay Bros 링크 삭제 실패:"));
+  }
 });
 
 adminChangePasswordButton.addEventListener("click", () => {
@@ -2356,6 +2494,7 @@ void initAdminSession().then(() => {
   void renderGuestbook();
   void renderSocialLinks();
   void renderWebsiteLinks();
+  void renderBeejayBrosLinks();
   void renderBanner();
 });
 

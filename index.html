@@ -77,11 +77,17 @@
         <button id="pwa-refresh-button" type="button" title="새로고침">🔄 새로고침</button>
         <button id="exit-site-button" type="button" title="종료">🚪 종료</button>
         <div id="social-links-container"></div>
+        <div id="beejay-bros-panel">
+          <div id="beejay-bros-panel-inner">
+            <div id="beejay-bros-title" class="text-metallic-gold">Beejay Bros</div>
+            <div id="beejay-bros-links-container"></div>
+          </div>
+        </div>
         <div id="website-links-container"></div>
         <div id="leaderboard-header">
           <div id="leaderboard-tagline-row">
             <div id="leaderboard-tagline" class="text-metallic">Masta Beejay Beat Breaker</div>
-            <svg id="p2b-badge" viewBox="0 0 110 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="P2B 2.41">
+            <svg id="p2b-badge" viewBox="0 0 110 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="P2B 2.51">
               <defs>
                 <linearGradient id="p2bTopFace" x1="0" y1="0" x2="1" y2="0">
                   <stop offset="0%" stop-color="#fff9e6" />
@@ -98,7 +104,7 @@
               </defs>
               <polygon points="18,8 92,8 100,3 26,3" fill="url(#p2bTopFace)" stroke="#9a6a00" stroke-width="0.5" />
               <polygon points="18,8 92,8 100,34 10,34" fill="url(#p2bFrontFace)" stroke="#7a5200" stroke-width="1" />
-              <text x="55" y="27" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="14" fill="#4a2f00">P2B 2.41</text>
+              <text x="55" y="27" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="14" fill="#4a2f00">P2B 2.51</text>
             </svg>
           </div>
         </div>
@@ -383,6 +389,20 @@
             <span id="admin-website-link-error" class="admin-panel-inline-error" hidden></span>
             <div class="admin-banner-field-label">
               배너 크기는 가로 5cm x 세로 2cm 정도입니다. 제목은 10자, 내용은 20자 이내로 입력하시면 배너 안에 깔끔하게 들어갑니다 (입력 가능한 최대 글자수는 제목 20자, 내용 60자). 최대 10개까지 등록 가능하며, 화면에 다 안 들어오면 스크롤로 볼 수 있습니다.
+            </div>
+          </div>
+
+          <div class="admin-panel-section">
+            <div class="admin-panel-section-title">Beejay Bros 관리</div>
+            <div id="admin-beejay-bros-link-list"></div>
+            <div id="admin-beejay-bros-link-form">
+              <input type="url" id="admin-beejay-bros-link-url" placeholder="https://..." />
+              <input type="text" id="admin-beejay-bros-link-text" placeholder="예: BDJ 공식 스토어" maxlength="40" />
+              <button id="admin-beejay-bros-link-add-button" type="button">추가</button>
+            </div>
+            <span id="admin-beejay-bros-link-error" class="admin-panel-inline-error" hidden></span>
+            <div class="admin-banner-field-label">
+              버튼 크기는 가로 4cm x 세로 1.2cm이며, 글자는 버튼 크기에 맞게 자동으로 줄어듭니다. 최대 10개까지 등록 가능합니다.
             </div>
           </div>
 

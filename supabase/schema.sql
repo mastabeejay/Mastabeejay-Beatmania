@@ -161,6 +161,21 @@ create table if not exists website_links (
 );
 alter table website_links enable row level security;
 
+-- "Beejay Bros" link buttons: a second, visually distinct admin-managed link list (see
+-- #beejay-bros-links-container in index.html), shown in the right margin below the
+-- login/Join-Crew widget. Unlike website_links there's no per-row styling here — font, size-fit,
+-- border-less button shape, and the shimmering metallic frame around the whole group are all fixed
+-- in CSS/JS, so the admin only ever supplies a url + short label text. Capped at 10 rows, same as
+-- website_links, enforced in admin_add_beejay_bros_link below.
+create table if not exists beejay_bros_links (
+  id bigint generated always as identity primary key,
+  url text not null,
+  text text not null,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table beejay_bros_links enable row level security;
+
 -- Singleton banner shown on the start screen, editable only by the admin — a plain notice message,
 -- a big graffiti-style tag, or an uploaded image set, never more than one at once (display_mode
 -- picks which, if any). display_mode is constrained by admin_set_banner() below, not a table CHECK
@@ -224,6 +239,10 @@ grant select on social_links to anon, authenticated;
 drop policy if exists "public read website_links" on website_links;
 create policy "public read website_links" on website_links for select using (true);
 grant select on website_links to anon, authenticated;
+
+drop policy if exists "public read beejay_bros_links" on beejay_bros_links;
+create policy "public read beejay_bros_links" on beejay_bros_links for select using (true);
+grant select on beejay_bros_links to anon, authenticated;
 
 drop policy if exists "public read site_notice" on site_notice;
 create policy "public read site_notice" on site_notice for select using (true);
@@ -947,6 +966,48 @@ begin
 end;
 $$;
 
+-- "Beejay Bros" link buttons (see beejay_bros_links' own comment above) — max 10 rows, same cap
+-- reasoning as website_links.
+create or replace function admin_add_beejay_bros_link(p_url text, p_text text, p_admin_password text)
+returns setof beejay_bros_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  if (select count(*) from beejay_bros_links) >= 10 then
+    raise exception 'too_many_links';
+  end if;
+  insert into beejay_bros_links (url, text, sort_order)
+  values (left(p_url, 500), left(p_text, 40), coalesce((select max(sort_order) + 1 from beejay_bros_links), 0));
+  return query select * from beejay_bros_links order by sort_order;
+end;
+$$;
+
+create or replace function admin_update_beejay_bros_link(p_id bigint, p_url text, p_text text, p_admin_password text)
+returns setof beejay_bros_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  update beejay_bros_links set url = left(p_url, 500), text = left(p_text, 40) where id = p_id;
+  return query select * from beejay_bros_links order by sort_order;
+end;
+$$;
+
+create or replace function admin_delete_beejay_bros_link(p_id bigint, p_admin_password text)
+returns setof beejay_bros_links
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  delete from beejay_bros_links where id = p_id;
+  return query select * from beejay_bros_links order by sort_order;
+end;
+$$;
+
 -- Superseded by admin_set_banner (also sets graffiti_text/display_mode) — drop it so it doesn't
 -- linger as dead code.
 drop function if exists admin_set_notice(text, text);
@@ -1067,3 +1128,6 @@ grant execute on function admin_delete_banner_image(bigint, text) to anon, authe
 grant execute on function admin_add_website_link(text, text, integer, text, boolean, text, integer, text, boolean, text, text, text, text) to anon, authenticated;
 grant execute on function admin_update_website_link(bigint, text, text, integer, text, boolean, text, integer, text, boolean, text, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_website_link(bigint, text) to anon, authenticated;
+grant execute on function admin_add_beejay_bros_link(text, text, text) to anon, authenticated;
+grant execute on function admin_update_beejay_bros_link(bigint, text, text, text) to anon, authenticated;
+grant execute on function admin_delete_beejay_bros_link(bigint, text) to anon, authenticated;
