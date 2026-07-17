@@ -1,4 +1,4 @@
-import { resolveScratchZone, type KeyZone, type ScratchZone } from "../handTracking/ZoneLayout";
+import type { KeyZone, ResolvedScratchZone } from "../handTracking/ZoneLayout";
 import type { FingertipDebugSample, PressEvent } from "../handTracking/types";
 
 export class ZoneDebugRenderer {
@@ -52,8 +52,8 @@ export class ZoneDebugRenderer {
   /** Semi-transparent black turntable disk. Brightens slightly and gets an accent-colored rim when
    *  the hand is engaged; the marker line rotates with rotationRad so the disk visibly spins with
    *  the detected up/down rub motion. */
-  drawScratchDisk(zone: ScratchZone, rotationRad: number, engaged: boolean, width: number, height: number): void {
-    const { cx, cy, r } = resolveScratchZone(zone, width, height);
+  drawScratchDisk(resolvedScratch: ResolvedScratchZone, rotationRad: number, engaged: boolean): void {
+    const { cx, cy, r } = resolvedScratch;
 
     this.ctx.fillStyle = engaged ? "rgba(15, 15, 15, 0.72)" : "rgba(10, 10, 10, 0.55)";
     this.ctx.beginPath();

@@ -1,6 +1,6 @@
 import type { JudgmentResult } from "../game/JudgmentEngine";
 import { SCRATCH_LANE } from "../game/types";
-import { resolveScratchZone, type KeyZone, type ScratchZone } from "../handTracking/ZoneLayout";
+import type { KeyZone, ResolvedScratchZone } from "../handTracking/ZoneLayout";
 import { t, type TKey } from "../i18n";
 
 interface ActiveJudgment extends JudgmentResult {
@@ -42,12 +42,11 @@ export class JudgmentRenderer {
     this.active.push({ ...result, combo, expiresAtMs: performance.now() + DISPLAY_DURATION_MS });
   }
 
-  draw(zones: KeyZone[], scratchZone: ScratchZone, width: number, height: number): void {
+  draw(zones: KeyZone[], resolvedScratch: ResolvedScratchZone, width: number, height: number): void {
     const now = performance.now();
     this.active = this.active.filter((judgment) => judgment.expiresAtMs > now);
 
     const hitLineY = (zones[0]?.yMin ?? 0.66) * height;
-    const resolvedScratch = resolveScratchZone(scratchZone, width, height);
 
     for (const judgment of this.active) {
       const isScratch = judgment.lane === SCRATCH_LANE;

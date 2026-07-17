@@ -1,5 +1,5 @@
 import { SCRATCH_LANE, type NoteEvent } from "../game/types";
-import { resolveScratchZone, type KeyZone, type ScratchZone } from "../handTracking/ZoneLayout";
+import type { KeyZone, ResolvedScratchZone } from "../handTracking/ZoneLayout";
 
 const NOTE_HEIGHT_PX = 18;
 const SCRATCH_NOTE_RADIUS_PX = 13;
@@ -11,7 +11,7 @@ export class NoteRenderer {
     this.ctx = ctx;
   }
 
-  draw(notes: NoteEvent[], zones: KeyZone[], scratchZone: ScratchZone, songTimeMs: number, lookaheadMs: number, width: number, height: number): void {
+  draw(notes: NoteEvent[], zones: KeyZone[], resolvedScratch: ResolvedScratchZone, songTimeMs: number, lookaheadMs: number, width: number, height: number): void {
     const hitLineFrac = zones[0]?.yMin ?? 0.66;
     const hitLinePx = hitLineFrac * height;
 
@@ -22,7 +22,7 @@ export class NoteRenderer {
     this.ctx.lineTo(width, hitLinePx);
     this.ctx.stroke();
 
-    const { cx: scratchTargetX, cy: scratchTargetY } = resolveScratchZone(scratchZone, width, height);
+    const { cx: scratchTargetX, cy: scratchTargetY } = resolvedScratch;
 
     for (const note of notes) {
       // Position is recomputed fresh from songTimeMs every call — never accumulated frame-to-frame —

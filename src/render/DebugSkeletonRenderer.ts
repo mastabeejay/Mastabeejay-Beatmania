@@ -11,19 +11,25 @@ const HAND_CONNECTIONS: [number, number][] = [
 
 export class DebugSkeletonRenderer {
   private ctx: CanvasRenderingContext2D;
+  // Reused per hand-slot across frames (drawn every frame at 60fps during gameplay) instead of
+  // `.map()`-ing a fresh 21-point array per hand per frame — allocated once per slot on first use,
+  // just overwritten in place after that.
+  private pointsScratch: { x: number; y: number }[][];
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
+    this.pointsScratch = [];
   }
 
   draw(hands: HandFrame[], width: number, height: number): void {
-    for (const hand of hands) {
+    hands.forEach((hand, handIndex) => {
       // Landmarks come from the raw (unmirrored) video frame; mirror x to match
       // the mirrored <video> element the user actually sees on screen.
-      const points = hand.landmarks.map((lm) => ({
-        x: (1 - lm.x) * width,
-        y: lm.y * height,
-      }));
+      const points = (this.pointsScratch[handIndex] ??= hand.landmarks.map(() => ({ x: 0, y: 0 })));
+      for (let i = 0; i < hand.landmarks.length; i++) {
+        points[i].x = (1 - hand.landmarks[i].x) * width;
+        points[i].y = hand.landmarks[i].y * height;
+      }
 
       this.ctx.strokeStyle = hand.handedness === "Left" ? "#4fc3f7" : "#ff8a65";
       this.ctx.lineWidth = 2;
@@ -45,6 +51,6 @@ export class DebugSkeletonRenderer {
       this.ctx.fillStyle = hand.handedness === "Left" ? "#4fc3f7" : "#ff8a65";
       this.ctx.font = "16px sans-serif";
       this.ctx.fillText(label, points[0].x + 10, points[0].y + 10);
-    }
+    });
   }
 }

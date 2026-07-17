@@ -78,7 +78,7 @@ import { GestureDetector } from "./handTracking/GestureDetector";
 import { HandLandmarkerService } from "./handTracking/HandLandmarkerService";
 import { ScratchDetector } from "./handTracking/ScratchDetector";
 import type { FingertipDebugSample, HandFrame } from "./handTracking/types";
-import { computeScratchZone, type KeyZone } from "./handTracking/ZoneLayout";
+import { computeScratchZone, resolveScratchZone, type KeyZone } from "./handTracking/ZoneLayout";
 import { DebugSkeletonRenderer } from "./render/DebugSkeletonRenderer";
 import { JudgmentRenderer } from "./render/JudgmentRenderer";
 import { NoteRenderer } from "./render/NoteRenderer";
@@ -91,6 +91,26 @@ const TEST_BEAT_COUNT = Math.round(DEFAULT_GAME_DURATION_MS / (60000 / TEST_BPM)
 // Must mirror style.css's mobile breakpoint exactly (width for portrait, height for landscape
 // phones) — shared so the two can't quietly drift out of sync with each other.
 const MOBILE_MEDIA_QUERY = "(max-width: 640px), (max-height: 480px)";
+
+// Several independent layout-refit functions (language-row positioning, control-group label
+// shrinking, notice-board refitting) each register their own "resize" listener and each do their
+// own getBoundingClientRect()/scrollHeight layout reads — during a continuous window drag-resize,
+// every one of those events re-runs all of them independently. Coalescing every registrant into a
+// single shared listener that runs them all together in one requestAnimationFrame tick (instead of
+// once per registrant per event) means a resize burst costs one batched layout pass, not N
+// independent ones stacked on top of each other.
+const resizeRefitCallbacks = new Set<() => void>();
+let resizeRefitRafId = 0;
+function onWindowResizeRefit(callback: () => void): void {
+  resizeRefitCallbacks.add(callback);
+}
+window.addEventListener("resize", () => {
+  if (resizeRefitRafId) return;
+  resizeRefitRafId = requestAnimationFrame(() => {
+    resizeRefitRafId = 0;
+    resizeRefitCallbacks.forEach((cb) => cb());
+  });
+});
 
 // Scroll speed (ms from spawn to hit line) is a separate axis from note density/difficulty —
 // conflating the two was why doubling one alone didn't fix "the game feels too fast". "extreme"
@@ -422,7 +442,7 @@ function positionLanguageRow(): void {
   languageSelectRow.style.transform = "translateY(-50%)";
 }
 positionLanguageRow();
-window.addEventListener("resize", positionLanguageRow);
+onWindowResizeRefit(positionLanguageRow);
 // The tagline is Orbitron — until the webfont arrives its fallback-font width is wrong, so
 // re-measure once fonts settle.
 void document.fonts.ready.then(positionLanguageRow);
@@ -493,7 +513,7 @@ function fitControlGroupLabels(): void {
 }
 onLangChange(() => requestAnimationFrame(fitControlGroupLabels));
 fitControlGroupLabels();
-window.addEventListener("resize", fitControlGroupLabels);
+onWindowResizeRefit(fitControlGroupLabels);
 
 let selectedSongFile: File | null = null;
 let stepSelectedSongFile: File | null = null;
@@ -1610,7 +1630,7 @@ async function renderBanner(): Promise<void> {
   if (showGraffiti) fitGraffitiFontSize();
 }
 
-window.addEventListener("resize", () => {
+onWindowResizeRefit(() => {
   if (!noticeBoardGraffiti.hidden) noticeBoardGraffiti.style.fontSize = "";
   if (!noticeBoard.hidden) fitNoticeBoardHeight(!noticeBoardImages.hidden);
   if (!noticeBoardGraffiti.hidden) fitGraffitiFontSize();
@@ -2659,13 +2679,26 @@ async function initAdminSession(): Promise<void> {
   }
 }
 
-void initAdminSession().then(() => {
-  void renderLeaderboard();
-  void renderGuestbook();
-  void renderSocialLinks();
-  void renderWebsiteLinks();
-  void renderBeejayBrosLinks();
-  void renderBanner();
+// Every list's own fetch doesn't depend on admin status, so start them all immediately, in parallel
+// with the admin-session re-check below, instead of only after it resolves — that used to serialize
+// 6 independent round trips behind 1 unrelated one. The actual RENDER still waits for
+// initAdminSession() to settle (reusing this already-fetched data, so no extra round trip) since
+// each render reads the now-finalized `adminPassword` to decide whether to show admin-only controls
+// — rendering before that settles risked a flash of admin controls from a stale cached password that
+// would then never get hidden again (none of these re-render reactively on their own).
+const leaderboardPreload = loadLeaderboard();
+const guestbookPreload = loadGuestbook();
+const socialLinksPreload = loadSocialLinks();
+const websiteLinksPreload = loadWebsiteLinks();
+const beejayBrosLinksPreload = loadBeejayBrosLinks();
+void renderBanner(); // doesn't reference adminPassword at all — no need to wait for anything
+
+void initAdminSession().then(async () => {
+  void renderLeaderboard(await leaderboardPreload);
+  void renderGuestbook(await guestbookPreload);
+  void renderSocialLinks(await socialLinksPreload);
+  void renderWebsiteLinks(await websiteLinksPreload);
+  void renderBeejayBrosLinks(await beejayBrosLinksPreload);
 });
 
 // A reload of an already-open tab shouldn't bump the visit counter again — only the very first load
@@ -3279,12 +3312,16 @@ function playStep(
         }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Resolved once per frame (fixed geometry math against the current canvas size) instead of
+        // separately inside each of the 3 renderers below that need it — same result every time,
+        // computing it 3x per frame was pure waste.
+        const resolvedScratch = resolveScratchZone(scratchZone, canvas.width, canvas.height);
         zoneDebugRenderer.draw(zones, latestDebug, canvas.width, canvas.height);
-        zoneDebugRenderer.drawScratchDisk(scratchZone, scratchDetector.getRotationRad(), scratchDetector.isEngaged(), canvas.width, canvas.height);
+        zoneDebugRenderer.drawScratchDisk(resolvedScratch, scratchDetector.getRotationRad(), scratchDetector.isEngaged());
         const visibleNotes = noteScheduler.getVisibleNotes(songTimeMs, lookaheadMs, 200);
-        noteRenderer.draw(visibleNotes, zones, scratchZone, songTimeMs, lookaheadMs, canvas.width, canvas.height);
+        noteRenderer.draw(visibleNotes, zones, resolvedScratch, songTimeMs, lookaheadMs, canvas.width, canvas.height);
         skeletonRenderer.draw(latestHands, canvas.width, canvas.height);
-        judgmentRenderer.draw(zones, scratchZone, canvas.width, canvas.height);
+        judgmentRenderer.draw(zones, resolvedScratch, canvas.width, canvas.height);
 
         requestAnimationFrame(renderFrame);
       }
@@ -3459,6 +3496,26 @@ async function runSession(
   hud.textContent = t("hudCameraPermission");
 
   const camera = new CameraManager(video);
+
+  // Safari's WebGL backend has been unreliable with MediaPipe's GPU delegate — hand tracking would
+  // detect once and then silently stop producing results on later frames. CPU is slower but stable
+  // there. ?delegate=cpu/gpu (used for perf A/B testing) always overrides this default. Computed up
+  // here (doesn't depend on the camera at all) so the hand-tracker load right below can start
+  // immediately rather than waiting on camera.start() first.
+  const delegateOverride = new URLSearchParams(location.search).get("delegate")?.toUpperCase();
+  const isSafari = /^((?!chrome|crios|fxios|android).)*safari/i.test(navigator.userAgent);
+  const delegate: "GPU" | "CPU" =
+    delegateOverride === "CPU" || delegateOverride === "GPU" ? delegateOverride : isSafari ? "CPU" : "GPU";
+
+  // Kicked off in parallel with camera.start() below rather than after it — none of the three
+  // (camera permission, hand-tracker init, audio sample fetch) depend on each other, so starting
+  // them concurrently cuts the wait from sum-of-three to max-of-three. If camera.start() fails, this
+  // is simply left to finish unused in the background (a little wasted network/GPU work, no harm);
+  // the .catch(() => {}) below only exists to prevent an unhandled-rejection warning in that case.
+  const handTracker = new HandLandmarkerService();
+  const resourcesPromise = Promise.all([handTracker.initialize({ delegate }), sfxEngine.loadScratchSample("/audio/Hiphop_Deejaying.mp3")]);
+  resourcesPromise.catch(() => {});
+
   try {
     await camera.start();
   } catch (err) {
@@ -3496,21 +3553,13 @@ async function runSession(
   window.addEventListener("resize", scheduleResync);
   window.addEventListener("orientationchange", scheduleResync);
 
-  // Safari's WebGL backend has been unreliable with MediaPipe's GPU delegate — hand tracking would
-  // detect once and then silently stop producing results on later frames. CPU is slower but stable
-  // there. ?delegate=cpu/gpu (used for perf A/B testing) always overrides this default.
-  const delegateOverride = new URLSearchParams(location.search).get("delegate")?.toUpperCase();
-  const isSafari = /^((?!chrome|crios|fxios|android).)*safari/i.test(navigator.userAgent);
-  const delegate: "GPU" | "CPU" =
-    delegateOverride === "CPU" || delegateOverride === "GPU" ? delegateOverride : isSafari ? "CPU" : "GPU";
-
   hud.textContent = t("hudResourceLoadingTemplate", { delegate });
-  const handTracker = new HandLandmarkerService();
   // Own try/catch (rather than letting this reject up into the caller's single catch-all) so a hand-
   // tracker/GPU-delegate init failure surfaces as what it actually is instead of being mislabeled as
-  // an audio-load failure — the two were sharing one message before this.
+  // an audio-load failure — the two were sharing one message before this. This resolves quickly (or
+  // has already resolved) since it started in parallel with camera.start() above, not after it.
   try {
-    await Promise.all([handTracker.initialize({ delegate }), sfxEngine.loadScratchSample("/audio/Hiphop_Deejaying.mp3")]);
+    await resourcesPromise;
   } catch (err) {
     hud.textContent = t("hudResourceFailedTemplate", { msg: (err as Error).message });
     startOverlay.style.removeProperty("display");
