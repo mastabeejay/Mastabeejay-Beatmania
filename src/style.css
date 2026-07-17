@@ -283,6 +283,11 @@ body::before {
   display: none;
 }
 
+/* Sits behind #start-overlay's own z-index (10) at every moment — including the main screen, where
+   #start-overlay's background is only 85% opaque, so without this the game title used to bleed
+   through faintly right next to the "Masta Beejay Beat Breaker" tagline above. visibility (not
+   display) is toggled to "visible" in main.ts only while #start-overlay is hidden (i.e. during
+   actual gameplay), exactly mirroring #stop-button's own show/hide timing. */
 #game-title {
   position: fixed;
   top: 14px;
@@ -291,6 +296,7 @@ body::before {
   font-size: clamp(22px, 4vw, 44px);
   white-space: nowrap;
   pointer-events: none;
+  visibility: hidden;
   z-index: 5;
 }
 
@@ -4064,20 +4070,23 @@ select option:disabled {
     font-size: 16px;
   }
 
-  /* No left margin to borrow on a phone — the language row leaves its absolute perch in the
-     BEST-20 title line and stacks as its own centered line above the title instead. */
+  /* No left margin to borrow for the desktop under-the-tagline-'M' trick, but the row still reads
+     fine sitting inline to the title's left (same relative arrangement as desktop) since
+     #language-select-row is already the first child in the DOM — a plain centered row puts it there
+     with no absolute positioning needed. */
   #leaderboard-title-row {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 8px;
   }
 
   #language-select-row {
     position: static;
     transform: none;
     justify-content: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   /* Same story as the Jaybot launcher: the fixed bottom-right install-guide stack was covering
@@ -4238,9 +4247,15 @@ select option:disabled {
     gap: 5px;
   }
 
+  /* Desktop's fixed 96px (itself a fix for language-dependent growth) was never narrowed for
+     mobile's much smaller font, so at this size it was actually wider than it needed to be relative
+     to Track/Option — enough on its own to trip #main-controls-row's flex-wrap and drop Option onto
+     a second row. Narrower fixed width keeps the same anti-growth property at a size that actually
+     fits alongside Track/Option here. */
   .settings-select-label select {
     font-size: 12px;
     padding: 4px 6px;
+    width: 70px;
   }
 
   #calibration-toggle-label {
@@ -4495,6 +4510,7 @@ select option:disabled {
   .settings-select-label select {
     font-size: 10px;
     padding: 2px 2px;
+    width: 44px;
   }
 
   /* Same compacting as #main-controls-row's groups above gets every individual item small enough

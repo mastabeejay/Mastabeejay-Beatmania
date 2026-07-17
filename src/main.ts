@@ -157,6 +157,9 @@ const hud = document.querySelector<HTMLDivElement>("#status-hud")!;
 const startOverlay = document.querySelector<HTMLDivElement>("#start-overlay")!;
 const startButton = document.querySelector<HTMLButtonElement>("#start-button")!;
 const stopButton = document.querySelector<HTMLButtonElement>("#stop-button")!;
+// Paired with every startOverlay show/hide below — visible only while the start screen itself is
+// hidden (active gameplay), so it never bleeds through the start screen's translucent background.
+const gameTitleEl = document.querySelector<HTMLDivElement>("#game-title")!;
 const speedSelect = document.querySelector<HTMLSelectElement>("#speed-select")!;
 const difficultySelect = document.querySelector<HTMLSelectElement>("#difficulty-select")!;
 const songFileInput = document.querySelector<HTMLInputElement>("#song-file-input")!;
@@ -3101,6 +3104,7 @@ function playStep(
         trackInfoEl.style.display = "none";
         calibrationStatus.style.display = "none";
         startOverlay.style.removeProperty("display");
+    gameTitleEl.style.visibility = "hidden";
         hud.textContent = message;
         resolve({ aborted: true });
       };
@@ -3390,11 +3394,13 @@ async function finalizeSession(
   if (!member) {
     camera.stop();
     startOverlay.style.removeProperty("display");
+    gameTitleEl.style.visibility = "hidden";
     return;
   }
   if (!(await qualifiesForTop20(cumulativeScore))) {
     camera.stop();
     startOverlay.style.removeProperty("display");
+    gameTitleEl.style.visibility = "hidden";
     return;
   }
 
@@ -3434,6 +3440,7 @@ async function finalizeSession(
       nameEntryOverlay.style.display = "none";
       await renderLeaderboard(updatedBoard);
       startOverlay.style.removeProperty("display");
+    gameTitleEl.style.visibility = "hidden";
       resolve();
     };
   });
@@ -3457,6 +3464,7 @@ async function runSession(
   } catch (err) {
     hud.textContent = t("hudCameraFailedTemplate", { msg: (err as Error).message });
     startOverlay.style.removeProperty("display");
+    gameTitleEl.style.visibility = "hidden";
     return;
   }
 
@@ -3506,6 +3514,7 @@ async function runSession(
   } catch (err) {
     hud.textContent = t("hudResourceFailedTemplate", { msg: (err as Error).message });
     startOverlay.style.removeProperty("display");
+    gameTitleEl.style.visibility = "hidden";
     return;
   }
 
@@ -3567,6 +3576,7 @@ async function runSession(
 
 startButton.addEventListener("click", () => {
   startOverlay.style.display = "none";
+  gameTitleEl.style.visibility = "visible";
 
   const speedKey = (speedSelect.value as keyof typeof SPEED_PRESETS) || "normal";
   const difficultyKey = (difficultySelect.value as keyof typeof DIFFICULTY_PRESETS) || "easy";
@@ -3585,5 +3595,6 @@ startButton.addEventListener("click", () => {
     .catch((err) => {
       hud.textContent = t("hudAudioLoadFailedTemplate", { msg: (err as Error).message });
       startOverlay.style.removeProperty("display");
+    gameTitleEl.style.visibility = "hidden";
     });
 });
