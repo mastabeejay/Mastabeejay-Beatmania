@@ -30,6 +30,15 @@ export const DEFAULT_TRACKS: DefaultTrack[] = [
   { fileUrl: "/audio/ybj/ybj-16.mp3", fileName: "임진년...어느날.mp3", title: "임진년...어느날", producer: "Produced by Yim Bongjin" },
   { fileUrl: "/audio/ybj/ybj-17.mp3", fileName: "찬양가.mp3", title: "찬양가", producer: "Produced by Yim Bongjin" },
   { fileUrl: "/audio/ybj/ybj-18.mp3", fileName: "청령포로 가는 길.mp3", title: "청령포로 가는 길", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-19.mp3", fileName: "아빠는 레전드1.mp3", title: "아빠는 레전드1", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-20.mp3", fileName: "아빠는 레전드2.mp3", title: "아빠는 레전드2", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-21.mp3", fileName: "대한의 이름들2.mp3", title: "대한의 이름들2", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-22.mp3", fileName: "청령포로 가는 길2.mp3", title: "청령포로 가는 길2", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-23.mp3", fileName: "Hoopkyuns2.mp3", title: "Hoopkyuns2", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-24.mp3", fileName: "Move Groove ver2.mp3", title: "Move Groove ver2", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-25.mp3", fileName: "우리는 2026 (remix).mp3", title: "우리는 2026 (remix)", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-26.mp3", fileName: "우리는 2026 (Old School).mp3", title: "우리는 2026 (Old School)", producer: "Produced by Yim Bongjin" },
+  { fileUrl: "/audio/ybj/ybj-27.mp3", fileName: "Deadline Dust.mp3", title: "Deadline Dust", producer: "Produced by Yim Bongjin" },
 ];
 
 export function pickRandomDefaultTrack(): DefaultTrack {
