@@ -345,35 +345,54 @@ const chatbotCloseButton = document.querySelector<HTMLButtonElement>("#chatbot-c
 const chatbotToggleButton = document.querySelector<HTMLButtonElement>("#chatbot-toggle-button")!;
 const ctx = canvas.getContext("2d")!;
 
-// --- Language selector ("Language" label + flag row sharing the BEST-20-title line) ----------------
+// --- Language selector ("Language" label + a closed dropdown sharing the BEST-20-title line) -------
 // Rendered from LANGUAGES rather than hand-written in index.html so the flag/label/default-active
-// state all come from one source of truth (src/i18n/translations.ts). Each flag button's own
-// tooltip/label is that language's native name — a language switcher conventionally shows "Español"
-// rather than translating it, so visitors can find their language even if the current UI text is
-// unreadable to them. Buttons are injected into the #language-flag-list child (NOT the row's own
-// innerHTML) so the "Language" label span survives — same wipe-the-siblings pitfall that bit the
-// data-i18n-on-<label> bug last round.
-const languageFlagList = document.querySelector<HTMLSpanElement>("#language-flag-list")!;
-languageFlagList.innerHTML = LANGUAGES.map(
-  (lang) => `<button type="button" class="lang-flag-btn" data-lang="${lang.code}" title="${lang.label}" aria-label="${lang.label}">${lang.flagSvg}</button>`,
+// state all come from one source of truth (src/i18n/translations.ts). Closed by default (matches
+// the site's own 속도/난이도 <select> pattern) — only the current flag shows until the trigger is
+// clicked, at which point the full list drops down below it; picking an option closes it again.
+// Each option's own tooltip/label is that language's native name — a language switcher
+// conventionally shows "Español" rather than translating it, so visitors can find their language
+// even if the current UI text is unreadable to them.
+const languageDropdownTrigger = document.querySelector<HTMLButtonElement>("#language-dropdown-trigger")!;
+const languageDropdownCurrentFlag = document.querySelector<HTMLSpanElement>("#language-dropdown-current-flag")!;
+const languageDropdownList = document.querySelector<HTMLDivElement>("#language-dropdown-list")!;
+languageDropdownList.innerHTML = LANGUAGES.map(
+  (lang) =>
+    `<button type="button" class="lang-flag-option" data-lang="${lang.code}" role="option" title="${lang.label}">${lang.flagSvg}<span class="lang-flag-option-label">${lang.label}</span></button>`,
 ).join("");
 function updateLanguageSelectorActiveState(): void {
   const current = getLang();
-  languageSelectRow.querySelectorAll<HTMLButtonElement>(".lang-flag-btn").forEach((btn) => {
+  languageDropdownCurrentFlag.innerHTML = (LANGUAGES.find((l) => l.code === current) ?? LANGUAGES[0]).flagSvg;
+  languageDropdownList.querySelectorAll<HTMLButtonElement>(".lang-flag-option").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.lang === current);
   });
 }
 updateLanguageSelectorActiveState();
-languageSelectRow.addEventListener("click", (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".lang-flag-btn");
+function closeLanguageDropdown(): void {
+  languageDropdownList.hidden = true;
+  languageDropdownTrigger.setAttribute("aria-expanded", "false");
+}
+languageDropdownTrigger.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const opening = languageDropdownList.hidden;
+  languageDropdownList.hidden = !opening;
+  languageDropdownTrigger.setAttribute("aria-expanded", String(opening));
+});
+languageDropdownList.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".lang-flag-option");
   if (!button) return;
   setLang(button.dataset.lang as Lang);
+  closeLanguageDropdown();
+});
+// Click-outside-to-close, same pattern as every other popover on this site.
+document.addEventListener("click", (event) => {
+  if (!languageDropdownList.hidden && !(event.target as HTMLElement).closest("#language-dropdown")) closeLanguageDropdown();
 });
 onLangChange(() => {
   updateLanguageSelectorActiveState();
   document.documentElement.lang = getLang();
   // The BEST-20 title's translated width differs per language, which moves how much left-margin
-  // room the flag row has — re-fit it. rAF so the just-applied translation has laid out first.
+  // room the row has — re-fit it. rAF so the just-applied translation has laid out first.
   requestAnimationFrame(positionLanguageRow);
 });
 document.documentElement.lang = getLang();
@@ -385,7 +404,6 @@ initI18n();
 // in CSS. Mobile keeps the row static (own centered line) — there's no left margin to sit in.
 const leaderboardTaglineEl = document.querySelector<HTMLDivElement>("#leaderboard-tagline")!;
 const leaderboardTitleRowEl = document.querySelector<HTMLDivElement>("#leaderboard-title-row")!;
-const leaderboardTitleEl = document.querySelector<HTMLDivElement>("#leaderboard-title")!;
 function positionLanguageRow(): void {
   if (window.matchMedia(MOBILE_MEDIA_QUERY).matches) {
     languageSelectRow.style.left = "";
@@ -393,26 +411,86 @@ function positionLanguageRow(): void {
     return;
   }
   // May well be negative — the tagline is wider than the leaderboard box, so the 'M' sits left of
-  // this container's own edge. Absolute positioning is allowed to hang outside it.
+  // this container's own edge. Absolute positioning is allowed to hang outside it. No shrink-to-fit
+  // needed here anymore (unlike the old all-7-flags-inline row) — the closed dropdown is a single
+  // fixed-size trigger button, so its width never varies with the selected language.
   const left = leaderboardTaglineEl.getBoundingClientRect().left - leaderboardTitleRowEl.getBoundingClientRect().left;
   languageSelectRow.style.left = `${left}px`;
   languageSelectRow.style.transform = "translateY(-50%)";
-  // Longer translated titles (es/fr) can reach the flag row's right edge — shrink the whole row
-  // from its left (title-'M'-aligned) edge just enough to clear the title text instead of
-  // overlapping it.
-  const rowRect = languageSelectRow.getBoundingClientRect();
-  const titleRect = leaderboardTitleEl.getBoundingClientRect();
-  const available = titleRect.left - 10 - rowRect.left;
-  if (rowRect.width > available && available > 0) {
-    languageSelectRow.style.transform = `translateY(-50%) scale(${Math.max(0.6, available / rowRect.width)})`;
-    languageSelectRow.style.transformOrigin = "left center";
-  }
 }
 positionLanguageRow();
 window.addEventListener("resize", positionLanguageRow);
 // The tagline is Orbitron — until the webfont arrives its fallback-font width is wrong, so
 // re-measure once fonts settle.
 void document.fonts.ready.then(positionLanguageRow);
+
+/** Same measure-and-shrink technique as fitGraffitiFontSize/fitBeejayBrosLinkText: shrinks el's
+ *  font-size (0.5px at a time, down to a floor) until its rendered height is back within
+ *  targetHeightPx. Reset to "" first so re-runs (language switch back to a short language) don't
+ *  compound a previous shrink. */
+function shrinkToFitHeight(el: HTMLElement, targetHeightPx: number, minFontPx = 10): void {
+  el.style.fontSize = "";
+  let fontSize = parseFloat(getComputedStyle(el).fontSize);
+  while (fontSize > minFontPx && el.scrollHeight > targetHeightPx + 0.5) {
+    fontSize -= 0.5;
+    el.style.fontSize = `${fontSize}px`;
+  }
+}
+
+/** Same technique, checking width instead — used for the 속도/난이도 field-name span next to each
+ *  <select> (see fitControlGroupLabels below), where a longer translation risks pushing the whole
+ *  label+select pair wide enough to trip .control-group-body's flex-wrap. */
+function shrinkToFitWidth(el: HTMLElement, targetWidthPx: number, minFontPx = 9): void {
+  el.style.fontSize = "";
+  let fontSize = parseFloat(getComputedStyle(el).fontSize);
+  while (fontSize > minFontPx && el.scrollWidth > targetWidthPx + 0.5) {
+    fontSize -= 0.5;
+    el.style.fontSize = `${fontSize}px`;
+  }
+}
+
+// A longer vi/es/fr translation used to just grow #track-group/#level-group's own width
+// unbounded (see .control-group's max-width comment in style.css), which pushed the 3 groups'
+// combined width past #main-controls-row's and made THAT row wrap — roughly doubling the whole
+// row's height. Capping each group's width fixes the row-level wrap, but its own labels
+// (bgm-mode-select / 자유 음원) can still wrap onto a 2nd line inside that narrower box; this
+// shrinks their font just enough that the 2-line height stays within a small, fixed budget —
+// the same budget for every language, so Track/Level/Option's height no longer depends on which
+// language is selected. Desktop's 34px is roughly 1.6x the single-line height these labels render
+// at by default (measured ~21px in Korean/English), giving 2 short lines room without going tiny.
+// Mobile already stacks every label onto 2 lines within a much narrower fixed-width box even for
+// Korean (measured ~34-38px there), so a longer translation there means MORE wrapped lines, not a
+// wider box — same fix, smaller/already-2-line budget so Korean itself is left untouched.
+const CONTROL_LABEL_HEIGHT_BUDGET_PX = 34;
+const CONTROL_LABEL_HEIGHT_BUDGET_MOBILE_PX = 38;
+// 속도/난이도's field-name span, next to its <select> — a longer translation (Velocidad/
+// Dificultad, Tốc độ/Độ khó) widened this enough on its own to trip the row-level wrap even after
+// the <select> itself got a fixed width (see .settings-select-label select's own comment). 44px
+// comfortably covers every language's translation at a readable size; only the genuine outliers
+// need any shrink at all.
+const SETTINGS_LABEL_WIDTH_BUDGET_PX = 44;
+function fitControlGroupLabels(): void {
+  const mobile = window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+  const heightBudget = mobile ? CONTROL_LABEL_HEIGHT_BUDGET_MOBILE_PX : CONTROL_LABEL_HEIGHT_BUDGET_PX;
+  // Mobile's own CSS already sets these labels to 10px (vs desktop's 14px) — shrinkToFitHeight's
+  // default 10px floor left zero room to shrink into (the starting size WAS the floor), so nothing
+  // ever happened there. A lower floor for mobile actually gives it somewhere to go.
+  const minFontPx = mobile ? 7 : 10;
+  document.querySelectorAll<HTMLElement>(".bgm-mode-select label, .song-file-label, #calibration-toggle-label, .settings-select-label").forEach((el) => {
+    shrinkToFitHeight(el, heightBudget, minFontPx);
+  });
+  // Desktop only: on mobile .settings-select-label stacks its label above the <select> (column,
+  // not row), so this span's own width isn't what risks tripping a wrap there — the height-shrink
+  // above already covers it.
+  if (!mobile) {
+    document.querySelectorAll<HTMLElement>(".settings-select-label > span[data-i18n]").forEach((el) => {
+      shrinkToFitWidth(el, SETTINGS_LABEL_WIDTH_BUDGET_PX);
+    });
+  }
+}
+onLangChange(() => requestAnimationFrame(fitControlGroupLabels));
+fitControlGroupLabels();
+window.addEventListener("resize", fitControlGroupLabels);
 
 let selectedSongFile: File | null = null;
 let stepSelectedSongFile: File | null = null;

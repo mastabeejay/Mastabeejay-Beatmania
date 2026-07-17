@@ -19,8 +19,9 @@ const TIER_COLOR: Record<string, string> = {
   Bad: "#ff2ee0",
 };
 
-// The popup shows the translated judgment word (per the site owner's request — these were English
-// in every language before); the internal tier names stay English as code-level identifiers.
+// The popup shows the judgment word via i18n so zh/fr get their translated version (per the site
+// owner's explicit scoping) while every other language keeps the original English wording; the
+// internal tier names themselves always stay English as code-level identifiers.
 const TIER_LABEL_KEY: Record<string, TKey> = {
   Excellent: "judgeExcellent",
   Great: "judgeGreat",

@@ -1932,7 +1932,7 @@ body::before {
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: nowrap;
 }
 
@@ -1942,24 +1942,84 @@ body::before {
   font-weight: 600;
   font-size: 13px;
   color: var(--color-cyber-silver);
-  margin-right: 4px;
   white-space: nowrap;
 }
 
-#language-flag-list {
+/* A closed-by-default dropdown, same interaction shape as the 속도/난이도 <select> elements: only
+   the current flag shows until #language-dropdown-trigger is clicked, at which point
+   #language-dropdown-list drops down below it (absolute — doesn't push any layout). A native
+   <select> can't render per-option SVG flag artwork cross-browser, hence the custom trigger+list
+   pair instead of a real <select>, but the open/close behavior matches. */
+#language-dropdown {
+  position: relative;
+}
+
+#language-dropdown-trigger {
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-.lang-flag-btn {
   line-height: 0;
-  padding: 3px;
+  padding: 3px 5px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(6, 10, 18, 0.5);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+#language-dropdown-trigger:hover {
+  background: rgba(0, 240, 255, 0.16);
+}
+
+#language-dropdown-trigger[aria-expanded="true"] {
+  border-color: rgba(0, 240, 255, 0.7);
+}
+
+#language-dropdown-caret {
+  font-size: 9px;
+  color: var(--color-cyber-silver);
+}
+
+#language-dropdown-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(6, 10, 18, 0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.lang-flag-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-cyber-silver);
+  font-family: var(--font-body);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.lang-flag-option:hover {
+  background: rgba(0, 240, 255, 0.14);
+}
+
+.lang-flag-option.active {
+  border-color: rgba(0, 240, 255, 0.5);
+  background: rgba(0, 240, 255, 0.2);
 }
 
 /* Real SVG flag artwork (emoji flags render as bare "KR"/"GB" letter pairs on Windows). */
@@ -1968,17 +2028,7 @@ body::before {
   height: 16px;
   border-radius: 2.5px;
   display: block;
-}
-
-.lang-flag-btn:hover {
-  background: rgba(0, 240, 255, 0.16);
-  transform: scale(1.08);
-}
-
-.lang-flag-btn.active {
-  border-color: rgba(0, 240, 255, 0.7);
-  background: rgba(0, 240, 255, 0.22);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.45);
+  flex-shrink: 0;
 }
 
 #p2b-badge {
@@ -3142,11 +3192,28 @@ body::before {
   gap: 24px;
 }
 
+/* max-width caps how wide a group can grow before its content is forced to wrap onto a 2nd line
+   instead — without this, a longer translation (vi/es/fr) just grew the group wider unbounded,
+   which pushed the 3 groups' combined width past #main-controls-row's own width and triggered ITS
+   flex-wrap, dropping Option onto a second row and roughly doubling the whole row's height. Capping
+   each group keeps the row's total width constant across every language; see fitControlGroupText()
+   in main.ts for the accompanying auto-shrink that keeps the wrapped 2-line text at the same height
+   as the original 1-line text. */
 .control-group {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  max-width: 280px;
+}
+
+/* Level needs a bit more than the shared 280px cap: its two label+<select> pairs (속도/난이도)
+   sit side by side, and some translations (Vitesse/Difficulté, Velocidad/Dificultad) overflow 280px
+   by only ~15-20px — just enough to trip .control-group-body's flex-wrap and stack them onto 2
+   rows, which costs far more height than the couple of extra px this cap costs the row's total
+   width (still comfortably under #main-controls-row's own 860px cap). */
+#level-group {
+  max-width: 310px;
 }
 
 .control-group-title {
@@ -3181,6 +3248,12 @@ body::before {
 
 .bgm-mode-select {
   display: flex;
+  /* align-items defaults to stretch — without this, whichever radio label wraps to 2 lines in a
+     given language forces BOTH labels (even a short one-line one) to that same stretched height,
+     and js-side font-shrinking the wrapped label alone can never undo it (its rendered box stays
+     pinned to the stretch height even as its own content shrinks below that). flex-start lets each
+     label size to its own content so fitControlGroupLabels() in main.ts can actually shrink it. */
+  align-items: flex-start;
   gap: 18px;
   font-family: var(--font-body);
   font-weight: 600;
@@ -3206,10 +3279,17 @@ body::before {
   font-size: 14px;
 }
 
+/* A closed native <select> sizes itself to its widest OPTION's text by default — harmless for
+   Korean/English's short options, but Vietnamese's "Bình thường" (~11 chars) made the box itself
+   nearly 30px wider than Korean's, which alone was enough to trip .control-group-body's flex-wrap
+   and stack the 속도/난이도 rows. A fixed width (with the browser's own closed-state text clipping
+   as the fallback for the rare long option) keeps the box — and therefore the row — the same size
+   in every language. */
 .settings-select-label select {
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 14px;
+  width: 96px;
   padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid rgba(0, 240, 255, 0.3);

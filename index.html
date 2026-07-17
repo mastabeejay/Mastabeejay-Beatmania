@@ -113,9 +113,15 @@
                left margin on desktop, JS-aligned to the tagline's first letter) instead of taking
                its own row, so it adds no vertical height to the start screen. -->
           <div id="leaderboard-title-row">
-            <div id="language-select-row" role="radiogroup" aria-label="Language">
+            <div id="language-select-row">
               <span id="language-select-label">Language</span>
-              <span id="language-flag-list"></span>
+              <div id="language-dropdown">
+                <button type="button" id="language-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Language">
+                  <span id="language-dropdown-current-flag"></span>
+                  <span id="language-dropdown-caret">▾</span>
+                </button>
+                <div id="language-dropdown-list" role="listbox" hidden></div>
+              </div>
             </div>
             <div id="leaderboard-title" class="text-metallic-gold" data-i18n="leaderboardTitle">BEST 20 RECORD</div>
           </div>
