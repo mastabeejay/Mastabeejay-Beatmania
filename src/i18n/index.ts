@@ -63,6 +63,9 @@ function applyStaticTranslations(): void {
   document.querySelectorAll<HTMLElement>("[data-i18n-title]").forEach((el) => {
     el.title = t(el.dataset.i18nTitle as keyof typeof T);
   });
+  document.querySelectorAll<HTMLImageElement>("img[data-i18n-alt]").forEach((el) => {
+    el.alt = t(el.dataset.i18nAlt as keyof typeof T);
+  });
 }
 
 export function setLang(lang: Lang): void {

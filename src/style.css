@@ -1913,23 +1913,61 @@ body::before {
 
 /* Flag row rendered from LANGUAGES (main.ts) — sits directly below the tagline/P2B row, per the
    site owner's placement request. Default (Korean) is visually marked active on load. */
+/* Shares the BEST-20-title line: the row is absolutely positioned into the title line's left
+   margin (no vertical height added to the start screen), with its left edge JS-aligned to the
+   tagline's first letter — see positionLanguageRow() in main.ts. Mobile reverts to a static
+   centered row of its own (see that breakpoint), since a phone has no left margin to borrow. */
+/* Centered flex (not a text-align'd block) so the title element shrinks to its text — the overlap
+   check in positionLanguageRow() needs the title's real text edges, not a full-width block box. */
+#leaderboard-title-row {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
 #language-select-row {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+/* Mirrors the 속도/난이도 field-label look (.settings-select-label) per the owner's request. */
+#language-select-label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-cyber-silver);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+#language-flag-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .lang-flag-btn {
-  font-size: 20px;
-  line-height: 1;
-  padding: 4px 7px;
-  border-radius: 8px;
+  line-height: 0;
+  padding: 3px;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(6, 10, 18, 0.5);
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+/* Real SVG flag artwork (emoji flags render as bare "KR"/"GB" letter pairs on Windows). */
+.lang-flag-svg {
+  width: 24px;
+  height: 16px;
+  border-radius: 2.5px;
+  display: block;
 }
 
 .lang-flag-btn:hover {
@@ -3944,6 +3982,22 @@ select option:disabled {
      old 12px made the whole layout blow up past the screen the moment the input was tapped. */
   #chatbot-input {
     font-size: 16px;
+  }
+
+  /* No left margin to borrow on a phone — the language row leaves its absolute perch in the
+     BEST-20 title line and stacks as its own centered line above the title instead. */
+  #leaderboard-title-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #language-select-row {
+    position: static;
+    transform: none;
+    justify-content: center;
+    flex-wrap: wrap;
   }
 
   /* Same story as the Jaybot launcher: the fixed bottom-right install-guide stack was covering

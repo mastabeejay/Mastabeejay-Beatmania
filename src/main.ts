@@ -345,14 +345,17 @@ const chatbotCloseButton = document.querySelector<HTMLButtonElement>("#chatbot-c
 const chatbotToggleButton = document.querySelector<HTMLButtonElement>("#chatbot-toggle-button")!;
 const ctx = canvas.getContext("2d")!;
 
-// --- Language selector (flag row under the "Masta Beejay Beat Breaker" tagline) -------------------
+// --- Language selector ("Language" label + flag row sharing the BEST-20-title line) ----------------
 // Rendered from LANGUAGES rather than hand-written in index.html so the flag/label/default-active
 // state all come from one source of truth (src/i18n/translations.ts). Each flag button's own
 // tooltip/label is that language's native name — a language switcher conventionally shows "Español"
 // rather than translating it, so visitors can find their language even if the current UI text is
-// unreadable to them.
-languageSelectRow.innerHTML = LANGUAGES.map(
-  (lang) => `<button type="button" class="lang-flag-btn" data-lang="${lang.code}" title="${lang.label}" aria-label="${lang.label}">${lang.flag}</button>`,
+// unreadable to them. Buttons are injected into the #language-flag-list child (NOT the row's own
+// innerHTML) so the "Language" label span survives — same wipe-the-siblings pitfall that bit the
+// data-i18n-on-<label> bug last round.
+const languageFlagList = document.querySelector<HTMLSpanElement>("#language-flag-list")!;
+languageFlagList.innerHTML = LANGUAGES.map(
+  (lang) => `<button type="button" class="lang-flag-btn" data-lang="${lang.code}" title="${lang.label}" aria-label="${lang.label}">${lang.flagSvg}</button>`,
 ).join("");
 function updateLanguageSelectorActiveState(): void {
   const current = getLang();
@@ -369,9 +372,47 @@ languageSelectRow.addEventListener("click", (event) => {
 onLangChange(() => {
   updateLanguageSelectorActiveState();
   document.documentElement.lang = getLang();
+  // The BEST-20 title's translated width differs per language, which moves how much left-margin
+  // room the flag row has — re-fit it. rAF so the just-applied translation has laid out first.
+  requestAnimationFrame(positionLanguageRow);
 });
 document.documentElement.lang = getLang();
 initI18n();
+
+// Desktop: the row sits absolutely in the BEST-20 title line's left margin, its left edge aligned
+// to the first letter ('M') of the centered "Masta Beejay Beat Breaker" tagline above — that x
+// position depends on viewport width and font loading, so it's measured live rather than guessed
+// in CSS. Mobile keeps the row static (own centered line) — there's no left margin to sit in.
+const leaderboardTaglineEl = document.querySelector<HTMLDivElement>("#leaderboard-tagline")!;
+const leaderboardTitleRowEl = document.querySelector<HTMLDivElement>("#leaderboard-title-row")!;
+const leaderboardTitleEl = document.querySelector<HTMLDivElement>("#leaderboard-title")!;
+function positionLanguageRow(): void {
+  if (window.matchMedia(MOBILE_MEDIA_QUERY).matches) {
+    languageSelectRow.style.left = "";
+    languageSelectRow.style.transform = "";
+    return;
+  }
+  // May well be negative — the tagline is wider than the leaderboard box, so the 'M' sits left of
+  // this container's own edge. Absolute positioning is allowed to hang outside it.
+  const left = leaderboardTaglineEl.getBoundingClientRect().left - leaderboardTitleRowEl.getBoundingClientRect().left;
+  languageSelectRow.style.left = `${left}px`;
+  languageSelectRow.style.transform = "translateY(-50%)";
+  // Longer translated titles (es/fr) can reach the flag row's right edge — shrink the whole row
+  // from its left (title-'M'-aligned) edge just enough to clear the title text instead of
+  // overlapping it.
+  const rowRect = languageSelectRow.getBoundingClientRect();
+  const titleRect = leaderboardTitleEl.getBoundingClientRect();
+  const available = titleRect.left - 10 - rowRect.left;
+  if (rowRect.width > available && available > 0) {
+    languageSelectRow.style.transform = `translateY(-50%) scale(${Math.max(0.6, available / rowRect.width)})`;
+    languageSelectRow.style.transformOrigin = "left center";
+  }
+}
+positionLanguageRow();
+window.addEventListener("resize", positionLanguageRow);
+// The tagline is Orbitron — until the webfont arrives its fallback-font width is wrong, so
+// re-measure once fonts settle.
+void document.fonts.ready.then(positionLanguageRow);
 
 let selectedSongFile: File | null = null;
 let stepSelectedSongFile: File | null = null;
@@ -2915,6 +2956,16 @@ async function resolveBgmSelection(
   return { songFile: new File([blob], track.fileName, { type: blob.type }), defaultTrack: track };
 }
 
+/** The in-game status readout shows the AudioContext's own state string — translated per the site
+ *  owner's request (running/suspended were raw English API values in every language). Unknown
+ *  values pass through untouched. */
+function translateAudioState(state: AudioContextState): string {
+  if (state === "running") return t("audioStateRunning");
+  if (state === "suspended") return t("audioStateSuspended");
+  if (state === "closed") return t("audioStateClosed");
+  return state;
+}
+
 type StepOutcome =
   | { aborted: true }
   | { aborted: false; finalScore: number; counts: { Excellent: number; Great: number; Good: number; Bad: number } };
@@ -3023,7 +3074,7 @@ function playStep(
         judgmentRenderer.register(result, outcome.combo);
         scoreValueEl.textContent = String(outcome.score);
         comboValueEl.hidden = outcome.combo <= 0;
-        if (outcome.combo > 0) comboValueEl.textContent = `COMBO ${outcome.combo}`;
+        if (outcome.combo > 0) comboValueEl.textContent = `${t("comboLabel")} ${outcome.combo}`;
       }
 
       // Hand-tracking runs at camera/inference FPS (often well under 60); rendering runs on its own
@@ -3090,9 +3141,9 @@ function playStep(
           lastFpsSampleTime = now;
         }
         const scratchStatus = scratchDetector.isEngaged()
-          ? `engaged (${scratchEvent?.direction ?? "none"}, ${(scratchEvent?.scratchVelocityPerSec ?? 0).toFixed(1)}/s)`
-          : "idle";
-        hud.textContent = `STEP: ${stepNumber}\nDelegate: ${delegate}\nFPS: ${fps}\n${t("hudDebugFramesLabel")}: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n${t("hudDebugHandsLabel")}: ${result.hands.length}\n${t("hudDebugPressesLabel")}: ${pressCount}\n${t("hudDebugScratchLabel")}: ${scratchStatus}\nAudioCtx: ${audioCtx.state}`;
+          ? `${t("scratchEngagedLabel")} (${scratchEvent?.direction ?? "none"}, ${(scratchEvent?.scratchVelocityPerSec ?? 0).toFixed(1)}/s)`
+          : t("scratchIdleLabel");
+        hud.textContent = `${t("hudDebugStepLabel")}: ${stepNumber}\n${t("hudDebugDelegateLabel")}: ${delegate}\nFPS: ${fps}\n${t("hudDebugFramesLabel")}: ${framesSeen}\nDetect: ${inferenceMsAvg.toFixed(1)}ms\n${t("hudDebugHandsLabel")}: ${result.hands.length}\n${t("hudDebugPressesLabel")}: ${pressCount}\n${t("hudDebugScratchLabel")}: ${scratchStatus}\nAudioCtx: ${translateAudioState(audioCtx.state)}`;
       });
 
       // iOS Safari can leave the AudioContext "suspended" right before a step starts — re-resuming
@@ -3172,7 +3223,7 @@ function showStepResults(
   return new Promise((resolve) => {
     resultsStepLabelEl.textContent = t("resultsStepCompleteTemplate", { n: stepNumber });
     resultsScoreEl.textContent = String(cumulativeScore);
-    resultsBreakdownEl.textContent = `${t("resultsBreakdownLabel")} ${stepScore}  ·  Excellent ${counts.Excellent}   Great ${counts.Great}   Good ${counts.Good}   Bad ${counts.Bad}`;
+    resultsBreakdownEl.textContent = `${t("resultsBreakdownLabel")} ${stepScore}  ·  ${t("judgeExcellent")} ${counts.Excellent}   ${t("judgeGreat")} ${counts.Great}   ${t("judgeGood")} ${counts.Good}   ${t("judgeBad")} ${counts.Bad}`;
     resultsNextStepButton.style.display = canContinue ? "inline-block" : "none";
     resultsConfirmButton.textContent = canContinue ? t("resultsConfirmBtnContinue") : t("resultsConfirmBtnFinal");
     resultsOverlay.style.display = "flex";

@@ -16,20 +16,90 @@ export type Lang = "ko" | "en" | "zh" | "vi" | "ja" | "es" | "fr";
 
 export interface LanguageOption {
   code: Lang;
-  flag: string;
+  /** Inline SVG markup for the country flag. Emoji flags are NOT used because Windows renders them
+   *  as two-letter country codes ("KR", "GB", ...) instead of flag images — confirmed by the site
+   *  owner on their own Windows PC — so each flag is hand-drawn as a tiny real SVG instead. */
+  flagSvg: string;
   label: string;
+}
+
+// A 5-point star polygon centered on the origin (outer radius 1, standard flag inner ratio) —
+// shared by the China and Vietnam flags below via transform.
+const STAR = `<path d="M0,-1 L0.22,-0.31 L0.95,-0.31 L0.36,0.12 L0.59,0.81 L0,0.38 L-0.59,0.81 L-0.36,0.12 L-0.95,-0.31 L-0.22,-0.31 Z"`;
+
+function flagSvg(inner: string): string {
+  return `<svg class="lang-flag-svg" viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`;
 }
 
 // Flags follow the site owner's explicit country choices (영국 -> UK flag for English, not US).
 // Order is the display order in the selector row; ko is first and is the default.
 export const LANGUAGES: LanguageOption[] = [
-  { code: "ko", flag: "🇰🇷", label: "한국어" },
-  { code: "en", flag: "🇬🇧", label: "English" },
-  { code: "zh", flag: "🇨🇳", label: "中文" },
-  { code: "vi", flag: "🇻🇳", label: "Tiếng Việt" },
-  { code: "ja", flag: "🇯🇵", label: "日本語" },
-  { code: "es", flag: "🇪🇸", label: "Español" },
-  { code: "fr", flag: "🇫🇷", label: "Français" },
+  {
+    code: "ko",
+    label: "한국어",
+    // Taegeukgi: white field, red-over-blue taegeuk (horizontal yin-yang simplification, standard
+    // for icon sizes), plus the four corner trigrams as bar triplets perpendicular to the diagonals.
+    flagSvg: flagSvg(
+      `<rect width="30" height="20" fill="#fff"/>` +
+        `<circle cx="15" cy="10" r="5" fill="#0047a0"/>` +
+        `<path d="M10,10 A5,5 0 0 1 20,10 Z" fill="#cd2e3a"/>` +
+        `<circle cx="12.5" cy="10" r="2.5" fill="#cd2e3a"/>` +
+        `<circle cx="17.5" cy="10" r="2.5" fill="#0047a0"/>` +
+        ["5 4.2 -56", "25 4.2 56", "5 15.8 56", "25 15.8 -56"]
+          .map(
+            (pos) =>
+              `<g fill="#000" transform="translate(${pos.split(" ")[0]} ${pos.split(" ")[1]}) rotate(${pos.split(" ")[2]})">` +
+              `<rect x="-2" y="-1.8" width="4" height="0.9"/><rect x="-2" y="-0.45" width="4" height="0.9"/><rect x="-2" y="0.9" width="4" height="0.9"/></g>`,
+          )
+          .join(""),
+    ),
+  },
+  {
+    code: "en",
+    label: "English",
+    // Union Jack, icon-simplified: centered saltire + cross (the official off-center red saltire
+    // detail is sub-pixel at this size).
+    flagSvg: flagSvg(
+      `<rect width="30" height="20" fill="#012169"/>` +
+        `<path d="M0,0 30,20 M30,0 0,20" stroke="#fff" stroke-width="4"/>` +
+        `<path d="M0,0 30,20 M30,0 0,20" stroke="#c8102e" stroke-width="1.6"/>` +
+        `<path d="M15,0 V20 M0,10 H30" stroke="#fff" stroke-width="6.6"/>` +
+        `<path d="M15,0 V20 M0,10 H30" stroke="#c8102e" stroke-width="3.6"/>`,
+    ),
+  },
+  {
+    code: "zh",
+    label: "中文",
+    // Official 30x20 construction grid: large star at (5,5), four small stars arcing beside it.
+    flagSvg: flagSvg(
+      `<rect width="30" height="20" fill="#de2910"/>` +
+        `<g fill="#ffde00">${STAR} transform="translate(5 5) scale(3)"/>` +
+        `${STAR} transform="translate(10 2) scale(1)"/>` +
+        `${STAR} transform="translate(12 4) scale(1)"/>` +
+        `${STAR} transform="translate(12 7) scale(1)"/>` +
+        `${STAR} transform="translate(10 9) scale(1)"/></g>`,
+    ),
+  },
+  {
+    code: "vi",
+    label: "Tiếng Việt",
+    flagSvg: flagSvg(`<rect width="30" height="20" fill="#da251d"/><g fill="#ffff00">${STAR} transform="translate(15 10) scale(6)"/></g>`),
+  },
+  {
+    code: "ja",
+    label: "日本語",
+    flagSvg: flagSvg(`<rect width="30" height="20" fill="#fff"/><circle cx="15" cy="10" r="6" fill="#bc002d"/>`),
+  },
+  {
+    code: "es",
+    label: "Español",
+    flagSvg: flagSvg(`<rect width="30" height="20" fill="#aa151b"/><rect y="5" width="30" height="10" fill="#f1bf00"/>`),
+  },
+  {
+    code: "fr",
+    label: "Français",
+    flagSvg: flagSvg(`<rect width="30" height="20" fill="#0055a4"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#ef4135"/>`),
+  },
 ];
 
 export const DEFAULT_LANG: Lang = "ko";
@@ -114,8 +184,10 @@ export const T: Record<string, Dict> = {
   },
 
   // --- Leaderboard ---------------------------------------------------------------------------------
+  // "BEST 20" itself is translated per the owner's explicit request (not kept as an English brand
+  // term) — ko uses the standard loanword spelling 베스트.
   leaderboardTitle: {
-    ko: "BEST 20 RECORD", en: "BEST 20 RECORD", zh: "BEST 20 排行榜", vi: "BEST 20 KỶ LỤC", ja: "BEST 20 記録", es: "MEJORES 20 RÉCORDS", fr: "TOP 20 DES SCORES",
+    ko: "베스트 20 기록", en: "BEST 20 RECORD", zh: "最佳 20 纪录", vi: "20 KỶ LỤC TỐT NHẤT", ja: "ベスト20記録", es: "LOS 20 MEJORES RÉCORDS", fr: "LES 20 MEILLEURS SCORES",
   },
   leaderboardEmpty: {
     ko: "기록이 없습니다 — 첫 기록의 주인공이 되어보세요!",
@@ -168,14 +240,15 @@ export const T: Record<string, Dict> = {
   startButtonLabel: {
     ko: "Let's Start BDJ", en: "Let's Start BDJ", zh: "开始 BDJ", vi: "Bắt đầu BDJ", ja: "BDJをスタート", es: "Comenzar BDJ", fr: "Démarrer BDJ",
   },
+  // "World" is translated per the owner's request; "MastaBeejay" stays as the brand name.
   welcomePrefix: {
-    ko: "Welcome to MastaBeejay World :",
+    ko: "MastaBeejay 세계에 오신 것을 환영합니다 :",
     en: "Welcome to MastaBeejay World :",
-    zh: "欢迎来到 MastaBeejay World：",
-    vi: "Chào mừng đến với MastaBeejay World :",
-    ja: "MastaBeejay Worldへようこそ：",
-    es: "Bienvenido a MastaBeejay World:",
-    fr: "Bienvenue dans MastaBeejay World :",
+    zh: "欢迎来到 MastaBeejay 世界：",
+    vi: "Chào mừng đến với thế giới MastaBeejay :",
+    ja: "MastaBeejayの世界へようこそ：",
+    es: "Bienvenido al mundo de MastaBeejay:",
+    fr: "Bienvenue dans le monde de MastaBeejay :",
   },
   guestsSuffix: { ko: "Guests", en: "Guests", zh: "位访客", vi: "Khách", ja: "人のGuest", es: "invitados", fr: "invités" },
   crewsSuffix: { ko: "Crews", en: "Crews", zh: "位团员", vi: "Crew", ja: "人のCrew", es: "miembros", fr: "membres" },
@@ -575,14 +648,16 @@ export const T: Record<string, Dict> = {
     es: "La clasificación (BEST 20) muestra los 20 mejores puntajes; con una puntuación alta puedes tomarte una foto conmemorativa con la webcam para guardarla junto a tu récord.",
     fr: "Le classement (BEST 20) affiche les 20 meilleurs scores ; avec un score élevé, vous pouvez prendre une photo souvenir via la webcam à conserver avec votre record.",
   },
+  // Judgment names here match the translated on-screen popups (judgeExcellent/... above) so the
+  // FAQ describes exactly what the player sees during play.
   faqScoring: {
-    ko: "판정은 Excellent(+60점), Great(+40점), Good(+20점), Bad(-5점) 4단계예요. Good 이상을 연속으로 2번 맞추는 순간부터 Combo가 시작되고, 그 다음부터 맞출 때마다 Combo 수가 1씩 늘면서 '기본 점수 + Combo 수 x 5점'이 가산돼요. Bad가 나오면 Combo는 0으로 초기화됩니다.",
+    ko: "판정은 최고(+60점), 훌륭(+40점), 좋음(+20점), 나쁨(-5점) 4단계예요. 좋음 이상을 연속으로 2번 맞추는 순간부터 콤보가 시작되고, 그 다음부터 맞출 때마다 콤보 수가 1씩 늘면서 '기본 점수 + 콤보 수 x 5점'이 가산돼요. 나쁨이 나오면 콤보는 0으로 초기화됩니다.",
     en: "There are 4 judgment tiers: Excellent (+60), Great (+40), Good (+20), and Bad (-5). Combo starts the moment you hit Good-or-better twice in a row; from then on, each hit adds 1 to the Combo count and adds \"base score + Combo count × 5\" points. A Bad resets the Combo to 0.",
-    zh: "判定共 4 档：Excellent（+60分）、Great（+40分）、Good（+20分）、Bad（-5分）。当连续 2 次达到 Good 及以上时 Combo 开始计数，此后每次命中 Combo 数加 1，并额外获得“基础分 + Combo 数 × 5”分。出现 Bad 时 Combo 会归零。",
-    vi: "Có 4 mức đánh giá: Excellent (+60), Great (+40), Good (+20), và Bad (-5). Combo bắt đầu khi bạn đạt Good trở lên 2 lần liên tiếp; từ đó mỗi lần trúng sẽ tăng Combo thêm 1 và cộng thêm \"điểm cơ bản + số Combo x 5\". Nếu bị Bad, Combo sẽ về 0.",
-    ja: "判定はExcellent（+60点）、Great（+40点）、Good（+20点）、Bad（-5点）の4段階です。Good以上を2回連続で決めた瞬間からComboが始まり、以降は決めるたびにCombo数が1増え、「基本点+Combo数×5点」が加算されます。Badが出るとComboは0にリセットされます。",
-    es: "Hay 4 niveles de juicio: Excellent (+60), Great (+40), Good (+20) y Bad (-5). El Combo comienza al lograr Good o mejor dos veces seguidas; a partir de ahí, cada acierto suma 1 al Combo y añade \"puntos base + Combo × 5\". Un Bad reinicia el Combo a 0.",
-    fr: "Il y a 4 niveaux de jugement : Excellent (+60), Great (+40), Good (+20) et Bad (-5). Le Combo démarre dès que vous obtenez Good ou mieux deux fois de suite ; ensuite, chaque coup ajoute 1 au Combo et rapporte « points de base + Combo × 5 ». Un Bad remet le Combo à 0.",
+    zh: "判定共 4 档：完美（+60分）、很棒（+40分）、不错（+20分）、失误（-5分）。当连续 2 次达到“不错”及以上时连击开始计数，此后每次命中连击数加 1，并额外获得“基础分 + 连击数 × 5”分。出现失误时连击会归零。",
+    vi: "Có 4 mức đánh giá: Xuất sắc (+60), Tuyệt vời (+40), Tốt (+20), và Tệ (-5). Combo bắt đầu khi bạn đạt mức Tốt trở lên 2 lần liên tiếp; từ đó mỗi lần trúng sẽ tăng Combo thêm 1 và cộng thêm \"điểm cơ bản + số Combo x 5\". Nếu bị Tệ, Combo sẽ về 0.",
+    ja: "判定は最高（+60点）、すごい（+40点）、良い（+20点）、ミス（-5点）の4段階です。「良い」以上を2回連続で決めた瞬間からコンボが始まり、以降は決めるたびにコンボ数が1増え、「基本点+コンボ数×5点」が加算されます。ミスが出るとコンボは0にリセットされます。",
+    es: "Hay 4 niveles de juicio: Excelente (+60), Genial (+40), Bien (+20) y Mal (-5). El Combo comienza al lograr Bien o mejor dos veces seguidas; a partir de ahí, cada acierto suma 1 al Combo y añade \"puntos base + Combo × 5\". Un Mal reinicia el Combo a 0.",
+    fr: "Il y a 4 niveaux de jugement : Excellent (+60), Super (+40), Bien (+20) et Raté (-5). Le Combo démarre dès que vous obtenez Bien ou mieux deux fois de suite ; ensuite, chaque coup ajoute 1 au Combo et rapporte « points de base + Combo × 5 ». Un Raté remet le Combo à 0.",
   },
   faqGuestbook: {
     ko: "방명록은 누구나 글을 남길 수 있고, 비밀번호를 설정하면 나중에 수정/삭제할 수 있어요. 답글도 남길 수 있습니다.",
@@ -959,20 +1034,22 @@ export const T: Record<string, Dict> = {
   resultsScoreLabel: {
     ko: "TOTAL SCORE", en: "TOTAL SCORE", zh: "总分", vi: "TỔNG ĐIỂM", ja: "合計スコア", es: "PUNTUACIÓN TOTAL", fr: "SCORE TOTAL",
   },
+  // "STEP"/"Step" is translated per the owner's explicit request (ko 단계, zh 阶段, vi bước, ja
+  // ステップ, es fase, fr étape) — only English keeps the original STEP wording.
   resultsNextStepBtn: {
-    ko: "다음 Step 진행", en: "Continue to next Step", zh: "进入下一 Step", vi: "Tiếp tục Step sau", ja: "次のStepへ進む", es: "Continuar al siguiente Step", fr: "Passer au Step suivant",
+    ko: "다음 단계 진행", en: "Continue to next Step", zh: "进入下一阶段", vi: "Tiếp tục bước sau", ja: "次のステップへ進む", es: "Continuar a la siguiente fase", fr: "Passer à l'étape suivante",
   },
   resultsConfirmBtnContinue: {
     ko: "종료하고 순위 확인", en: "Finish and check ranking", zh: "结束并查看排名", vi: "Kết thúc và xem thứ hạng", ja: "終了して順位を確認", es: "Terminar y ver clasificación", fr: "Terminer et voir le classement",
   },
   resultsConfirmBtnFinal: { ko: "확인", en: "OK", zh: "确定", vi: "Xác nhận", ja: "確認", es: "Aceptar", fr: "OK" },
   resultsStepCompleteTemplate: {
-    ko: "STEP {n} 완료", en: "STEP {n} Complete", zh: "STEP {n} 完成", vi: "Hoàn thành STEP {n}", ja: "STEP {n} 完了", es: "STEP {n} completado", fr: "STEP {n} terminé",
+    ko: "{n}단계 완료", en: "STEP {n} Complete", zh: "第 {n} 阶段完成", vi: "Hoàn thành bước {n}", ja: "ステップ{n} 完了", es: "Fase {n} completada", fr: "Étape {n} terminée",
   },
   resultsBreakdownLabel: {
-    ko: "이번 STEP 점수", en: "This STEP's score", zh: "本次 STEP 得分", vi: "Điểm STEP này", ja: "今回のSTEPスコア", es: "Puntos de este STEP", fr: "Score de ce STEP",
+    ko: "이번 단계 점수", en: "This STEP's score", zh: "本阶段得分", vi: "Điểm bước này", ja: "今回のステップスコア", es: "Puntos de esta fase", fr: "Score de cette étape",
   },
-  stepSetupTitleTemplate: { ko: "STEP {n} 준비", en: "STEP {n} Setup", zh: "STEP {n} 准备", vi: "Chuẩn bị STEP {n}", ja: "STEP {n} 準備", es: "Preparación STEP {n}", fr: "Préparation STEP {n}" },
+  stepSetupTitleTemplate: { ko: "{n}단계 준비", en: "STEP {n} Setup", zh: "第 {n} 阶段准备", vi: "Chuẩn bị bước {n}", ja: "ステップ{n} 準備", es: "Preparación de la fase {n}", fr: "Préparation de l'étape {n}" },
   stepSetupHint: {
     ko: "속도 또는 난이도 중 하나는 반드시 이전 단계보다 높아야 진행할 수 있습니다.",
     en: "Either the speed or the difficulty must be higher than the previous step to proceed.",
@@ -991,9 +1068,9 @@ export const T: Record<string, Dict> = {
     es: "La velocidad o la dificultad debe ser mayor que en el paso anterior.",
     fr: "La vitesse ou la difficulté doit être supérieure à l'étape précédente.",
   },
-  stepStartBtn: { ko: "STEP 시작", en: "Start STEP", zh: "开始 STEP", vi: "Bắt đầu STEP", ja: "STEP開始", es: "Iniciar STEP", fr: "Démarrer le STEP" },
+  stepStartBtn: { ko: "단계 시작", en: "Start STEP", zh: "开始阶段", vi: "Bắt đầu bước", ja: "ステップ開始", es: "Iniciar fase", fr: "Démarrer l'étape" },
   nameEntryTitle: {
-    ko: "TOP 20 진입!", en: "You made TOP 20!", zh: "进入 TOP 20！", vi: "Lọt vào TOP 20!", ja: "TOP 20入り！", es: "¡Entraste al TOP 20!", fr: "Vous êtes dans le TOP 20 !",
+    ko: "상위 20위 진입!", en: "You made TOP 20!", zh: "进入前 20 名！", vi: "Lọt vào 20 hạng đầu!", ja: "トップ20入り！", es: "¡Entraste entre los 20 mejores!", fr: "Vous êtes parmi les 20 meilleurs !",
   },
   nameEntryDesc: {
     ko: "이름과 메세지를 남겨주세요", en: "Please leave your name and a message", zh: "请留下您的姓名和留言", vi: "Vui lòng để lại tên và lời nhắn", ja: "お名前とメッセージを入力してください", es: "Deja tu nombre y un mensaje", fr: "Laissez votre nom et un message",
@@ -1014,13 +1091,13 @@ export const T: Record<string, Dict> = {
     ko: "DJ의 자세를 잡아주세요", en: "Strike your best DJ pose", zh: "请摆出 DJ 的姿势", vi: "Hãy tạo dáng như một DJ", ja: "DJのポーズを決めてください", es: "Ponte en pose de DJ", fr: "Prenez la pose du DJ",
   },
   guestStepLimitAlert: {
-    ko: "Guest 신분으로는 STEP 2로 넘어갈 수 없습니다.\n-Beejay-",
+    ko: "Guest 신분으로는 2단계로 넘어갈 수 없습니다.\n-Beejay-",
     en: "Guests can't advance to STEP 2.\n-Beejay-",
-    zh: "以游客身份无法进入 STEP 2。\n-Beejay-",
-    vi: "Khách không thể tiến vào STEP 2.\n-Beejay-",
-    ja: "ゲストの状態ではSTEP 2に進めません。\n-Beejay-",
-    es: "Los invitados no pueden avanzar al STEP 2.\n-Beejay-",
-    fr: "Les invités ne peuvent pas passer au STEP 2.\n-Beejay-",
+    zh: "以游客身份无法进入第 2 阶段。\n-Beejay-",
+    vi: "Khách không thể tiến vào bước 2.\n-Beejay-",
+    ja: "ゲストの状態ではステップ2に進めません。\n-Beejay-",
+    es: "Los invitados no pueden avanzar a la fase 2.\n-Beejay-",
+    fr: "Les invités ne peuvent pas passer à l'étape 2.\n-Beejay-",
   },
   stopBtnLabel: { ko: "⏹ 종료", en: "⏹ Stop", zh: "⏹ 结束", vi: "⏹ Dừng", ja: "⏹ 終了", es: "⏹ Detener", fr: "⏹ Arrêter" },
 
@@ -1038,16 +1115,16 @@ export const T: Record<string, Dict> = {
     ko: "리소스 로딩 실패: {msg}", en: "Failed to load resources: {msg}", zh: "资源加载失败：{msg}", vi: "Tải tài nguyên thất bại: {msg}", ja: "リソース読み込み失敗：{msg}", es: "Error al cargar recursos: {msg}", fr: "Échec du chargement des ressources : {msg}",
   },
   hudStepLoadingChartTemplate: {
-    ko: "STEP {n} 로딩 중... (음원 분석해서 채보 생성)",
+    ko: "{n}단계 로딩 중... (음원 분석해서 채보 생성)",
     en: "Loading STEP {n}... (analyzing audio to generate the chart)",
-    zh: "正在加载 STEP {n}…（分析音源以生成谱面）",
-    vi: "Đang tải STEP {n}... (phân tích âm thanh để tạo bản phổ)",
-    ja: "STEP {n} 読み込み中…（音源を解析して譜面を生成）",
-    es: "Cargando STEP {n}... (analizando el audio para generar el mapa de notas)",
-    fr: "Chargement du STEP {n}... (analyse de l'audio pour générer la partition)",
+    zh: "正在加载第 {n} 阶段…（分析音源以生成谱面）",
+    vi: "Đang tải bước {n}... (phân tích âm thanh để tạo bản phổ)",
+    ja: "ステップ{n} 読み込み中…（音源を解析して譜面を生成）",
+    es: "Cargando fase {n}... (analizando el audio para generar el mapa de notas)",
+    fr: "Chargement de l'étape {n}... (analyse de l'audio pour générer la partition)",
   },
   hudStepLoadingTemplate: {
-    ko: "STEP {n} 로딩 중...", en: "Loading STEP {n}...", zh: "正在加载 STEP {n}…", vi: "Đang tải STEP {n}...", ja: "STEP {n} 読み込み中…", es: "Cargando STEP {n}...", fr: "Chargement du STEP {n}...",
+    ko: "{n}단계 로딩 중...", en: "Loading STEP {n}...", zh: "正在加载第 {n} 阶段…", vi: "Đang tải bước {n}...", ja: "ステップ{n} 読み込み中…", es: "Cargando fase {n}...", fr: "Chargement de l'étape {n}...",
   },
   hudChartFailedTemplate: {
     ko: "음원 처리 실패: {msg}", en: "Failed to process audio: {msg}", zh: "音源处理失败：{msg}", vi: "Xử lý âm thanh thất bại: {msg}", ja: "音源処理失敗：{msg}", es: "Error al procesar el audio: {msg}", fr: "Échec du traitement de l'audio : {msg}",
@@ -1063,6 +1140,50 @@ export const T: Record<string, Dict> = {
   hudDebugHandsLabel: { ko: "감지된 손", en: "Hands detected", zh: "检测到的手", vi: "Tay phát hiện", ja: "検出された手", es: "Manos detectadas", fr: "Mains détectées" },
   hudDebugPressesLabel: { ko: "누름 횟수", en: "Presses", zh: "按压次数", vi: "Số lần nhấn", ja: "押下回数", es: "Pulsaciones", fr: "Appuis" },
   hudDebugScratchLabel: { ko: "스크래치", en: "Scratch", zh: "刮碟", vi: "Scratch", ja: "スクラッチ", es: "Scratch", fr: "Scratch" },
+  // Remaining English terms in the in-game status readout, translated per the owner's explicit
+  // request (Delegate / idle / running / Step): the label of each line plus the state VALUES that
+  // were previously shown as raw English API strings (scratch engaged/idle, AudioContext
+  // running/suspended/closed). GPU/CPU stay as-is — hardware acronyms, not words.
+  hudDebugStepLabel: { ko: "단계", en: "STEP", zh: "阶段", vi: "Bước", ja: "ステップ", es: "Fase", fr: "Étape" },
+  hudDebugDelegateLabel: { ko: "처리 장치", en: "Delegate", zh: "处理器", vi: "Bộ xử lý", ja: "処理デバイス", es: "Procesador", fr: "Processeur" },
+  scratchEngagedLabel: { ko: "작동 중", en: "engaged", zh: "转动中", vi: "đang quay", ja: "作動中", es: "activo", fr: "actif" },
+  scratchIdleLabel: { ko: "대기", en: "idle", zh: "空闲", vi: "chờ", ja: "待機", es: "inactivo", fr: "inactif" },
+  audioStateRunning: { ko: "실행 중", en: "running", zh: "运行中", vi: "đang chạy", ja: "動作中", es: "en marcha", fr: "en cours" },
+  audioStateSuspended: { ko: "일시중지", en: "suspended", zh: "已暂停", vi: "tạm dừng", ja: "一時停止", es: "suspendido", fr: "suspendu" },
+  audioStateClosed: { ko: "종료됨", en: "closed", zh: "已关闭", vi: "đã đóng", ja: "終了", es: "cerrado", fr: "fermé" },
+
+  // --- Judgment popups / combo (canvas-drawn during gameplay + results breakdown) ---------------------
+  // Translated per the owner's explicit request — these were previously kept as English rhythm-game
+  // terms in every language. ja uses the native rhythm-game conventions (ミス for a miss/Bad).
+  judgeExcellent: { ko: "최고", en: "Excellent", zh: "完美", vi: "Xuất sắc", ja: "最高", es: "Excelente", fr: "Excellent" },
+  judgeGreat: { ko: "훌륭", en: "Great", zh: "很棒", vi: "Tuyệt vời", ja: "すごい", es: "Genial", fr: "Super" },
+  judgeGood: { ko: "좋음", en: "Good", zh: "不错", vi: "Tốt", ja: "良い", es: "Bien", fr: "Bien" },
+  judgeBad: { ko: "나쁨", en: "Bad", zh: "失误", vi: "Tệ", ja: "ミス", es: "Mal", fr: "Raté" },
+  // vi uses the loanword "Combo" (the standard Vietnamese gaming term) — the native word "Chuỗi"
+  // alone reads as "string/sequence", confirmed ambiguous by Google Translate + MyMemory cross-check.
+  comboLabel: { ko: "콤보", en: "Combo", zh: "连击", vi: "Combo", ja: "コンボ", es: "Combo", fr: "Combo" },
+
+  // --- Score HUD / leaderboard Step column / footer credit / photo alt --------------------------------
+  scoreHudLabel: { ko: "점수", en: "SCORE", zh: "分数", vi: "ĐIỂM", ja: "スコア", es: "PUNTOS", fr: "SCORE" },
+  lbHeaderStep: { ko: "단계", en: "Step", zh: "阶段", vi: "Bước", ja: "ステップ", es: "Fase", fr: "Étape" },
+  producedByCredit: {
+    ko: "2026년 Beejay(임봉진) 제작",
+    en: "Produced by Beejay (Yim Bongjin) in 2026",
+    zh: "由 Beejay（Yim Bongjin）于 2026 年制作",
+    vi: "Sản xuất bởi Beejay (Yim Bongjin) năm 2026",
+    ja: "制作：Beejay（Yim Bongjin）・2026年",
+    es: "Producido por Beejay (Yim Bongjin) en 2026",
+    fr: "Produit par Beejay (Yim Bongjin) en 2026",
+  },
+  photoLightboxAltText: {
+    ko: "베스트 20 기념 사진",
+    en: "Best 20 commemorative photo",
+    zh: "前 20 名纪念照片",
+    vi: "Ảnh kỷ niệm 20 hạng đầu",
+    ja: "ベスト20記念写真",
+    es: "Foto conmemorativa de los 20 mejores",
+    fr: "Photo souvenir des 20 meilleurs",
+  },
 
   // --- Calibration ------------------------------------------------------------------------------------
   calibrationRestPromptTemplate: {

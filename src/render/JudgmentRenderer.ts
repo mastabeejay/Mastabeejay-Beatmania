@@ -1,6 +1,7 @@
 import type { JudgmentResult } from "../game/JudgmentEngine";
 import { SCRATCH_LANE } from "../game/types";
 import { resolveScratchZone, type KeyZone, type ScratchZone } from "../handTracking/ZoneLayout";
+import { t, type TKey } from "../i18n";
 
 interface ActiveJudgment extends JudgmentResult {
   expiresAtMs: number;
@@ -16,6 +17,15 @@ const TIER_COLOR: Record<string, string> = {
   Great: "#00f0ff",
   Good: "#39ff8a",
   Bad: "#ff2ee0",
+};
+
+// The popup shows the translated judgment word (per the site owner's request — these were English
+// in every language before); the internal tier names stay English as code-level identifiers.
+const TIER_LABEL_KEY: Record<string, TKey> = {
+  Excellent: "judgeExcellent",
+  Great: "judgeGreat",
+  Good: "judgeGood",
+  Bad: "judgeBad",
 };
 
 export class JudgmentRenderer {
@@ -55,12 +65,13 @@ export class JudgmentRenderer {
       this.ctx.textAlign = "center";
       this.ctx.shadowColor = color;
       this.ctx.shadowBlur = 16;
-      this.ctx.fillText(judgment.tier, cx, baseY - 30 - riseOffset);
+      const tierLabel = TIER_LABEL_KEY[judgment.tier] ? t(TIER_LABEL_KEY[judgment.tier]) : judgment.tier;
+      this.ctx.fillText(tierLabel, cx, baseY - 30 - riseOffset);
       if (judgment.combo > 0) {
         this.ctx.font = "700 15px Orbitron, sans-serif";
         this.ctx.fillStyle = "#ffd200";
         this.ctx.shadowColor = "#ffd200";
-        this.ctx.fillText(`Combo ${judgment.combo}`, cx, baseY - 8 - riseOffset);
+        this.ctx.fillText(`${t("comboLabel")} ${judgment.combo}`, cx, baseY - 8 - riseOffset);
       }
       this.ctx.shadowBlur = 0;
       this.ctx.globalAlpha = 1;

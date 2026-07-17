@@ -34,7 +34,7 @@
       </div>
       <div id="hud-stack">
         <div id="score-hud">
-          <div id="score-hud-label">SCORE</div>
+          <div id="score-hud-label" data-i18n="scoreHudLabel">SCORE</div>
           <div id="score-value">0</div>
           <div id="combo-value" hidden></div>
         </div>
@@ -46,7 +46,7 @@
       </div>
       <div id="game-title" class="text-metallic">Beejay's Deejay Jackey</div>
       <div id="footer-row">
-        <div id="game-subtitle">Produced by Beejay (Yim Bongjin) in 2026</div>
+        <div id="game-subtitle" data-i18n="producedByCredit">Produced by Beejay (Yim Bongjin) in 2026</div>
         <button id="admin-login-link" type="button" data-i18n="adminLoginBtn">🔐 관리자</button>
         <button id="admin-logout-button" type="button" hidden data-i18n="adminLogoutBtn">🔓 관리자 모드 (로그아웃)</button>
         <button id="admin-panel-open-button" type="button" hidden data-i18n="adminPanelOpenBtn">⚙️ 관리자 패널</button>
@@ -107,10 +107,18 @@
               <text x="55" y="27" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="800" font-size="14" fill="#4a2f00">P2B 2.51</text>
             </svg>
           </div>
-          <div id="language-select-row" role="radiogroup" aria-label="Language"></div>
         </div>
         <div id="leaderboard-section">
-          <div id="leaderboard-title" class="text-metallic-gold" data-i18n="leaderboardTitle">BEST 20 RECORD</div>
+          <!-- The language selector shares the BEST-20-title line (absolutely positioned into its
+               left margin on desktop, JS-aligned to the tagline's first letter) instead of taking
+               its own row, so it adds no vertical height to the start screen. -->
+          <div id="leaderboard-title-row">
+            <div id="language-select-row" role="radiogroup" aria-label="Language">
+              <span id="language-select-label">Language</span>
+              <span id="language-flag-list"></span>
+            </div>
+            <div id="leaderboard-title" class="text-metallic-gold" data-i18n="leaderboardTitle">BEST 20 RECORD</div>
+          </div>
           <button id="leaderboard-admin-delete-button" type="button" hidden>🗑️ 선택 삭제</button>
           <div id="leaderboard-panel">
             <table id="leaderboard-table">
@@ -123,7 +131,7 @@
                   <th data-i18n="lbHeaderScore">점수</th>
                   <th data-i18n="lbHeaderSpeed">속도</th>
                   <th data-i18n="lbHeaderDifficulty">난이도</th>
-                  <th>Step</th>
+                  <th data-i18n="lbHeaderStep">Step</th>
                   <th>BGM</th>
                   <th data-i18n="lbHeaderDate">기록일</th>
                 </tr>
@@ -666,7 +674,7 @@
         <div id="photo-countdown-number">5</div>
       </div>
       <div id="photo-lightbox-overlay">
-        <img id="photo-lightbox-image" src="" alt="Best 20 기념 사진" />
+        <img id="photo-lightbox-image" src="" alt="Best 20 기념 사진" data-i18n-alt="photoLightboxAltText" />
         <button id="photo-lightbox-download-button" type="button" data-i18n="photoLightboxDownloadBtn">⬇ Download</button>
       </div>
       <div id="toast" role="status" hidden></div>
