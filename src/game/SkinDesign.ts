@@ -4,11 +4,23 @@ import { supabase } from "./supabaseClient";
 /** The admin's site-wide skin choice from the [Skin design set] panel section: "original" is the
  *  launch cyberpunk look, "ai" is the neutral-dark/emerald reskin modeled on the v0 "Pointer AI
  *  landing page" template, "frosted" is the Apple-style glassmorphism reskin modeled on the v0
- *  "Frosted Glass - Authentication Concept" template. Applied as an html.theme-* class — see
+ *  "Frosted Glass - Authentication Concept" template, "agentic" is the light minimal-SaaS reskin
+ *  modeled on the v0 "Agentic" template, "uxbooster" is the light lavender-and-emerald dashboard
+ *  reskin modeled on the v0 "UXBooster" template. Applied as an html.theme-* class — see
  *  applySkinDesign() in main.ts. */
-export type SkinDesign = "original" | "ai" | "frosted";
+export type SkinDesign = "original" | "ai" | "frosted" | "agentic" | "uxbooster";
 
-export const SKIN_DESIGNS: SkinDesign[] = ["original", "ai", "frosted"];
+export const SKIN_DESIGNS: SkinDesign[] = ["original", "ai", "frosted", "agentic", "uxbooster"];
+
+/** Display name shown in admin save-confirmation messages — kept alongside the type instead of
+ *  scattered ternaries at each call site. */
+export const SKIN_LABELS: Record<SkinDesign, string> = {
+  original: "Original",
+  ai: "AI",
+  frosted: "Frosted Glass",
+  agentic: "Agentic",
+  uxbooster: "UXBooster",
+};
 
 /** Same degrade-to-default shape as loadChatbotMode: if the skin_design column doesn't exist yet
  *  (SQL migration not run) or the read fails, the site just stays on the original skin instead of

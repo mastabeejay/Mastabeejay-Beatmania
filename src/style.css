@@ -172,6 +172,207 @@ html.theme-frosted .control-group-title {
   text-shadow: none;
 }
 
+/* Shared by both light-background skins below (Agentic, UXBooster): a gentle one-time
+   entrance and a hover-lift, applied to the same "boxed content" selector list each skin reuses
+   for its panel-background override. Neither source template has anything flashier than this —
+   subtle motion, not a flashy effect — so one pair of keyframes covers both. */
+@keyframes skin-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The "Agentic" skin — modeled on the v0 "Agentic" template (build/orchestrate-AI-agents landing
+   page): a stark white canvas, IBM Plex Sans set thin and tight for headlines (its actual "Geist"
+   body font isn't a Google Font, so system-ui stands in — the same honest substitution called out
+   to the site owner), monochrome charcoal accents instead of a color accent (the template's own CTA
+   is a plain bordered ghost button, not a colored one), and 14px-radius corners. */
+html.theme-agentic {
+  --color-cyber-bg: #ffffff;
+  --color-cyber-cyan: #111111;
+  --color-cyber-magenta: #dc2626;
+  --color-cyber-silver: #171717;
+  --font-display: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-body: -apple-system, "Segoe UI", system-ui, sans-serif;
+  --rgb-accent: 17, 17, 17;
+  --rgb-danger: 220, 38, 38;
+  --rgb-deep: 255, 255, 255;
+  --rgb-panel: 250, 250, 250;
+  --radius-pill: 14px;
+}
+
+html.theme-agentic body {
+  background: #ffffff;
+}
+
+html.theme-agentic body::before {
+  background-image: none;
+}
+
+/* The template's headline treatment: thin weight, tight negative tracking, solid ink color —
+   replaces the chrome/gold gradient-fill + neon glow both other skins keep. */
+html.theme-agentic .text-metallic,
+html.theme-agentic .text-metallic-gold {
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  -webkit-text-fill-color: currentColor;
+  color: #111111;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  filter: none;
+}
+
+html.theme-agentic .control-group-title {
+  text-shadow: none;
+  font-weight: 500;
+}
+
+/* Every boxed panel becomes a flat off-white card with a hairline border and a soft shadow instead
+   of a glow — plus the shared fade-in-up entrance and a small hover-lift, the two motion touches
+   both source templates actually use (fade-in content, lifting cards). */
+html.theme-agentic #leaderboard-panel,
+html.theme-agentic #notice-board,
+html.theme-agentic .website-link-banner,
+html.theme-agentic #beejay-bros-panel-inner,
+html.theme-agentic .install-guide-card,
+html.theme-agentic #chatbot-panel,
+html.theme-agentic #chatbot-toggle-button,
+html.theme-agentic #guestbook-overlay-panel,
+html.theme-agentic .guestbook-entry,
+html.theme-agentic #admin-login-panel,
+html.theme-agentic #admin-panel-panel,
+html.theme-agentic #membership-login-panel,
+html.theme-agentic #membership-signup-panel,
+html.theme-agentic #membership-profile-panel,
+html.theme-agentic #members-directory-panel,
+html.theme-agentic #direct-chat-panel,
+html.theme-agentic #install-guide-overlay-panel,
+html.theme-agentic #toast {
+  background: #fafafa;
+  border-color: rgba(17, 17, 17, 0.1);
+  box-shadow: 0 1px 3px rgba(17, 17, 17, 0.06);
+  animation: skin-fade-in-up 0.5s ease both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+html.theme-agentic .install-guide-card:hover,
+html.theme-agentic .website-link-banner:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(17, 17, 17, 0.1);
+}
+
+/* The template's own CTA: a bordered ghost pill, not a filled one. */
+html.theme-agentic #start-button {
+  background: transparent;
+  border: 1px solid rgba(17, 17, 17, 0.15);
+  color: #111111;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+html.theme-agentic #start-button:hover {
+  background: rgba(17, 17, 17, 0.04);
+  border-color: rgba(17, 17, 17, 0.3);
+}
+
+/* The "UXBooster" skin — modeled on the v0 "UXBooster" analytics-dashboard template: a soft
+   lavender-gray canvas with the actual content sitting in a warm off-white card (its own
+   rounded-xl container), an emerald accent (the dashboard's own "good/positive metric" color,
+   used throughout its progress bars), and fully-rounded pill controls. */
+html.theme-uxbooster {
+  --color-cyber-bg: #c5c3d1;
+  --color-cyber-cyan: #10b981;
+  --color-cyber-magenta: #ef4444;
+  --color-cyber-silver: #1a1a1a;
+  /* Unlike Agentic (which pairs a distinct thin display face with its body font), UXBooster's own
+     site uses one font everywhere — headings included — so --font-display matches --font-body here
+     instead of keeping Orbitron. */
+  --font-display: -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-body: -apple-system, "Segoe UI", system-ui, sans-serif;
+  --rgb-accent: 16, 185, 129;
+  --rgb-danger: 239, 68, 68;
+  --rgb-deep: 197, 195, 209;
+  --rgb-panel: 245, 244, 240;
+  --radius-pill: 999px;
+}
+
+html.theme-uxbooster body {
+  background: #c5c3d1;
+}
+
+html.theme-uxbooster body::before {
+  background-image: none;
+}
+
+html.theme-uxbooster .text-metallic,
+html.theme-uxbooster .text-metallic-gold {
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  -webkit-text-fill-color: currentColor;
+  color: #1a1a1a;
+  font-weight: 600;
+  filter: none;
+}
+
+html.theme-uxbooster .control-group-title {
+  text-shadow: none;
+}
+
+/* Same warm off-white card treatment as the dashboard's own content container, plus the shared
+   fade-in-up entrance and hover-lift. */
+html.theme-uxbooster #leaderboard-panel,
+html.theme-uxbooster #notice-board,
+html.theme-uxbooster .website-link-banner,
+html.theme-uxbooster #beejay-bros-panel-inner,
+html.theme-uxbooster .install-guide-card,
+html.theme-uxbooster #chatbot-panel,
+html.theme-uxbooster #chatbot-toggle-button,
+html.theme-uxbooster #guestbook-overlay-panel,
+html.theme-uxbooster .guestbook-entry,
+html.theme-uxbooster #admin-login-panel,
+html.theme-uxbooster #admin-panel-panel,
+html.theme-uxbooster #membership-login-panel,
+html.theme-uxbooster #membership-signup-panel,
+html.theme-uxbooster #membership-profile-panel,
+html.theme-uxbooster #members-directory-panel,
+html.theme-uxbooster #direct-chat-panel,
+html.theme-uxbooster #install-guide-overlay-panel,
+html.theme-uxbooster #toast {
+  background: #f5f4f0;
+  border-color: rgba(26, 26, 26, 0.08);
+  box-shadow: 0 2px 8px rgba(26, 26, 26, 0.08);
+  animation: skin-fade-in-up 0.5s ease both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+html.theme-uxbooster .install-guide-card:hover,
+html.theme-uxbooster .website-link-banner:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(26, 26, 26, 0.12);
+}
+
+/* Solid emerald pill CTA — the dashboard's own "positive" accent color, filled instead of the
+   template's small ghost icon-buttons (which have no equivalent of a large primary CTA to copy). */
+html.theme-uxbooster #start-button {
+  background: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+  text-shadow: none;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+}
+
+html.theme-uxbooster #start-button:hover {
+  background: #0da271;
+  box-shadow: 0 6px 24px rgba(16, 185, 129, 0.4);
+}
+
 /* Generic in-flight state for any button wrapped in withButtonLoading() (main.ts) — a network
    round-trip with zero visual change read as "did my click even register?", so this pulses and
    dims the button (its own label is swapped for a loading message by the JS side) until the

@@ -6,7 +6,7 @@ import { adminChangePassword, adminLogin, WrongAdminPasswordError } from "./game
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
 import { adminSetChatbotMode, askGemini, GeminiRateLimitedError, isGeminiConfigured, loadChatbotMode, type ChatbotMode, type ChatMessage } from "./game/Chatbot";
-import { adminSetSkinDesign, loadSkinDesign, SKIN_DESIGNS, type SkinDesign } from "./game/SkinDesign";
+import { adminSetSkinDesign, loadSkinDesign, SKIN_DESIGNS, SKIN_LABELS, type SkinDesign } from "./game/SkinDesign";
 import { matchFaq } from "./game/ChatbotFaq";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
@@ -2769,8 +2769,12 @@ let currentSkinDesign: SkinDesign = storedSkin && SKIN_DESIGNS.includes(storedSk
 
 function applySkinDesign(skin: SkinDesign): void {
   currentSkinDesign = skin;
-  document.documentElement.classList.toggle("theme-ai", skin === "ai");
-  document.documentElement.classList.toggle("theme-frosted", skin === "frosted");
+  // "original" gets no class (it's the unskinned default); every other skin is its own
+  // html.theme-<name> class, generalized over SKIN_DESIGNS so adding a new skin here never needs
+  // a matching new toggle() line.
+  for (const candidate of SKIN_DESIGNS) {
+    if (candidate !== "original") document.documentElement.classList.toggle(`theme-${candidate}`, candidate === skin);
+  }
   try {
     localStorage.setItem(SKIN_STORAGE_KEY, skin);
   } catch {
@@ -2790,7 +2794,7 @@ adminSkinDesignSaveButton.addEventListener("click", () => {
   void withButtonLoading(adminSkinDesignSaveButton, "저장 중...", () => adminSetSkinDesign(skin, adminPassword!))
     .then(() => {
       applySkinDesign(skin);
-      adminSkinDesignSuccess.textContent = `'${skin === "ai" ? "AI" : skin === "frosted" ? "Frosted Glass" : "Original"}' 스킨으로 적용 저장되었습니다.`;
+      adminSkinDesignSuccess.textContent = `'${SKIN_LABELS[skin]}' 스킨으로 적용 저장되었습니다.`;
       adminSkinDesignSuccess.hidden = false;
     })
     .catch((err) => handleAdminPanelError(err, "스킨 저장에 실패했습니다:", adminSkinDesignError));
