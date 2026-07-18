@@ -20,6 +20,11 @@
   --rgb-danger: 255, 46, 224;
   --rgb-deep: 3, 5, 10;
   --rgb-panel: 6, 10, 18;
+  /* Body-text and gold-accent tuples (the RGB of --color-cyber-silver / --color-cyber-gold).
+     Every rgba() text color in this file reads these rather than hardcoding the numbers, so the
+     light-background skins (Agentic, UXBooster) can swap all text to dark ink with one override. */
+  --rgb-text: 201, 211, 222;
+  --rgb-gold: 255, 210, 0;
   --radius-pill: 999px;
 }
 
@@ -193,10 +198,19 @@ html.theme-frosted .control-group-title {
    to the site owner), monochrome charcoal accents instead of a color accent (the template's own CTA
    is a plain bordered ghost button, not a colored one), and 14px-radius corners. */
 html.theme-agentic {
+  /* :root declares color-scheme: dark, which makes the UA-default text color white — anything
+     that never sets an explicit color (e.g. #footer-row) inherits that. Flipping the scheme gives
+     those a black default and light-styled native form controls to match. */
+  color-scheme: light;
   --color-cyber-bg: #ffffff;
   --color-cyber-cyan: #111111;
   --color-cyber-magenta: #dc2626;
   --color-cyber-silver: #171717;
+  /* All text goes dark ink on this white canvas — including the gold accents, which become a dark
+     bronze (readable on white, still recognizably "gold" where it marks the P2B badge etc.). */
+  --color-cyber-gold: #7a5c00;
+  --rgb-text: 23, 23, 23;
+  --rgb-gold: 122, 92, 0;
   --font-display: "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-body: -apple-system, "Segoe UI", system-ui, sans-serif;
   --rgb-accent: 17, 17, 17;
@@ -204,6 +218,12 @@ html.theme-agentic {
   --rgb-deep: 255, 255, 255;
   --rgb-panel: 250, 250, 250;
   --radius-pill: 14px;
+  /* Read by the shared panel-card rule below (with UXBooster) so both light skins' near-identical
+     "flat off-white card" treatment lives in one selector list instead of two. */
+  --panel-bg: #fafafa;
+  --panel-border: rgba(17, 17, 17, 0.1);
+  --panel-shadow: 0 1px 3px rgba(17, 17, 17, 0.06);
+  --panel-hover-shadow: 0 6px 16px rgba(17, 17, 17, 0.1);
 }
 
 html.theme-agentic body {
@@ -233,40 +253,6 @@ html.theme-agentic .control-group-title {
   font-weight: 500;
 }
 
-/* Every boxed panel becomes a flat off-white card with a hairline border and a soft shadow instead
-   of a glow — plus the shared fade-in-up entrance and a small hover-lift, the two motion touches
-   both source templates actually use (fade-in content, lifting cards). */
-html.theme-agentic #leaderboard-panel,
-html.theme-agentic #notice-board,
-html.theme-agentic .website-link-banner,
-html.theme-agentic #beejay-bros-panel-inner,
-html.theme-agentic .install-guide-card,
-html.theme-agentic #chatbot-panel,
-html.theme-agentic #chatbot-toggle-button,
-html.theme-agentic #guestbook-overlay-panel,
-html.theme-agentic .guestbook-entry,
-html.theme-agentic #admin-login-panel,
-html.theme-agentic #admin-panel-panel,
-html.theme-agentic #membership-login-panel,
-html.theme-agentic #membership-signup-panel,
-html.theme-agentic #membership-profile-panel,
-html.theme-agentic #members-directory-panel,
-html.theme-agentic #direct-chat-panel,
-html.theme-agentic #install-guide-overlay-panel,
-html.theme-agentic #toast {
-  background: #fafafa;
-  border-color: rgba(17, 17, 17, 0.1);
-  box-shadow: 0 1px 3px rgba(17, 17, 17, 0.06);
-  animation: skin-fade-in-up 0.5s ease both;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-html.theme-agentic .install-guide-card:hover,
-html.theme-agentic .website-link-banner:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(17, 17, 17, 0.1);
-}
-
 /* The template's own CTA: a bordered ghost pill, not a filled one. */
 html.theme-agentic #start-button {
   background: transparent;
@@ -286,20 +272,34 @@ html.theme-agentic #start-button:hover {
    rounded-xl container), an emerald accent (the dashboard's own "good/positive metric" color,
    used throughout its progress bars), and fully-rounded pill controls. */
 html.theme-uxbooster {
+  /* Same color-scheme flip as Agentic — see that block's comment. */
+  color-scheme: light;
   --color-cyber-bg: #c5c3d1;
-  --color-cyber-cyan: #10b981;
+  /* Emerald deepened from the template's #10b981 (fine for fills, ~2.4:1 as text on the off-white
+     cards) to emerald-700 so accent-colored *text* stays dark and readable; the solid CTA below
+     keeps the brighter template green as a fill. */
+  --color-cyber-cyan: #047857;
   --color-cyber-magenta: #ef4444;
   --color-cyber-silver: #1a1a1a;
+  /* Same dark-ink text + dark-bronze gold treatment as Agentic — see that block's comment. */
+  --color-cyber-gold: #7a5c00;
+  --rgb-text: 26, 26, 26;
+  --rgb-gold: 122, 92, 0;
   /* Unlike Agentic (which pairs a distinct thin display face with its body font), UXBooster's own
      site uses one font everywhere — headings included — so --font-display matches --font-body here
      instead of keeping Orbitron. */
   --font-display: -apple-system, "Segoe UI", system-ui, sans-serif;
   --font-body: -apple-system, "Segoe UI", system-ui, sans-serif;
-  --rgb-accent: 16, 185, 129;
+  --rgb-accent: 4, 120, 87;
   --rgb-danger: 239, 68, 68;
   --rgb-deep: 197, 195, 209;
   --rgb-panel: 245, 244, 240;
   --radius-pill: 999px;
+  /* Same shared panel-card rule as Agentic — see that block's comment. */
+  --panel-bg: #f5f4f0;
+  --panel-border: rgba(26, 26, 26, 0.08);
+  --panel-shadow: 0 2px 8px rgba(26, 26, 26, 0.08);
+  --panel-hover-shadow: 0 8px 20px rgba(26, 26, 26, 0.12);
 }
 
 html.theme-uxbooster body {
@@ -325,37 +325,40 @@ html.theme-uxbooster .control-group-title {
   text-shadow: none;
 }
 
-/* Same warm off-white card treatment as the dashboard's own content container, plus the shared
-   fade-in-up entrance and hover-lift. */
-html.theme-uxbooster #leaderboard-panel,
-html.theme-uxbooster #notice-board,
-html.theme-uxbooster .website-link-banner,
-html.theme-uxbooster #beejay-bros-panel-inner,
-html.theme-uxbooster .install-guide-card,
-html.theme-uxbooster #chatbot-panel,
-html.theme-uxbooster #chatbot-toggle-button,
-html.theme-uxbooster #guestbook-overlay-panel,
-html.theme-uxbooster .guestbook-entry,
-html.theme-uxbooster #admin-login-panel,
-html.theme-uxbooster #admin-panel-panel,
-html.theme-uxbooster #membership-login-panel,
-html.theme-uxbooster #membership-signup-panel,
-html.theme-uxbooster #membership-profile-panel,
-html.theme-uxbooster #members-directory-panel,
-html.theme-uxbooster #direct-chat-panel,
-html.theme-uxbooster #install-guide-overlay-panel,
-html.theme-uxbooster #toast {
-  background: #f5f4f0;
-  border-color: rgba(26, 26, 26, 0.08);
-  box-shadow: 0 2px 8px rgba(26, 26, 26, 0.08);
+/* Every boxed panel on either light skin becomes a flat off-white card with a hairline border and
+   a soft shadow instead of a glow — plus the shared fade-in-up entrance and a small hover-lift, the
+   two motion touches both source templates actually use (fade-in content, lifting cards). One
+   selector list covers both skins; the --panel-* variables each one sets above supply the
+   per-skin color values. */
+html:is(.theme-agentic, .theme-uxbooster) #leaderboard-panel,
+html:is(.theme-agentic, .theme-uxbooster) #notice-board,
+html:is(.theme-agentic, .theme-uxbooster) .website-link-banner,
+html:is(.theme-agentic, .theme-uxbooster) #beejay-bros-panel-inner,
+html:is(.theme-agentic, .theme-uxbooster) .install-guide-card,
+html:is(.theme-agentic, .theme-uxbooster) #chatbot-panel,
+html:is(.theme-agentic, .theme-uxbooster) #chatbot-toggle-button,
+html:is(.theme-agentic, .theme-uxbooster) #guestbook-overlay-panel,
+html:is(.theme-agentic, .theme-uxbooster) .guestbook-entry,
+html:is(.theme-agentic, .theme-uxbooster) #admin-login-panel,
+html:is(.theme-agentic, .theme-uxbooster) #admin-panel-panel,
+html:is(.theme-agentic, .theme-uxbooster) #membership-login-panel,
+html:is(.theme-agentic, .theme-uxbooster) #membership-signup-panel,
+html:is(.theme-agentic, .theme-uxbooster) #membership-profile-panel,
+html:is(.theme-agentic, .theme-uxbooster) #members-directory-panel,
+html:is(.theme-agentic, .theme-uxbooster) #direct-chat-panel,
+html:is(.theme-agentic, .theme-uxbooster) #install-guide-overlay-panel,
+html:is(.theme-agentic, .theme-uxbooster) #toast {
+  background: var(--panel-bg);
+  border-color: var(--panel-border);
+  box-shadow: var(--panel-shadow);
   animation: skin-fade-in-up 0.5s ease both;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-html.theme-uxbooster .install-guide-card:hover,
-html.theme-uxbooster .website-link-banner:hover {
+html:is(.theme-agentic, .theme-uxbooster) .install-guide-card:hover,
+html:is(.theme-agentic, .theme-uxbooster) .website-link-banner:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(26, 26, 26, 0.12);
+  box-shadow: var(--panel-hover-shadow);
 }
 
 /* Solid emerald pill CTA — the dashboard's own "positive" accent color, filled instead of the
@@ -371,6 +374,33 @@ html.theme-uxbooster #start-button {
 html.theme-uxbooster #start-button:hover {
   background: #0da271;
   box-shadow: 0 6px 24px rgba(16, 185, 129, 0.4);
+}
+
+/* Shared by both light skins: the two text colors below are hardcoded light values in their base
+   rules (white notice text, ice-white Beejay Bros link text — both designed for dark panels), so
+   the variable overrides above can't reach them; on the light cards they need dark ink and no
+   white-lifting shadow. */
+html:is(.theme-agentic, .theme-uxbooster) #notice-board-text,
+html:is(.theme-agentic, .theme-uxbooster) .beejay-bros-link-text {
+  color: var(--color-cyber-silver);
+  text-shadow: none;
+}
+
+/* The producer credit's brushed-metal shine gradient is silver-to-white — invisible on the light
+   canvases, so it keeps its sweep animation but over dark-ink band colors instead. */
+html:is(.theme-agentic, .theme-uxbooster) #game-subtitle {
+  background-image: linear-gradient(100deg, #3a3a3a 30%, #8a8a8a 48%, #999999 50%, #8a8a8a 52%, #3a3a3a 70%);
+  filter: none;
+}
+
+/* Same "hardcoded for dark panels" problem as the block above: these three read as a bright
+   success-green designed to pop against near-black (#toast, admin inline-success messages, the
+   Crews-directory online indicator), which nearly disappears on the light cards. A single dark
+   forest green keeps the "success" meaning while staying readable on #fafafa/#f5f4f0. */
+html:is(.theme-agentic, .theme-uxbooster) #toast,
+html:is(.theme-agentic, .theme-uxbooster) .admin-panel-inline-success,
+html:is(.theme-agentic, .theme-uxbooster) #members-directory-table td.members-directory-online.is-online {
+  color: #15803d;
 }
 
 /* Generic in-flight state for any button wrapped in withButtonLoading() (main.ts) — a network
@@ -535,7 +565,7 @@ body::before {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 8px rgba(255, 210, 0, 0.5)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+  filter: drop-shadow(0 0 8px rgba(var(--rgb-gold), 0.5)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
 }
 
 /* --- HUD / status panels --------------------------------------------------------------------- */
@@ -556,9 +586,9 @@ body::before {
   padding: 10px 20px;
   background: rgba(var(--rgb-panel), 0.72);
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 210, 0, 0.4);
+  border: 1px solid rgba(var(--rgb-gold), 0.4);
   border-radius: 8px;
-  box-shadow: 0 0 18px rgba(255, 210, 0, 0.12);
+  box-shadow: 0 0 18px rgba(var(--rgb-gold), 0.12);
   pointer-events: none;
 }
 
@@ -567,7 +597,7 @@ body::before {
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.16em;
-  color: rgba(255, 210, 0, 0.75);
+  color: rgba(var(--rgb-gold), 0.75);
 }
 
 #score-value {
@@ -575,7 +605,7 @@ body::before {
   font-weight: 800;
   font-size: 32px;
   color: var(--color-cyber-gold);
-  text-shadow: 0 0 12px rgba(255, 210, 0, 0.5);
+  text-shadow: 0 0 12px rgba(var(--rgb-gold), 0.5);
   line-height: 1.2;
 }
 
@@ -587,7 +617,7 @@ body::before {
   font-size: 14px;
   letter-spacing: 0.06em;
   color: var(--color-cyber-gold);
-  text-shadow: 0 0 8px rgba(255, 210, 0, 0.4);
+  text-shadow: 0 0 8px rgba(var(--rgb-gold), 0.4);
 }
 
 #track-info {
@@ -614,7 +644,7 @@ body::before {
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.04em;
-  color: rgba(201, 211, 222, 0.65);
+  color: rgba(var(--rgb-text), 0.65);
 }
 
 #status-hud {
@@ -707,7 +737,7 @@ body::before {
   font-weight: 600;
   font-size: 16px;
   letter-spacing: 0.03em;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
   margin: 0;
 }
 
@@ -861,7 +891,7 @@ body::before {
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.5;
-  color: rgba(201, 211, 222, 0.92);
+  color: rgba(var(--rgb-text), 0.92);
 }
 
 #install-guide-modal-steps li::before {
@@ -888,9 +918,9 @@ body::before {
   font-family: var(--font-body);
   font-size: 12px;
   line-height: 1.5;
-  color: rgba(255, 210, 0, 0.85);
-  background: rgba(255, 210, 0, 0.08);
-  border: 1px solid rgba(255, 210, 0, 0.25);
+  color: rgba(var(--rgb-gold), 0.85);
+  background: rgba(var(--rgb-gold), 0.08);
+  border: 1px solid rgba(var(--rgb-gold), 0.25);
   border-radius: 8px;
   padding: 10px 12px;
   margin: 0 0 16px;
@@ -907,7 +937,7 @@ body::before {
   border-radius: var(--radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: transparent;
-  color: rgba(201, 211, 222, 0.7);
+  color: rgba(var(--rgb-text), 0.7);
   cursor: pointer;
   transition: background 0.2s ease;
 }
@@ -990,7 +1020,7 @@ body::before {
   font-weight: 600;
   font-size: 10px;
   letter-spacing: 0.03em;
-  color: rgba(255, 210, 0, 0.75);
+  color: rgba(var(--rgb-gold), 0.75);
 }
 
 #chatbot-close-button {
@@ -998,7 +1028,7 @@ body::before {
   font-size: 13px;
   border: none;
   background: none;
-  color: rgba(201, 211, 222, 0.6);
+  color: rgba(var(--rgb-text), 0.6);
   cursor: pointer;
 }
 
@@ -1025,12 +1055,12 @@ body::before {
 .chatbot-message-bot {
   align-self: flex-start;
   background: rgba(var(--rgb-accent), 0.1);
-  color: rgba(201, 211, 222, 0.92);
+  color: rgba(var(--rgb-text), 0.92);
 }
 
 .chatbot-message-user {
   align-self: flex-end;
-  background: rgba(255, 210, 0, 0.14);
+  background: rgba(var(--rgb-gold), 0.14);
   color: var(--color-cyber-silver);
 }
 
@@ -1112,7 +1142,7 @@ body::before {
   line-height: 1.45;
   /* Two lines split by an explicit <br /> in the markup — no max-width, so neither line rewraps. */
   white-space: nowrap;
-  color: rgba(201, 211, 222, 0.85);
+  color: rgba(var(--rgb-text), 0.85);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
@@ -1149,7 +1179,7 @@ body::before {
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.04em;
-  color: rgba(201, 211, 222, 0.4);
+  color: rgba(var(--rgb-text), 0.4);
   background: none;
   border: none;
   cursor: pointer;
@@ -1163,11 +1193,11 @@ body::before {
 }
 
 #admin-logout-button {
-  color: rgba(255, 210, 0, 0.7);
+  color: rgba(var(--rgb-gold), 0.7);
 }
 
 #admin-logout-button:hover {
-  color: rgba(255, 210, 0, 1);
+  color: rgba(var(--rgb-gold), 1);
 }
 
 #admin-panel-open-button {
@@ -1194,9 +1224,9 @@ body::before {
   width: min(340px, 90vw);
   padding: 24px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 210, 0, 0.3);
+  border: 1px solid rgba(var(--rgb-gold), 0.3);
   background: rgba(var(--rgb-panel), 0.9);
-  box-shadow: 0 0 30px rgba(255, 210, 0, 0.15);
+  box-shadow: 0 0 30px rgba(var(--rgb-gold), 0.15);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1214,8 +1244,8 @@ body::before {
   font-size: 14px;
   padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 210, 0, 0.3);
-  background: rgba(255, 210, 0, 0.06);
+  border: 1px solid rgba(var(--rgb-gold), 0.3);
+  background: rgba(var(--rgb-gold), 0.06);
   color: var(--color-cyber-silver);
 }
 
@@ -1241,15 +1271,15 @@ body::before {
 }
 
 #admin-login-submit {
-  border: 1px solid rgba(255, 210, 0, 0.4);
-  background: rgba(255, 210, 0, 0.16);
+  border: 1px solid rgba(var(--rgb-gold), 0.4);
+  background: rgba(var(--rgb-gold), 0.16);
   color: var(--color-cyber-silver);
 }
 
 #admin-login-cancel {
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: transparent;
-  color: rgba(201, 211, 222, 0.7);
+  color: rgba(var(--rgb-text), 0.7);
 }
 
 /* --- Admin panel (notice + social-link management) ---------------------------------------------- */
@@ -1272,9 +1302,9 @@ body::before {
   overflow-y: auto;
   padding: 22px 24px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 210, 0, 0.3);
+  border: 1px solid rgba(var(--rgb-gold), 0.3);
   background: rgba(var(--rgb-panel), 0.92);
-  box-shadow: 0 0 30px rgba(255, 210, 0, 0.15);
+  box-shadow: 0 0 30px rgba(var(--rgb-gold), 0.15);
 }
 
 #admin-panel-title {
@@ -1313,7 +1343,7 @@ body::before {
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 13px;
-  color: rgba(201, 211, 222, 0.85);
+  color: rgba(var(--rgb-text), 0.85);
 }
 
 #admin-banner-mode-select label,
@@ -1331,7 +1361,7 @@ body::before {
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 12px;
-  color: rgba(201, 211, 222, 0.7);
+  color: rgba(var(--rgb-text), 0.7);
   margin-bottom: 10px;
 }
 
@@ -1444,7 +1474,7 @@ body::before {
   flex: 1 1 auto;
   font-family: var(--font-body);
   font-size: 12px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
 }
 
 #admin-banner-images-row {
@@ -1464,7 +1494,7 @@ body::before {
 #admin-banner-images-filenames {
   font-family: var(--font-body);
   font-size: 12px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
 }
 
 #admin-social-links-list {
@@ -1574,7 +1604,7 @@ body::before {
 #admin-social-link-image-filename {
   font-family: var(--font-body);
   font-size: 12px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
 }
 
 .admin-social-link-image-thumb {
@@ -1734,7 +1764,7 @@ body::before {
   gap: 6px;
   font-family: var(--font-body);
   font-size: 12px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
 }
 
 /* Groups the title/content text input together with its own font-size/family/bold controls so the
@@ -1952,7 +1982,7 @@ body::before {
   border-radius: var(--radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: transparent;
-  color: rgba(201, 211, 222, 0.7);
+  color: rgba(var(--rgb-text), 0.7);
   cursor: pointer;
   transition: background 0.2s ease;
 }
@@ -2068,7 +2098,7 @@ body::before {
 #membership-profile-cancel {
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: transparent;
-  color: rgba(201, 211, 222, 0.7);
+  color: rgba(var(--rgb-text), 0.7);
 }
 
 /* Set apart from 저장/취소 above (its own row, smaller, muted-until-hovered) — a destructive,
@@ -2120,9 +2150,9 @@ body::before {
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 12px;
-  color: rgba(255, 210, 0, 0.9);
-  background: rgba(255, 210, 0, 0.08);
-  border: 1px solid rgba(255, 210, 0, 0.25);
+  color: rgba(var(--rgb-gold), 0.9);
+  background: rgba(var(--rgb-gold), 0.08);
+  border: 1px solid rgba(var(--rgb-gold), 0.25);
   border-radius: 6px;
   padding: 6px 10px;
   margin: 0 0 8px;
@@ -2146,7 +2176,7 @@ body::before {
 #membership-profile-photo-filename {
   font-family: var(--font-body);
   font-size: 12px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
   word-break: break-all;
 }
 
@@ -2159,14 +2189,14 @@ body::before {
   margin-bottom: 12px;
   font-family: var(--font-body);
   font-size: 13px;
-  color: rgba(201, 211, 222, 0.85);
+  color: rgba(var(--rgb-text), 0.85);
 }
 
 #membership-signup-gender-label,
 #membership-profile-gender-label {
   font-weight: 600;
   font-size: 12px;
-  color: rgba(201, 211, 222, 0.7);
+  color: rgba(var(--rgb-text), 0.7);
 }
 
 #leaderboard-admin-delete-button,
@@ -2259,9 +2289,9 @@ body::before {
   overflow-y: auto;
   padding: 14px 20px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 210, 0, 0.3);
+  border: 1px solid rgba(var(--rgb-gold), 0.3);
   background: rgba(var(--rgb-panel), 0.6);
-  box-shadow: 0 0 20px rgba(255, 210, 0, 0.1);
+  box-shadow: 0 0 20px rgba(var(--rgb-gold), 0.1);
 }
 
 #leaderboard-tagline-row {
@@ -2401,7 +2431,7 @@ body::before {
   width: 128px;
   height: auto;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 6px rgba(255, 210, 0, 0.4)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 0 6px rgba(var(--rgb-gold), 0.4)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
 }
 
 #leaderboard-title {
@@ -2448,7 +2478,7 @@ body::before {
   height: 36px;
   object-fit: cover;
   border-radius: 6px;
-  border: 1px solid rgba(255, 210, 0, 0.4);
+  border: 1px solid rgba(var(--rgb-gold), 0.4);
   cursor: pointer;
   vertical-align: middle;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -2456,18 +2486,18 @@ body::before {
 
 .leaderboard-photo-thumb:hover {
   transform: scale(1.15);
-  box-shadow: 0 0 10px rgba(255, 210, 0, 0.5);
+  box-shadow: 0 0 10px rgba(var(--rgb-gold), 0.5);
 }
 
 .leaderboard-photo-empty {
-  color: rgba(201, 211, 222, 0.35);
+  color: rgba(var(--rgb-text), 0.35);
   font-size: 11px;
 }
 
 #leaderboard-table thead th {
   color: var(--color-cyber-gold);
   font-weight: 700;
-  border-bottom: 1px solid rgba(255, 210, 0, 0.3);
+  border-bottom: 1px solid rgba(var(--rgb-gold), 0.3);
 }
 
 #leaderboard-table tbody tr:nth-child(odd) {
@@ -2475,11 +2505,11 @@ body::before {
 }
 
 #leaderboard-table tbody td {
-  color: rgba(201, 211, 222, 0.9);
+  color: rgba(var(--rgb-text), 0.9);
 }
 
 #leaderboard-empty td {
-  color: rgba(201, 211, 222, 0.5);
+  color: rgba(var(--rgb-text), 0.5);
   font-style: italic;
 }
 
@@ -2573,7 +2603,7 @@ body::before {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background-color: rgba(201, 211, 222, 0.15);
+  background-color: rgba(var(--rgb-text), 0.15);
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -2642,7 +2672,7 @@ body::before {
   border: none;
   background: none;
   color: var(--color-cyber-gold);
-  text-shadow: 0 0 8px rgba(255, 210, 0, 0.4);
+  text-shadow: 0 0 8px rgba(var(--rgb-gold), 0.4);
   cursor: pointer;
   transition: opacity 0.2s ease;
 }
@@ -2713,7 +2743,7 @@ body::before {
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 11px;
-  color: rgba(201, 211, 222, 0.6);
+  color: rgba(var(--rgb-text), 0.6);
 }
 
 /* --- Notice board (admin-editable) -------------------------------------------------------------
@@ -2735,7 +2765,7 @@ body::before {
   background: linear-gradient(135deg, rgba(24, 8, 32, 0.88), rgba(var(--rgb-panel), 0.92));
   border: none;
   box-shadow:
-    0 0 22px rgba(201, 211, 222, 0.25),
+    0 0 22px rgba(var(--rgb-text), 0.25),
     inset 0 0 24px rgba(var(--rgb-accent), 0.06);
   animation: notice-pulse 3.5s ease-in-out infinite;
 }
@@ -2744,7 +2774,7 @@ body::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent 25%, rgba(255, 210, 0, 0.1) 50%, transparent 75%);
+  background: linear-gradient(100deg, transparent 25%, rgba(var(--rgb-gold), 0.1) 50%, transparent 75%);
   background-size: 260% 100%;
   animation: notice-sheen 6s ease-in-out infinite;
   pointer-events: none;
@@ -2764,12 +2794,12 @@ body::before {
   0%,
   100% {
     box-shadow:
-      0 0 22px rgba(201, 211, 222, 0.25),
+      0 0 22px rgba(var(--rgb-text), 0.25),
       inset 0 0 24px rgba(var(--rgb-accent), 0.06);
   }
   50% {
     box-shadow:
-      0 0 32px rgba(201, 211, 222, 0.4),
+      0 0 32px rgba(var(--rgb-text), 0.4),
       inset 0 0 30px rgba(var(--rgb-accent), 0.1);
   }
 }
@@ -2812,10 +2842,10 @@ body::before {
   position: absolute;
   inset: -24px;
   background-image:
-    radial-gradient(circle 3px at 8% 15%, rgba(255, 210, 0, 0.4), transparent 65%),
+    radial-gradient(circle 3px at 8% 15%, rgba(var(--rgb-gold), 0.4), transparent 65%),
     radial-gradient(circle 2px at 92% 20%, rgba(var(--rgb-accent), 0.4), transparent 65%),
     radial-gradient(circle 2.5px at 20% 85%, rgba(var(--rgb-danger), 0.35), transparent 65%),
-    radial-gradient(circle 2px at 78% 80%, rgba(255, 210, 0, 0.35), transparent 65%),
+    radial-gradient(circle 2px at 78% 80%, rgba(var(--rgb-gold), 0.35), transparent 65%),
     radial-gradient(circle 3px at 45% 10%, rgba(var(--rgb-accent), 0.3), transparent 65%),
     radial-gradient(circle 1.5px at 60% 90%, rgba(var(--rgb-danger), 0.3), transparent 65%);
   pointer-events: none;
@@ -3038,7 +3068,7 @@ body::before {
   font-family: var(--font-body);
   font-size: 13px;
   font-style: italic;
-  color: rgba(201, 211, 222, 0.5);
+  color: rgba(var(--rgb-text), 0.5);
   text-align: center;
   margin: 0;
 }
@@ -3062,7 +3092,7 @@ body::before {
 #members-directory-table thead th {
   color: var(--color-cyber-gold);
   font-weight: 700;
-  border-bottom: 1px solid rgba(255, 210, 0, 0.3);
+  border-bottom: 1px solid rgba(var(--rgb-gold), 0.3);
 }
 
 #members-directory-table tbody tr:nth-child(odd) {
@@ -3070,11 +3100,11 @@ body::before {
 }
 
 #members-directory-table tbody td {
-  color: rgba(201, 211, 222, 0.9);
+  color: rgba(var(--rgb-text), 0.9);
 }
 
 #members-directory-empty td {
-  color: rgba(201, 211, 222, 0.5);
+  color: rgba(var(--rgb-text), 0.5);
   font-style: italic;
 }
 
@@ -3083,7 +3113,7 @@ body::before {
    td's own color above — a bare class has lower specificity than that id+type rule and would
    otherwise silently lose. */
 #members-directory-table td.members-directory-number {
-  color: rgba(201, 211, 222, 0.5);
+  color: rgba(var(--rgb-text), 0.5);
   font-weight: 700;
 }
 
@@ -3092,7 +3122,7 @@ body::before {
   height: 32px;
   margin: 0 auto;
   border-radius: 50%;
-  background-color: rgba(201, 211, 222, 0.15);
+  background-color: rgba(var(--rgb-text), 0.15);
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -3125,7 +3155,7 @@ body::before {
    subscription, so it reflects who was online at that moment. */
 #members-directory-table td.members-directory-online {
   font-size: 11px;
-  color: rgba(201, 211, 222, 0.5);
+  color: rgba(var(--rgb-text), 0.5);
 }
 
 #members-directory-table td.members-directory-online.is-online {
@@ -3214,8 +3244,8 @@ body::before {
 
 .direct-chat-message.theirs {
   align-self: flex-start;
-  background: rgba(201, 211, 222, 0.1);
-  border: 1px solid rgba(201, 211, 222, 0.2);
+  background: rgba(var(--rgb-text), 0.1);
+  border: 1px solid rgba(var(--rgb-text), 0.2);
   color: var(--color-cyber-silver);
 }
 
@@ -3223,7 +3253,7 @@ body::before {
   font-family: var(--font-body);
   font-size: 13px;
   font-style: italic;
-  color: rgba(201, 211, 222, 0.5);
+  color: rgba(var(--rgb-text), 0.5);
   text-align: center;
   margin: 12px 0;
 }
@@ -3292,7 +3322,7 @@ body::before {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background-color: rgba(201, 211, 222, 0.15);
+  background-color: rgba(var(--rgb-text), 0.15);
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -3307,14 +3337,14 @@ body::before {
 
 .guestbook-entry-date {
   font-size: 11px;
-  color: rgba(201, 211, 222, 0.5);
+  color: rgba(var(--rgb-text), 0.5);
   white-space: nowrap;
 }
 
 .guestbook-entry-message {
   font-family: var(--font-body);
   font-size: 13px;
-  color: rgba(201, 211, 222, 0.9);
+  color: rgba(var(--rgb-text), 0.9);
   margin: 4px 0;
   word-break: break-word;
   white-space: pre-wrap;
@@ -3354,7 +3384,7 @@ body::before {
   border-radius: var(--radius-pill);
   border: 1px solid rgba(var(--rgb-accent), 0.3);
   background: transparent;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
 }
@@ -3440,7 +3470,7 @@ body::before {
 .guestbook-edit-attachment-filename {
   font-family: var(--font-body);
   font-size: 11px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
   word-break: break-all;
 }
 
@@ -3468,7 +3498,7 @@ body::before {
 .guestbook-cancel-btn {
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: transparent;
-  color: rgba(201, 211, 222, 0.6);
+  color: rgba(var(--rgb-text), 0.6);
 }
 
 /* Squared-off layout, same on every screen size (PC, mobile portrait/landscape all get identical
@@ -3554,7 +3584,7 @@ body::before {
 #guestbook-attachment-filename {
   font-family: var(--font-body);
   font-size: 11px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
   word-break: break-all;
 }
 
@@ -3630,7 +3660,7 @@ body::before {
   content: "◆";
   font-size: 9px;
   color: var(--color-cyber-gold);
-  text-shadow: 0 0 6px rgba(255, 210, 0, 0.7);
+  text-shadow: 0 0 6px rgba(var(--rgb-gold), 0.7);
 }
 
 .control-group-body {
@@ -3656,7 +3686,7 @@ body::before {
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 14px;
-  color: rgba(201, 211, 222, 0.85);
+  color: rgba(var(--rgb-text), 0.85);
 }
 
 .bgm-mode-select label {
@@ -3762,7 +3792,7 @@ select option:disabled {
   font-weight: 600;
   font-size: 14px;
   line-height: 1.25;
-  color: rgba(201, 211, 222, 0.85);
+  color: rgba(var(--rgb-text), 0.85);
   accent-color: var(--color-cyber-cyan);
   cursor: pointer;
 }
@@ -3784,7 +3814,7 @@ select option:disabled {
   padding: 16px 32px;
   border-radius: 12px;
   background: rgba(var(--rgb-panel), 0.75);
-  border: 1px solid rgba(255, 210, 0, 0.35);
+  border: 1px solid rgba(var(--rgb-gold), 0.35);
   color: var(--color-cyber-gold);
   font-family: var(--font-display);
   font-size: 26px;
@@ -3793,7 +3823,7 @@ select option:disabled {
   white-space: nowrap;
   pointer-events: none;
   z-index: 9;
-  box-shadow: 0 0 24px rgba(255, 210, 0, 0.15);
+  box-shadow: 0 0 24px rgba(var(--rgb-gold), 0.15);
 }
 
 /* --- Buttons ----------------------------------------------------------------------------------- */
@@ -3979,7 +4009,7 @@ select option:disabled {
   box-sizing: border-box;
   border: none;
   border-radius: 8px;
-  background: rgba(255, 210, 0, 0.08);
+  background: rgba(var(--rgb-gold), 0.08);
   text-decoration: none;
   overflow: hidden;
   flex-shrink: 0;
@@ -3987,7 +4017,7 @@ select option:disabled {
 }
 
 .beejay-bros-link-banner:hover {
-  background: rgba(255, 210, 0, 0.2);
+  background: rgba(var(--rgb-gold), 0.2);
 }
 
 .beejay-bros-link-text {
@@ -4101,7 +4131,7 @@ select option:disabled {
   font-weight: 600;
   letter-spacing: 0.2em;
   font-size: 14px;
-  color: rgba(201, 211, 222, 0.7);
+  color: rgba(var(--rgb-text), 0.7);
   margin-top: 10px;
 }
 
@@ -4113,7 +4143,7 @@ select option:disabled {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 16px rgba(255, 210, 0, 0.55)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.7));
+  filter: drop-shadow(0 0 16px rgba(var(--rgb-gold), 0.55)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.7));
   line-height: 1.1;
 }
 
@@ -4160,7 +4190,7 @@ select option:disabled {
 #name-entry-desc {
   font-family: var(--font-body);
   font-size: 14px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
   margin: 0;
 }
 
@@ -4179,7 +4209,7 @@ select option:disabled {
 
 #name-entry-name::placeholder,
 #name-entry-message::placeholder {
-  color: rgba(201, 211, 222, 0.4);
+  color: rgba(var(--rgb-text), 0.4);
 }
 
 #name-entry-name:focus,
@@ -4212,7 +4242,7 @@ select option:disabled {
 #step-setup-hint {
   font-family: var(--font-body);
   font-size: 13px;
-  color: rgba(201, 211, 222, 0.75);
+  color: rgba(var(--rgb-text), 0.75);
   max-width: 480px;
   margin: 0;
 }
@@ -4282,7 +4312,7 @@ select option:disabled {
   font-weight: 700;
   font-size: clamp(16px, 3vw, 24px);
   color: var(--color-cyber-gold);
-  text-shadow: 0 0 12px rgba(255, 210, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 0 12px rgba(var(--rgb-gold), 0.6), 0 2px 6px rgba(0, 0, 0, 0.8);
   text-align: center;
 }
 
@@ -4314,8 +4344,8 @@ select option:disabled {
   max-width: min(90vw, 640px);
   max-height: 78vh;
   border-radius: 12px;
-  border: 2px solid rgba(255, 210, 0, 0.5);
-  box-shadow: 0 0 40px rgba(255, 210, 0, 0.25);
+  border: 2px solid rgba(var(--rgb-gold), 0.5);
+  box-shadow: 0 0 40px rgba(var(--rgb-gold), 0.25);
 }
 
 /* Its own click handler stops propagation so it doesn't also trigger the overlay's
@@ -4327,15 +4357,15 @@ select option:disabled {
   font-size: 13px;
   padding: 8px 20px;
   border-radius: var(--radius-pill);
-  border: 1px solid rgba(255, 210, 0, 0.5);
-  background: rgba(255, 210, 0, 0.14);
+  border: 1px solid rgba(var(--rgb-gold), 0.5);
+  background: rgba(var(--rgb-gold), 0.14);
   color: var(--color-cyber-gold);
   cursor: pointer;
   transition: background 0.2s ease;
 }
 
 #photo-lightbox-download-button:hover {
-  background: rgba(255, 210, 0, 0.26);
+  background: rgba(var(--rgb-gold), 0.26);
 }
 
 /* --- Mobile layout for the pre-game start screen -----------------------------------------------

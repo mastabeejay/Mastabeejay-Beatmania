@@ -57,7 +57,7 @@ import {
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
 import { adminAddBannerImages, adminDeleteBannerImage, loadBannerImages, type BannerImage } from "./game/BannerImages";
 import { adminSetBanner, adminSetGraffitiImage, loadBanner, type BannerMode } from "./game/Notice";
-import { generateGraffitiImage } from "./game/GraffitiImage";
+import { generateGraffitiImage, GraffitiGenerationExhaustedError } from "./game/GraffitiImage";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
 import { getOnlineMemberIds, trackMemberOnline, untrackMemberOnline } from "./game/Presence";
@@ -2329,8 +2329,8 @@ adminGraffitiAiGenerateButton.addEventListener("click", () => {
       return renderBanner();
     })
     .catch((err) => {
-      if (err instanceof GeminiRateLimitedError) {
-        adminGraffitiAiError.textContent = "AI 그래피티 생성 실패: Gemini 무료 사용량을 모두 소진했습니다. 잠시 후 다시 시도해주세요.";
+      if (err instanceof GraffitiGenerationExhaustedError) {
+        adminGraffitiAiError.textContent = "AI 그래피티 생성 실패: Gemini 무료 사용량을 모두 소진했고, 무료 대체 서비스도 실패했습니다. 잠시 후 다시 시도해주세요.";
         adminGraffitiAiError.hidden = false;
         return;
       }
