@@ -6,6 +6,7 @@ import { adminChangePassword, adminLogin, WrongAdminPasswordError } from "./game
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
 import { adminSetChatbotMode, askGemini, GeminiRateLimitedError, isGeminiConfigured, loadChatbotMode, type ChatbotMode, type ChatMessage } from "./game/Chatbot";
+import { adminSetSkinDesign, loadSkinDesign, type SkinDesign } from "./game/SkinDesign";
 import { matchFaq } from "./game/ChatbotFaq";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
@@ -357,6 +358,10 @@ const adminBannerImagesSuccess = document.querySelector<HTMLSpanElement>("#admin
 const adminBannerImagesAddButton = document.querySelector<HTMLButtonElement>("#admin-banner-images-add-button")!;
 const chatbotPanel = document.querySelector<HTMLDivElement>("#chatbot-panel")!;
 const chatbotMode = document.querySelector<HTMLSpanElement>("#chatbot-mode")!;
+const adminSkinDesignRadios = document.querySelectorAll<HTMLInputElement>('input[name="admin-skin-design"]');
+const adminSkinDesignSaveButton = document.querySelector<HTMLButtonElement>("#admin-skin-design-save-button")!;
+const adminSkinDesignError = document.querySelector<HTMLSpanElement>("#admin-skin-design-error")!;
+const adminSkinDesignSuccess = document.querySelector<HTMLSpanElement>("#admin-skin-design-success")!;
 const adminChatbotModeRadios = document.querySelectorAll<HTMLInputElement>('input[name="admin-chatbot-mode"]');
 const adminChatbotModeSaveButton = document.querySelector<HTMLButtonElement>("#admin-chatbot-mode-save-button")!;
 const adminChatbotModeError = document.querySelector<HTMLSpanElement>("#admin-chatbot-mode-error")!;
@@ -2216,6 +2221,9 @@ adminPanelOpenButton.addEventListener("click", () => {
       radio.checked = radio.value === mode;
     });
   });
+  adminSkinDesignRadios.forEach((radio) => {
+    radio.checked = radio.value === currentSkinDesign;
+  });
   void renderAdminSocialLinksList();
   void renderAdminBannerImagesList();
   void renderAdminWebsiteLinksList();
@@ -2238,6 +2246,8 @@ adminPanelCloseButton.addEventListener("click", () => {
   adminBannerImagesSuccess.hidden = true;
   adminChatbotModeError.hidden = true;
   adminChatbotModeSuccess.hidden = true;
+  adminSkinDesignError.hidden = true;
+  adminSkinDesignSuccess.hidden = true;
 });
 
 adminChatbotModeSaveButton.addEventListener("click", () => {
@@ -2747,6 +2757,41 @@ setChatbotModeLabel(chatbotAiModeActive());
 void loadChatbotMode().then((mode) => {
   chatbotAdminMode = mode;
   setChatbotModeLabel(chatbotAiModeActive());
+});
+
+// --- [Skin design set]: admin-selectable site-wide visual skin -------------------------------------
+// The last-known skin is cached in localStorage and applied synchronously at boot so returning
+// visitors don't get a flash of the other skin while the site_notice read is in flight; the server
+// value then reconciles (and is what first-time visitors get once it arrives).
+const SKIN_STORAGE_KEY = "bdj-skin";
+let currentSkinDesign: SkinDesign = localStorage.getItem(SKIN_STORAGE_KEY) === "ai" ? "ai" : "original";
+
+function applySkinDesign(skin: SkinDesign): void {
+  currentSkinDesign = skin;
+  document.documentElement.classList.toggle("theme-ai", skin === "ai");
+  try {
+    localStorage.setItem(SKIN_STORAGE_KEY, skin);
+  } catch {
+    // Private mode etc. — the skin still applies this visit, it just won't pre-apply next time.
+  }
+}
+
+applySkinDesign(currentSkinDesign);
+void loadSkinDesign().then(applySkinDesign);
+
+adminSkinDesignSaveButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const checkedRadio = Array.from(adminSkinDesignRadios).find((radio) => radio.checked);
+  const skin = (checkedRadio?.value as SkinDesign | undefined) ?? "original";
+  adminSkinDesignError.hidden = true;
+  adminSkinDesignSuccess.hidden = true;
+  void withButtonLoading(adminSkinDesignSaveButton, "저장 중...", () => adminSetSkinDesign(skin, adminPassword!))
+    .then(() => {
+      applySkinDesign(skin);
+      adminSkinDesignSuccess.textContent = `'${skin === "ai" ? "AI" : "Original"}' 스킨으로 적용 저장되었습니다.`;
+      adminSkinDesignSuccess.hidden = false;
+    })
+    .catch((err) => handleAdminPanelError(err, "스킨 저장에 실패했습니다:", adminSkinDesignError));
 });
 
 function appendChatbotMessage(text: string, role: "user" | "model"): void {

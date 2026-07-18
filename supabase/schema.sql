@@ -198,6 +198,10 @@ alter table site_notice add column if not exists display_mode text not null defa
 -- network failure) or 'faq' (fixed FAQ only, never call Gemini). Rides on this singleton since
 -- it's exactly the same shape of site-wide, admin-owned, publicly-readable setting as the banner.
 alter table site_notice add column if not exists chatbot_mode text not null default 'gemini';
+-- Site-wide skin choice, set from the admin panel's [Skin design set] section: 'original' is the
+-- launch cyberpunk look, 'ai' is the neutral-dark/emerald "AI style" reskin (modeled on the
+-- v0 "Pointer AI landing page" template). Same single-row site_notice pattern as chatbot_mode.
+alter table site_notice add column if not exists skin_design text not null default 'original';
 
 -- Up to 4 admin-uploaded images shown side by side when display_mode = 'images'. Stored as
 -- data: URLs (like the leaderboard's celebration photo) rather than Supabase Storage, since the
@@ -1046,6 +1050,22 @@ begin
 end;
 $$;
 
+-- [Skin design set]: the admin's site-wide choice between the two full visual skins ('original'
+-- cyberpunk vs 'ai' neutral-dark/emerald) — same shape as admin_set_chatbot_mode above.
+create or replace function admin_set_skin_design(p_skin text, p_admin_password text)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  if p_skin not in ('original', 'ai') then
+    raise exception 'invalid_skin';
+  end if;
+  update site_notice set skin_design = p_skin, updated_at = now() where id = 1;
+end;
+$$;
+
 -- Superseded by admin_add_banner_images/admin_delete_banner_image — replacing the *entire* set on
 -- every call meant uploading images one at a time (the only option most browsers' file pickers make
 -- obvious) silently wiped out whatever was already there, leaving just the last upload.
@@ -1123,6 +1143,7 @@ grant execute on function admin_update_social_link(bigint, text, text, text, tex
 grant execute on function admin_delete_social_link(bigint, text) to anon, authenticated;
 grant execute on function admin_set_banner(text, text, text, text) to anon, authenticated;
 grant execute on function admin_set_chatbot_mode(text, text) to anon, authenticated;
+grant execute on function admin_set_skin_design(text, text) to anon, authenticated;
 grant execute on function admin_add_banner_images(text[], text) to anon, authenticated;
 grant execute on function admin_delete_banner_image(bigint, text) to anon, authenticated;
 grant execute on function admin_add_website_link(text, text, integer, text, boolean, text, integer, text, boolean, text, text, text, text) to anon, authenticated;
