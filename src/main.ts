@@ -56,7 +56,8 @@ import {
 } from "./game/BeejayBrosLinks";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
 import { adminAddBannerImages, adminDeleteBannerImage, loadBannerImages, type BannerImage } from "./game/BannerImages";
-import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
+import { adminSetBanner, adminSetGraffitiImage, loadBanner, type BannerMode } from "./game/Notice";
+import { generateGraffitiImage } from "./game/GraffitiImage";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
 import { getOnlineMemberIds, trackMemberOnline, untrackMemberOnline } from "./game/Presence";
@@ -303,6 +304,10 @@ const adminPanelOverlay = document.querySelector<HTMLDivElement>("#admin-panel-o
 const adminPanelCloseButton = document.querySelector<HTMLButtonElement>("#admin-panel-close-button")!;
 const adminNoticeInput = document.querySelector<HTMLTextAreaElement>("#admin-notice-input")!;
 const adminGraffitiInput = document.querySelector<HTMLInputElement>("#admin-graffiti-input")!;
+const adminGraffitiAiGenerateButton = document.querySelector<HTMLButtonElement>("#admin-graffiti-ai-generate-button")!;
+const adminGraffitiAiError = document.querySelector<HTMLSpanElement>("#admin-graffiti-ai-error")!;
+const adminGraffitiAiSuccess = document.querySelector<HTMLSpanElement>("#admin-graffiti-ai-success")!;
+const adminGraffitiAiPreview = document.querySelector<HTMLImageElement>("#admin-graffiti-ai-preview")!;
 const adminBannerModeRadios = document.querySelectorAll<HTMLInputElement>('input[name="admin-banner-mode"]');
 const adminBannerSaveButton = document.querySelector<HTMLButtonElement>("#admin-banner-save-button")!;
 const adminBannerSaveError = document.querySelector<HTMLSpanElement>("#admin-banner-save-error")!;
@@ -348,6 +353,7 @@ const noticeBoard = document.querySelector<HTMLDivElement>("#notice-board")!;
 const noticeBoardLabel = document.querySelector<HTMLDivElement>("#notice-board-label")!;
 const noticeBoardText = document.querySelector<HTMLDivElement>("#notice-board-text")!;
 const noticeBoardGraffiti = document.querySelector<HTMLDivElement>("#notice-board-graffiti")!;
+const noticeBoardGraffitiImage = document.querySelector<HTMLImageElement>("#notice-board-graffiti-image")!;
 const noticeBoardImages = document.querySelector<HTMLDivElement>("#notice-board-images")!;
 const footerRow = document.querySelector<HTMLDivElement>("#footer-row")!;
 const adminBannerImagesList = document.querySelector<HTMLDivElement>("#admin-banner-images-list")!;
@@ -1600,6 +1606,10 @@ async function renderBanner(): Promise<void> {
   const banner = await loadBanner();
   const showNotice = banner.displayMode === "notice" && !!banner.message;
   const showGraffiti = banner.displayMode === "graffiti" && !!banner.graffitiText;
+  // An AI-generated image (see GraffitiImage.ts) replaces the CSS-styled text rendering when one's
+  // been saved for the current graffiti text; the two are mutually exclusive, never both shown.
+  const showGraffitiImage = showGraffiti && !!banner.graffitiImageData;
+  const showGraffitiText = showGraffiti && !showGraffitiImage;
 
   let images: BannerImage[] = [];
   if (banner.displayMode === "images") images = await loadBannerImages();
@@ -1608,7 +1618,9 @@ async function renderBanner(): Promise<void> {
   noticeBoardText.textContent = banner.message ?? "";
   noticeBoardText.hidden = !showNotice;
   noticeBoardGraffiti.textContent = banner.graffitiText ?? "";
-  noticeBoardGraffiti.hidden = !showGraffiti;
+  noticeBoardGraffiti.hidden = !showGraffitiText;
+  noticeBoardGraffitiImage.src = banner.graffitiImageData ?? "";
+  noticeBoardGraffitiImage.hidden = !showGraffitiImage;
   noticeBoardLabel.hidden = !showNotice;
 
   if (showImages) {
@@ -1630,9 +1642,9 @@ async function renderBanner(): Promise<void> {
   // would measure the board's height using whatever *already-shrunk* font size a previous
   // fitGraffitiFontSize() pass left in place, computing a too-small cap that then forces the next
   // shrink pass to shrink even further — a ratchet that only ever gets tighter, never recovers.
-  if (showGraffiti) noticeBoardGraffiti.style.fontSize = "";
+  if (showGraffitiText) noticeBoardGraffiti.style.fontSize = "";
   if (!noticeBoard.hidden) fitNoticeBoardHeight(showImages);
-  if (showGraffiti) fitGraffitiFontSize();
+  if (showGraffitiText) fitGraffitiFontSize();
 }
 
 onWindowResizeRefit(() => {
@@ -2214,6 +2226,8 @@ adminPanelOpenButton.addEventListener("click", () => {
     adminBannerModeRadios.forEach((radio) => {
       radio.checked = radio.value === banner.displayMode;
     });
+    adminGraffitiAiPreview.src = banner.graffitiImageData ?? "";
+    adminGraffitiAiPreview.hidden = !banner.graffitiImageData;
   });
   void loadChatbotMode().then((mode) => {
     chatbotAdminMode = mode;
@@ -2248,6 +2262,8 @@ adminPanelCloseButton.addEventListener("click", () => {
   adminChatbotModeSuccess.hidden = true;
   adminSkinDesignError.hidden = true;
   adminSkinDesignSuccess.hidden = true;
+  adminGraffitiAiError.hidden = true;
+  adminGraffitiAiSuccess.hidden = true;
 });
 
 adminChatbotModeSaveButton.addEventListener("click", () => {
@@ -2288,6 +2304,38 @@ adminBannerSaveButton.addEventListener("click", () => {
       return renderBanner();
     })
     .catch((err) => handleAdminPanelError(err, "배너 저장에 실패했습니다:", adminBannerSaveError));
+});
+
+adminGraffitiAiGenerateButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const text = adminGraffitiInput.value.trim();
+  adminGraffitiAiError.hidden = true;
+  adminGraffitiAiSuccess.hidden = true;
+  if (!text) {
+    adminGraffitiAiError.textContent = "그래피티로 표시할 문구를 먼저 입력해주세요.";
+    adminGraffitiAiError.hidden = false;
+    return;
+  }
+  void withButtonLoading(adminGraffitiAiGenerateButton, "생성 중...", () =>
+    generateGraffitiImage(text).then((imageDataUrl) => adminSetGraffitiImage(text, imageDataUrl, adminPassword!)),
+  )
+    .then((banner) => {
+      adminGraffitiAiPreview.src = banner.graffitiImageData ?? "";
+      adminGraffitiAiPreview.hidden = !banner.graffitiImageData;
+      adminBannerModeRadios.forEach((radio) => {
+        radio.checked = radio.value === banner.displayMode;
+      });
+      adminGraffitiAiSuccess.hidden = false;
+      return renderBanner();
+    })
+    .catch((err) => {
+      if (err instanceof GeminiRateLimitedError) {
+        adminGraffitiAiError.textContent = "AI 그래피티 생성 실패: Gemini 무료 사용량을 모두 소진했습니다. 잠시 후 다시 시도해주세요.";
+        adminGraffitiAiError.hidden = false;
+        return;
+      }
+      handleAdminPanelError(err, "AI 그래피티 생성에 실패했습니다:", adminGraffitiAiError);
+    });
 });
 
 const BANNER_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/bmp"];

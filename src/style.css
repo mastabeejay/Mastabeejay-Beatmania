@@ -2879,6 +2879,38 @@ body::before {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
+/* AI-generated graffiti artwork — same "capped height, natural width, contain" sizing as the
+   image-upload banner mode above, since it fills the identical notice-board slot. */
+#notice-board-graffiti-image {
+  display: block;
+  height: min(32vh, 400px);
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+#admin-graffiti-ai-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+#admin-graffiti-ai-preview {
+  display: block;
+  max-width: 220px;
+  max-height: 140px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--rgb-accent), 0.2);
+  margin-bottom: 6px;
+}
+
 #guestbook-overlay,
 #members-directory-overlay {
   display: none;
