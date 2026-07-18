@@ -54,13 +54,29 @@ export class CameraManager {
    *  (fires once at start, then stops firing at all). The timestamp handed to MediaPipe comes from
    *  rAF's own clock, not video.currentTime: detectForVideo requires a strictly increasing
    *  timestamp between calls, and video.currentTime has been observed to stall for camera streams
-   *  on some platforms, which would silently fail every detection after the first. */
+   *  on some platforms, which would silently fail every detection after the first — which also
+   *  rules out gating on video.currentTime to skip duplicate frames.
+   *
+   *  Throttled to the same ~30fps the camera itself was requested at (see start() above): without
+   *  this, rAF fires at the DISPLAY's refresh rate, not the camera's capture rate, so a 120-240Hz
+   *  gaming monitor was re-running the frameCallback (MediaPipe hand-landmark inference — the most
+   *  expensive step in the whole app) 4-8x per real camera frame, on input that hadn't actually
+   *  changed since the previous call. Same class of fix, and same reasoning, as the render loop's
+   *  own TARGET_FRAME_MS cap in main.ts. */
+  private static readonly TARGET_FRAME_MS = 1000 / 30;
+  private lastPumpTime = 0;
+
   private pump(): void {
     if (!this.running) {
       this.pumping = false;
       return;
     }
     requestAnimationFrame((now) => {
+      if (now - this.lastPumpTime < CameraManager.TARGET_FRAME_MS) {
+        this.pump();
+        return;
+      }
+      this.lastPumpTime = now;
       if (this.video.readyState < 2) {
         this.pump();
         return;

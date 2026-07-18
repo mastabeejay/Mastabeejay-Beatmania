@@ -126,7 +126,7 @@ function buildRequestBody(history: ChatMessage[], userMessage: string, lang: Lan
  *  conversation's full history ride along on each call. */
 const MAX_HISTORY_MESSAGES = 10;
 
-export function trimHistory(history: ChatMessage[]): ChatMessage[] {
+function trimHistory(history: ChatMessage[]): ChatMessage[] {
   return history.slice(-MAX_HISTORY_MESSAGES);
 }
 

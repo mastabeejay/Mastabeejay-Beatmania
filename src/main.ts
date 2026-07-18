@@ -71,8 +71,8 @@ import {
   type WebsiteLinkAnimation,
   type WebsiteLinkFontFamily,
 } from "./game/WebsiteLinks";
-import { buildTestChart, DIFFICULTY_PRESETS, type ChartDensity } from "./game/testChart";
-import { SCRATCH_LANE } from "./game/types";
+import { buildTestChart } from "./game/testChart";
+import { DIFFICULTY_PRESETS, SCRATCH_LANE, type ChartDensity } from "./game/types";
 import { reportVisit } from "./game/Visits";
 import { GestureDetector } from "./handTracking/GestureDetector";
 import { HandLandmarkerService } from "./handTracking/HandLandmarkerService";
@@ -3168,6 +3168,14 @@ function playStep(
         return;
       }
       if (stopped) return; // stop button hit while the chart was still loading
+
+      // Both generators (assignLanes for a real upload, buildTestChart for the click-track) push all
+      // key notes in time order, then all scratch notes in time order, so the combined array is two
+      // sorted runs concatenated rather than one globally sorted list. JudgmentEngine's scan-cursor
+      // below relies on a single ascending-by-timeMs array; sorting once here (order doesn't matter
+      // to NoteScheduler's filter, and same-lane notes were already relatively time-ordered, so
+      // nothing renders differently) is cheaper than teaching every consumer about the two-run shape.
+      chart.sort((a, b) => a.timeMs - b.timeMs);
 
       const noteScheduler = new NoteScheduler(chart);
       const judgmentEngine = new JudgmentEngine(chart);

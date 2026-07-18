@@ -1,9 +1,6 @@
 import { NUM_KEYS } from "../app/AppConfig";
 import { SCRATCH_LANE, type ChartDensity, type NoteEvent } from "./types";
 
-export type { ChartDensity };
-export { DIFFICULTY_PRESETS } from "./types";
-
 /** Key notes cycle through lanes at a fixed beat interval by default; scratch notes land at their
  *  own (coarser) interval. Higher difficulty layers in: syncopation (a note nudged off the beat
  *  grid — shifted by a fraction of the note spacing itself, so it can't drift far enough to collide
