@@ -1059,7 +1059,7 @@ begin
   if not admin_login(p_admin_password) then
     raise exception 'wrong_password';
   end if;
-  if p_skin not in ('original', 'ai') then
+  if p_skin not in ('original', 'ai', 'frosted') then
     raise exception 'invalid_skin';
   end if;
   update site_notice set skin_design = p_skin, updated_at = now() where id = 1;

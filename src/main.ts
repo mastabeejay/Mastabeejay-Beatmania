@@ -6,7 +6,7 @@ import { adminChangePassword, adminLogin, WrongAdminPasswordError } from "./game
 import { runFingerCalibration } from "./calibration/CalibrationFlow";
 import { CameraManager } from "./camera/CameraManager";
 import { adminSetChatbotMode, askGemini, GeminiRateLimitedError, isGeminiConfigured, loadChatbotMode, type ChatbotMode, type ChatMessage } from "./game/Chatbot";
-import { adminSetSkinDesign, loadSkinDesign, type SkinDesign } from "./game/SkinDesign";
+import { adminSetSkinDesign, loadSkinDesign, SKIN_DESIGNS, type SkinDesign } from "./game/SkinDesign";
 import { matchFaq } from "./game/ChatbotFaq";
 import { buildChartFromFile } from "./chartGen/ChartBuilder";
 import { pickRandomDefaultTrack, type DefaultTrack } from "./game/DefaultTracks";
@@ -2764,11 +2764,13 @@ void loadChatbotMode().then((mode) => {
 // visitors don't get a flash of the other skin while the site_notice read is in flight; the server
 // value then reconciles (and is what first-time visitors get once it arrives).
 const SKIN_STORAGE_KEY = "bdj-skin";
-let currentSkinDesign: SkinDesign = localStorage.getItem(SKIN_STORAGE_KEY) === "ai" ? "ai" : "original";
+const storedSkin = localStorage.getItem(SKIN_STORAGE_KEY) as SkinDesign | null;
+let currentSkinDesign: SkinDesign = storedSkin && SKIN_DESIGNS.includes(storedSkin) ? storedSkin : "original";
 
 function applySkinDesign(skin: SkinDesign): void {
   currentSkinDesign = skin;
   document.documentElement.classList.toggle("theme-ai", skin === "ai");
+  document.documentElement.classList.toggle("theme-frosted", skin === "frosted");
   try {
     localStorage.setItem(SKIN_STORAGE_KEY, skin);
   } catch {
@@ -2788,7 +2790,7 @@ adminSkinDesignSaveButton.addEventListener("click", () => {
   void withButtonLoading(adminSkinDesignSaveButton, "저장 중...", () => adminSetSkinDesign(skin, adminPassword!))
     .then(() => {
       applySkinDesign(skin);
-      adminSkinDesignSuccess.textContent = `'${skin === "ai" ? "AI" : "Original"}' 스킨으로 적용 저장되었습니다.`;
+      adminSkinDesignSuccess.textContent = `'${skin === "ai" ? "AI" : skin === "frosted" ? "Frosted Glass" : "Original"}' 스킨으로 적용 저장되었습니다.`;
       adminSkinDesignSuccess.hidden = false;
     })
     .catch((err) => handleAdminPanelError(err, "스킨 저장에 실패했습니다:", adminSkinDesignError));

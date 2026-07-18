@@ -85,6 +85,93 @@ html.theme-ai .control-group-title {
   text-shadow: none;
 }
 
+/* The "Frosted Glass" skin — modeled on the v0 "Frosted Glass - Authentication Concept" template
+   (tags: glass-morphism / apple-design / liquid-glass / minimal): a colorful blurred-gradient
+   backdrop with translucent white-tinted glass panels (backdrop-filter blur) and white hairline
+   borders. The accent tuple becomes pure white, so every existing rgba(var(--rgb-accent), α)
+   border/fill automatically turns into the white-glass treatment; the rules below add the parts a
+   variable swap can't express (the gradient backdrop, real backdrop-filter on the major panels,
+   and the Apple-style solid-white CTA). Pills stay pills — fully-rounded shapes are part of this
+   language, unlike the AI skin's 8px corners. */
+html.theme-frosted {
+  --color-cyber-bg: #101223;
+  --color-cyber-cyan: #ffffff;
+  --color-cyber-magenta: #ff453a;
+  --color-cyber-silver: #f0f2f7;
+  --font-body: "Inter", -apple-system, "Segoe UI", sans-serif;
+  --rgb-accent: 255, 255, 255;
+  --rgb-danger: 255, 69, 58;
+  --rgb-deep: 16, 18, 35;
+  --rgb-panel: 30, 33, 55;
+}
+
+/* The signature backdrop: soft blue/purple/pink light blobs over deep indigo — what the glass
+   panels' blur actually diffuses. */
+html.theme-frosted body {
+  background:
+    radial-gradient(ellipse 55% 45% at 18% 22%, rgba(88, 130, 255, 0.35), transparent 70%),
+    radial-gradient(ellipse 50% 45% at 82% 28%, rgba(191, 90, 242, 0.28), transparent 70%),
+    radial-gradient(ellipse 55% 50% at 55% 85%, rgba(255, 55, 95, 0.22), transparent 70%),
+    #101223;
+}
+
+html.theme-frosted body::before {
+  background-image: none;
+}
+
+html.theme-frosted .text-metallic {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+}
+
+html.theme-frosted .text-metallic-gold {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+}
+
+/* The frosted panels themselves: every major boxed surface becomes translucent white-tinted glass
+   over the gradient. backdrop-filter is applied only to these bounded panels (not full-screen
+   overlays) to keep the GPU cost of the effect modest. */
+html.theme-frosted #leaderboard-panel,
+html.theme-frosted #notice-board,
+html.theme-frosted .website-link-banner,
+html.theme-frosted #beejay-bros-panel-inner,
+html.theme-frosted .install-guide-card,
+html.theme-frosted #chatbot-panel,
+html.theme-frosted #chatbot-toggle-button,
+html.theme-frosted #guestbook-overlay-panel,
+html.theme-frosted .guestbook-entry,
+html.theme-frosted #admin-login-panel,
+html.theme-frosted #admin-panel-panel,
+html.theme-frosted #membership-login-panel,
+html.theme-frosted #membership-signup-panel,
+html.theme-frosted #membership-profile-panel,
+html.theme-frosted #members-directory-panel,
+html.theme-frosted #direct-chat-panel,
+html.theme-frosted #install-guide-overlay-panel,
+html.theme-frosted #toast {
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+/* Apple-style primary CTA: a solid near-white pill with dark text. */
+html.theme-frosted #start-button {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: transparent;
+  color: #101223;
+  text-shadow: none;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+html.theme-frosted #start-button:hover {
+  background: #ffffff;
+  box-shadow: 0 8px 36px rgba(255, 255, 255, 0.25);
+}
+
+html.theme-frosted .control-group-title {
+  text-shadow: none;
+}
+
 /* Generic in-flight state for any button wrapped in withButtonLoading() (main.ts) — a network
    round-trip with zero visual change read as "did my click even register?", so this pulses and
    dims the button (its own label is swapped for a loading message by the JS side) until the
