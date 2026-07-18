@@ -202,12 +202,6 @@ alter table site_notice add column if not exists chatbot_mode text not null defa
 -- launch cyberpunk look, 'ai' is the neutral-dark/emerald "AI style" reskin (modeled on the
 -- v0 "Pointer AI landing page" template). Same single-row site_notice pattern as chatbot_mode.
 alter table site_notice add column if not exists skin_design text not null default 'original';
--- AI-generated graffiti artwork (base64 data: URL, same storage convention as site_banner_images
--- below) for display_mode='graffiti', set by admin_set_graffiti_image(). Kept alongside (not
--- replacing) graffiti_text: the plain admin_set_banner() save path always clears this back to null
--- (choosing the CSS-styled-text rendering), so a stale image never lingers after the admin edits
--- the tag text through the regular form without regenerating.
-alter table site_notice add column if not exists graffiti_image_data text;
 
 -- Up to 4 admin-uploaded images shown side by side when display_mode = 'images'. Stored as
 -- data: URLs (like the leaderboard's celebration photo) rather than Supabase Storage, since the
@@ -1033,31 +1027,6 @@ begin
     message = nullif(trim(left(coalesce(p_notice_text, ''), 500)), ''),
     graffiti_text = nullif(trim(left(coalesce(p_graffiti_text, ''), 60)), ''),
     display_mode = case when p_display_mode in ('notice', 'graffiti', 'images') then p_display_mode else 'none' end,
-    -- Always cleared here — this is the plain-text-save path (CSS-styled graffiti). A previously
-    -- AI-generated image only survives when set via admin_set_graffiti_image below, and only until
-    -- the admin saves through this form again.
-    graffiti_image_data = null,
-    updated_at = now()
-  where id = 1;
-  return query select * from site_notice where id = 1;
-end;
-$$;
-
--- The AI-graffiti save path: called after the client successfully generates an image via Gemini
--- (src/game/GraffitiImage.ts), storing both the source text (so it re-populates the admin input on
--- next panel open) and the generated artwork, and switching display_mode to 'graffiti' the same way
--- admin_add_banner_images auto-switches to 'images'.
-create or replace function admin_set_graffiti_image(p_graffiti_text text, p_image_data text, p_admin_password text)
-returns setof site_notice
-language plpgsql security definer set search_path = public, extensions as $$
-begin
-  if not admin_login(p_admin_password) then
-    raise exception 'wrong_password';
-  end if;
-  update site_notice set
-    graffiti_text = nullif(trim(left(coalesce(p_graffiti_text, ''), 60)), ''),
-    graffiti_image_data = p_image_data,
-    display_mode = 'graffiti',
     updated_at = now()
   where id = 1;
   return query select * from site_notice where id = 1;
@@ -1173,7 +1142,6 @@ grant execute on function admin_add_social_link(text, text, text, text) to anon,
 grant execute on function admin_update_social_link(bigint, text, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_social_link(bigint, text) to anon, authenticated;
 grant execute on function admin_set_banner(text, text, text, text) to anon, authenticated;
-grant execute on function admin_set_graffiti_image(text, text, text) to anon, authenticated;
 grant execute on function admin_set_chatbot_mode(text, text) to anon, authenticated;
 grant execute on function admin_set_skin_design(text, text) to anon, authenticated;
 grant execute on function admin_add_banner_images(text[], text) to anon, authenticated;

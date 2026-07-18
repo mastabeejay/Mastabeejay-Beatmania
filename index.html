@@ -224,36 +224,55 @@
           <div id="notice-board-label" data-i18n="noticeLabel">📢 NOTICE</div>
           <div id="notice-board-text"></div>
           <div id="notice-board-graffiti"></div>
-          <img id="notice-board-graffiti-image" alt="그래피티 이미지" hidden />
           <div id="notice-board-images"></div>
         </div>
-        <div id="install-guide-section">
-          <div id="install-guide-label" class="text-metallic-gold" data-i18n="installSectionLabel">설치방법</div>
-          <div id="install-guide-cards">
-            <button type="button" class="install-guide-card" data-platform="windows">
-              <span class="install-guide-card-icon">🖥️</span>
-              <span class="install-guide-card-label">Windows</span>
-            </button>
-            <button type="button" class="install-guide-card" data-platform="macos">
-              <span class="install-guide-card-icon">💻</span>
-              <span class="install-guide-card-label">macOS</span>
-            </button>
-            <button type="button" class="install-guide-card" data-platform="linux">
-              <span class="install-guide-card-icon">🐧</span>
-              <span class="install-guide-card-label">Linux</span>
-            </button>
-            <button type="button" class="install-guide-card" data-platform="android">
-              <span class="install-guide-card-icon">🤖</span>
-              <span class="install-guide-card-label">Android</span>
-            </button>
-            <button type="button" class="install-guide-card" data-platform="ios">
-              <span class="install-guide-card-icon">📱</span>
-              <span class="install-guide-card-label">iOS</span>
-            </button>
-            <button type="button" class="install-guide-card" data-platform="chromeos">
-              <span class="install-guide-card-icon">🌐</span>
-              <span class="install-guide-card-label">ChromeOS</span>
-            </button>
+        <!-- position:fixed lives on this wrapper (not on #install-guide-section any more) so the
+             BGM player and the install-guide dock stack as one column pinned to the same
+             bottom-right corner. On the mobile breakpoint this collapses to display:contents,
+             handing each child back to #start-overlay's normal scroll flow — see that rule. -->
+        <div id="main-screen-bottom-dock">
+          <div id="main-bgm-player">
+            <audio id="main-bgm-audio" preload="auto"></audio>
+            <button id="main-bgm-prev-button" type="button" aria-label="이전 곡" title="이전 곡">⏮</button>
+            <button id="main-bgm-play-pause-button" type="button" aria-label="재생/일시정지" title="재생/일시정지">▶</button>
+            <button id="main-bgm-next-button" type="button" aria-label="다음 곡" title="다음 곡">⏭</button>
+            <div id="main-bgm-marquee">
+              <div id="main-bgm-marquee-track">
+                <span class="main-bgm-marquee-copy"></span>
+                <span class="main-bgm-marquee-copy" aria-hidden="true"></span>
+              </div>
+            </div>
+            <button id="main-bgm-mute-button" type="button" aria-label="음소거" title="음소거">🔊</button>
+            <input type="range" id="main-bgm-volume" min="0" max="1" step="0.01" value="0.5" aria-label="음량 조절" />
+          </div>
+          <div id="install-guide-section">
+            <div id="install-guide-label" class="text-metallic-gold" data-i18n="installSectionLabel">설치방법</div>
+            <div id="install-guide-cards">
+              <button type="button" class="install-guide-card" data-platform="windows">
+                <span class="install-guide-card-icon">🖥️</span>
+                <span class="install-guide-card-label">Windows</span>
+              </button>
+              <button type="button" class="install-guide-card" data-platform="macos">
+                <span class="install-guide-card-icon">💻</span>
+                <span class="install-guide-card-label">macOS</span>
+              </button>
+              <button type="button" class="install-guide-card" data-platform="linux">
+                <span class="install-guide-card-icon">🐧</span>
+                <span class="install-guide-card-label">Linux</span>
+              </button>
+              <button type="button" class="install-guide-card" data-platform="android">
+                <span class="install-guide-card-icon">🤖</span>
+                <span class="install-guide-card-label">Android</span>
+              </button>
+              <button type="button" class="install-guide-card" data-platform="ios">
+                <span class="install-guide-card-icon">📱</span>
+                <span class="install-guide-card-label">iOS</span>
+              </button>
+              <button type="button" class="install-guide-card" data-platform="chromeos">
+                <span class="install-guide-card-icon">🌐</span>
+                <span class="install-guide-card-label">ChromeOS</span>
+              </button>
+            </div>
           </div>
         </div>
         <div id="chatbot-panel">
@@ -310,15 +329,6 @@
               그래피티 문구 (짧게 — 예: MBBM 2026)
               <input type="text" id="admin-graffiti-input" maxlength="60" placeholder="그래피티로 표시할 글자/숫자" />
             </label>
-            <div id="admin-graffiti-ai-row">
-              <button id="admin-graffiti-ai-generate-button" type="button">✨ AI 그래피티 생성</button>
-              <span id="admin-graffiti-ai-error" class="admin-panel-inline-error" hidden></span>
-              <span id="admin-graffiti-ai-success" class="admin-panel-inline-success" hidden>AI 그래피티 이미지가 생성되어 저장되었습니다 (그래피티 표시 모드로 전환됨).</span>
-            </div>
-            <img id="admin-graffiti-ai-preview" alt="생성된 그래피티 미리보기" hidden />
-            <div class="admin-banner-field-label">
-              위 문구를 AI(Gemini)로 그래피티 이미지로 변환합니다. 문구를 입력한 뒤 눌러주세요 — 생성과 동시에 저장되고 그래피티 표시 모드로 전환됩니다. AI 이미지 생성은 문구 텍스트 정확도가 완벽하지 않을 수 있습니다 (특히 한글).
-            </div>
 
             <div class="admin-banner-field-label" style="margin-top: 14px">이미지 파일 (최대 4개, JPG/JPEG/BMP/PNG/GIF, 개당 최대 3MB)</div>
             <div id="admin-banner-images-list"></div>

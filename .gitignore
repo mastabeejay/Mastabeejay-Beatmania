@@ -28,6 +28,10 @@ server/data
 # public/audio/ybj/ (renamed to safe ASCII slugs to avoid URL-encoding issues).
 /YBJ_music
 
+# Raw source folder for the main-screen BGM playlist — the files actually served are the copies
+# under public/audio/mainbgm/ (renamed to safe ASCII slugs), see src/game/MainBgm.ts.
+/MAIN_BGM
+
 # Source app-icon artwork — the files actually served are the resized copies under public/icons/.
 /MBBMicon.png
 

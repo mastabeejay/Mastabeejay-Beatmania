@@ -219,9 +219,11 @@ html.theme-agentic {
   --rgb-panel: 250, 250, 250;
   --radius-pill: 14px;
   /* Read by the shared panel-card rule below (with UXBooster) so both light skins' near-identical
-     "flat off-white card" treatment lives in one selector list instead of two. */
+     "flat off-white card" treatment lives in one selector list instead of two. Border darkened to
+     a clearly-visible charcoal hairline (not the original template's near-invisible 10% tint) per
+     owner feedback that the panels read as borderless on a plain white canvas. */
   --panel-bg: #fafafa;
-  --panel-border: rgba(17, 17, 17, 0.1);
+  --panel-border: rgba(17, 17, 17, 0.4);
   --panel-shadow: 0 1px 3px rgba(17, 17, 17, 0.06);
   --panel-hover-shadow: 0 6px 16px rgba(17, 17, 17, 0.1);
 }
@@ -234,16 +236,18 @@ html.theme-agentic body::before {
   background-image: none;
 }
 
-/* The template's headline treatment: thin weight, tight negative tracking, solid ink color —
-   replaces the chrome/gold gradient-fill + neon glow both other skins keep. */
+/* The template's headline treatment: tight negative tracking, solid ink color — replaces the
+   chrome/gold gradient-fill + neon glow both other skins keep. Bold weight and pure-black color
+   (rather than the template's original thin/#111111 look) per owner feedback that titles like
+   "Masta Beejay Beat Breaker" read as too faint on the white canvas. */
 html.theme-agentic .text-metallic,
 html.theme-agentic .text-metallic-gold {
   background: none;
   -webkit-background-clip: unset;
   background-clip: unset;
   -webkit-text-fill-color: currentColor;
-  color: #111111;
-  font-weight: 300;
+  color: #000000;
+  font-weight: 700;
   letter-spacing: -0.03em;
   filter: none;
 }
@@ -256,15 +260,15 @@ html.theme-agentic .control-group-title {
 /* The template's own CTA: a bordered ghost pill, not a filled one. */
 html.theme-agentic #start-button {
   background: transparent;
-  border: 1px solid rgba(17, 17, 17, 0.15);
-  color: #111111;
+  border: 1px solid rgba(17, 17, 17, 0.45);
+  color: #000000;
   text-shadow: none;
   box-shadow: none;
 }
 
 html.theme-agentic #start-button:hover {
-  background: rgba(17, 17, 17, 0.04);
-  border-color: rgba(17, 17, 17, 0.3);
+  background: rgba(17, 17, 17, 0.06);
+  border-color: rgba(17, 17, 17, 0.65);
 }
 
 /* The "UXBooster" skin — modeled on the v0 "UXBooster" analytics-dashboard template: a soft
@@ -295,9 +299,10 @@ html.theme-uxbooster {
   --rgb-deep: 197, 195, 209;
   --rgb-panel: 245, 244, 240;
   --radius-pill: 999px;
-  /* Same shared panel-card rule as Agentic — see that block's comment. */
+  /* Same shared panel-card rule as Agentic — see that block's comment, including the darkened
+     border. */
   --panel-bg: #f5f4f0;
-  --panel-border: rgba(26, 26, 26, 0.08);
+  --panel-border: rgba(26, 26, 26, 0.38);
   --panel-shadow: 0 2px 8px rgba(26, 26, 26, 0.08);
   --panel-hover-shadow: 0 8px 20px rgba(26, 26, 26, 0.12);
 }
@@ -310,14 +315,16 @@ html.theme-uxbooster body::before {
   background-image: none;
 }
 
+/* Bold weight and pure-black color (rather than the dashboard template's semibold/#1a1a1a) per
+   owner feedback that titles like "Masta Beejay Beat Breaker" read as too faint. */
 html.theme-uxbooster .text-metallic,
 html.theme-uxbooster .text-metallic-gold {
   background: none;
   -webkit-background-clip: unset;
   background-clip: unset;
   -webkit-text-fill-color: currentColor;
-  color: #1a1a1a;
-  font-weight: 600;
+  color: #000000;
+  font-weight: 700;
   filter: none;
 }
 
@@ -768,12 +775,14 @@ body::before {
   visibility: hidden;
 }
 
-/* --- Install-as-app guide ------------------------------------------------------------------- */
+/* --- Main-screen BGM player + install-as-app guide dock ------------------------------------- */
 
 /* Fixed to the bottom-right corner rather than sitting inline in the start-screen flow — still a
    child of #start-overlay though, so it hides automatically during gameplay along with everything
-   else in that flow (display:none on the parent hides fixed-position descendants too). */
-#install-guide-section {
+   else in that flow (display:none on the parent hides fixed-position descendants too). Houses the
+   BGM player above the install-guide dock so both share one fixed anchor instead of each guessing
+   the other's rendered height. */
+#main-screen-bottom-dock {
   position: fixed;
   bottom: 12px;
   right: 12px;
@@ -782,6 +791,88 @@ body::before {
   align-items: flex-end;
   gap: 6px;
   z-index: 11;
+}
+
+#install-guide-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* Same boxed-panel look as the install-guide cards below it, just a horizontal control row instead
+   of a card grid. Fixed width keeps the marquee's scroll distance (and therefore its reading
+   speed) consistent regardless of track-title length. */
+#main-bgm-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 260px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--rgb-accent), 0.3);
+  background: rgba(var(--rgb-panel), 0.7);
+}
+
+#main-bgm-prev-button,
+#main-bgm-play-pause-button,
+#main-bgm-next-button,
+#main-bgm-mute-button {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-cyber-cyan);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+#main-bgm-prev-button:hover,
+#main-bgm-play-pause-button:hover,
+#main-bgm-next-button:hover,
+#main-bgm-mute-button:hover {
+  background: rgba(var(--rgb-accent), 0.14);
+}
+
+/* The scrolling title — overflow:hidden on the outer wrapper is the mask, the inner track holds
+   two back-to-back copies of the same text and animates from translateX(0) to -50% (exactly one
+   copy's width), which loops seamlessly with no jump regardless of how long the title is. Duration
+   is set per-track from JS (main.ts) so a longer title doesn't fly by faster than a short one. */
+#main-bgm-marquee {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#main-bgm-marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: main-bgm-marquee-scroll 12s linear infinite;
+}
+
+.main-bgm-marquee-copy {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--color-cyber-silver);
+  padding-right: 32px;
+}
+
+@keyframes main-bgm-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+#main-bgm-volume {
+  flex-shrink: 0;
+  width: 56px;
+  accent-color: var(--color-cyber-cyan);
 }
 
 /* 3 cards across x 2 rows (Windows/macOS/Linux over Android/iOS/ChromeOS) — a 6-card vertical
@@ -2909,38 +3000,6 @@ body::before {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-/* AI-generated graffiti artwork — same "capped height, natural width, contain" sizing as the
-   image-upload banner mode above, since it fills the identical notice-board slot. */
-#notice-board-graffiti-image {
-  display: block;
-  height: min(32vh, 400px);
-  width: auto;
-  max-width: 100%;
-  object-fit: contain;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  margin: 0 auto;
-  position: relative;
-  z-index: 1;
-}
-
-#admin-graffiti-ai-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 6px 0;
-}
-
-#admin-graffiti-ai-preview {
-  display: block;
-  max-width: 220px;
-  max-height: 140px;
-  object-fit: contain;
-  border-radius: 8px;
-  border: 1px solid rgba(var(--rgb-accent), 0.2);
-  margin-bottom: 6px;
-}
-
 #guestbook-overlay,
 #members-directory-overlay {
   display: none;
@@ -4511,6 +4570,13 @@ select option:disabled {
     flex-wrap: nowrap;
   }
 
+  /* Un-wraps the fixed dock — the BGM player and install-guide section rejoin #start-overlay's
+     normal scroll flow directly as siblings, each still governed by its own rules below (this
+     element generates no box of its own, so it doesn't need its own position/layout rule here). */
+  #main-screen-bottom-dock {
+    display: contents;
+  }
+
   /* Same story as the Jaybot launcher: the fixed bottom-right install-guide stack was covering
      the guestbook/notice/footer area. It becomes the column's last row, cards side by side — and
      the section itself switches to a row too, so the "설치방법" label sits immediately left of the
@@ -4520,6 +4586,13 @@ select option:disabled {
     position: static;
     flex-direction: row;
     align-items: center;
+  }
+
+  /* Full-width row in the scrolling column instead of the desktop's narrow right-aligned bar —
+     matches how #install-guide-section itself reflows at this breakpoint. */
+  #main-bgm-player {
+    width: 100%;
+    justify-content: center;
   }
 
   /* Desktop's stretch (for centering over the 3x2 grid) would stretch the label vertically here,

@@ -56,8 +56,8 @@ import {
 } from "./game/BeejayBrosLinks";
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
 import { adminAddBannerImages, adminDeleteBannerImage, loadBannerImages, type BannerImage } from "./game/BannerImages";
-import { adminSetBanner, adminSetGraffitiImage, loadBanner, type BannerMode } from "./game/Notice";
-import { generateGraffitiImage, GraffitiGenerationExhaustedError } from "./game/GraffitiImage";
+import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
+import { MAIN_BGM_TRACKS } from "./game/MainBgm";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
 import { getOnlineMemberIds, trackMemberOnline, untrackMemberOnline } from "./game/Presence";
@@ -304,10 +304,6 @@ const adminPanelOverlay = document.querySelector<HTMLDivElement>("#admin-panel-o
 const adminPanelCloseButton = document.querySelector<HTMLButtonElement>("#admin-panel-close-button")!;
 const adminNoticeInput = document.querySelector<HTMLTextAreaElement>("#admin-notice-input")!;
 const adminGraffitiInput = document.querySelector<HTMLInputElement>("#admin-graffiti-input")!;
-const adminGraffitiAiGenerateButton = document.querySelector<HTMLButtonElement>("#admin-graffiti-ai-generate-button")!;
-const adminGraffitiAiError = document.querySelector<HTMLSpanElement>("#admin-graffiti-ai-error")!;
-const adminGraffitiAiSuccess = document.querySelector<HTMLSpanElement>("#admin-graffiti-ai-success")!;
-const adminGraffitiAiPreview = document.querySelector<HTMLImageElement>("#admin-graffiti-ai-preview")!;
 const adminBannerModeRadios = document.querySelectorAll<HTMLInputElement>('input[name="admin-banner-mode"]');
 const adminBannerSaveButton = document.querySelector<HTMLButtonElement>("#admin-banner-save-button")!;
 const adminBannerSaveError = document.querySelector<HTMLSpanElement>("#admin-banner-save-error")!;
@@ -353,7 +349,6 @@ const noticeBoard = document.querySelector<HTMLDivElement>("#notice-board")!;
 const noticeBoardLabel = document.querySelector<HTMLDivElement>("#notice-board-label")!;
 const noticeBoardText = document.querySelector<HTMLDivElement>("#notice-board-text")!;
 const noticeBoardGraffiti = document.querySelector<HTMLDivElement>("#notice-board-graffiti")!;
-const noticeBoardGraffitiImage = document.querySelector<HTMLImageElement>("#notice-board-graffiti-image")!;
 const noticeBoardImages = document.querySelector<HTMLDivElement>("#notice-board-images")!;
 const footerRow = document.querySelector<HTMLDivElement>("#footer-row")!;
 const adminBannerImagesList = document.querySelector<HTMLDivElement>("#admin-banner-images-list")!;
@@ -1606,10 +1601,6 @@ async function renderBanner(): Promise<void> {
   const banner = await loadBanner();
   const showNotice = banner.displayMode === "notice" && !!banner.message;
   const showGraffiti = banner.displayMode === "graffiti" && !!banner.graffitiText;
-  // An AI-generated image (see GraffitiImage.ts) replaces the CSS-styled text rendering when one's
-  // been saved for the current graffiti text; the two are mutually exclusive, never both shown.
-  const showGraffitiImage = showGraffiti && !!banner.graffitiImageData;
-  const showGraffitiText = showGraffiti && !showGraffitiImage;
 
   let images: BannerImage[] = [];
   if (banner.displayMode === "images") images = await loadBannerImages();
@@ -1618,9 +1609,7 @@ async function renderBanner(): Promise<void> {
   noticeBoardText.textContent = banner.message ?? "";
   noticeBoardText.hidden = !showNotice;
   noticeBoardGraffiti.textContent = banner.graffitiText ?? "";
-  noticeBoardGraffiti.hidden = !showGraffitiText;
-  noticeBoardGraffitiImage.src = banner.graffitiImageData ?? "";
-  noticeBoardGraffitiImage.hidden = !showGraffitiImage;
+  noticeBoardGraffiti.hidden = !showGraffiti;
   noticeBoardLabel.hidden = !showNotice;
 
   if (showImages) {
@@ -1642,9 +1631,9 @@ async function renderBanner(): Promise<void> {
   // would measure the board's height using whatever *already-shrunk* font size a previous
   // fitGraffitiFontSize() pass left in place, computing a too-small cap that then forces the next
   // shrink pass to shrink even further — a ratchet that only ever gets tighter, never recovers.
-  if (showGraffitiText) noticeBoardGraffiti.style.fontSize = "";
+  if (showGraffiti) noticeBoardGraffiti.style.fontSize = "";
   if (!noticeBoard.hidden) fitNoticeBoardHeight(showImages);
-  if (showGraffitiText) fitGraffitiFontSize();
+  if (showGraffiti) fitGraffitiFontSize();
 }
 
 onWindowResizeRefit(() => {
@@ -2226,8 +2215,6 @@ adminPanelOpenButton.addEventListener("click", () => {
     adminBannerModeRadios.forEach((radio) => {
       radio.checked = radio.value === banner.displayMode;
     });
-    adminGraffitiAiPreview.src = banner.graffitiImageData ?? "";
-    adminGraffitiAiPreview.hidden = !banner.graffitiImageData;
   });
   void loadChatbotMode().then((mode) => {
     chatbotAdminMode = mode;
@@ -2262,8 +2249,6 @@ adminPanelCloseButton.addEventListener("click", () => {
   adminChatbotModeSuccess.hidden = true;
   adminSkinDesignError.hidden = true;
   adminSkinDesignSuccess.hidden = true;
-  adminGraffitiAiError.hidden = true;
-  adminGraffitiAiSuccess.hidden = true;
 });
 
 adminChatbotModeSaveButton.addEventListener("click", () => {
@@ -2304,38 +2289,6 @@ adminBannerSaveButton.addEventListener("click", () => {
       return renderBanner();
     })
     .catch((err) => handleAdminPanelError(err, "배너 저장에 실패했습니다:", adminBannerSaveError));
-});
-
-adminGraffitiAiGenerateButton.addEventListener("click", () => {
-  if (!adminPassword) return;
-  const text = adminGraffitiInput.value.trim();
-  adminGraffitiAiError.hidden = true;
-  adminGraffitiAiSuccess.hidden = true;
-  if (!text) {
-    adminGraffitiAiError.textContent = "그래피티로 표시할 문구를 먼저 입력해주세요.";
-    adminGraffitiAiError.hidden = false;
-    return;
-  }
-  void withButtonLoading(adminGraffitiAiGenerateButton, "생성 중...", () =>
-    generateGraffitiImage(text).then((imageDataUrl) => adminSetGraffitiImage(text, imageDataUrl, adminPassword!)),
-  )
-    .then((banner) => {
-      adminGraffitiAiPreview.src = banner.graffitiImageData ?? "";
-      adminGraffitiAiPreview.hidden = !banner.graffitiImageData;
-      adminBannerModeRadios.forEach((radio) => {
-        radio.checked = radio.value === banner.displayMode;
-      });
-      adminGraffitiAiSuccess.hidden = false;
-      return renderBanner();
-    })
-    .catch((err) => {
-      if (err instanceof GraffitiGenerationExhaustedError) {
-        adminGraffitiAiError.textContent = "AI 그래피티 생성 실패: Gemini 무료 사용량을 모두 소진했고, 무료 대체 서비스도 실패했습니다. 잠시 후 다시 시도해주세요.";
-        adminGraffitiAiError.hidden = false;
-        return;
-      }
-      handleAdminPanelError(err, "AI 그래피티 생성에 실패했습니다:", adminGraffitiAiError);
-    });
 });
 
 const BANNER_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/bmp"];
@@ -2922,6 +2875,11 @@ pwaRefreshButton.addEventListener("click", () => {
 const exitFallbackOverlay = document.querySelector<HTMLDivElement>("#exit-fallback-overlay")!;
 exitSiteButton.addEventListener("click", () => {
   if (!window.confirm(t("exitConfirmMsg"))) return;
+  // Self-review catch: window.close() below silently no-ops on some platforms (iOS standalone in
+  // particular — see the fallback overlay further down), leaving the page open with BGM still
+  // audibly playing behind a screen that's asking the visitor to leave. pauseMainBgm is declared
+  // later in this file as a hoisted function declaration, so calling it here is safe.
+  pauseMainBgm();
   // `open("", "_self")` re-targets this window as "opened by script" first — several Android
   // WebView/Chrome builds only allow a page to window.close() itself when that's true, and
   // otherwise silently no-op it (this is why it worked on PC — a desktop PWA's window already
@@ -3754,3 +3712,211 @@ startButton.addEventListener("click", () => {
     gameTitleEl.style.visibility = "hidden";
     });
 });
+
+// --- Main-screen BGM player ------------------------------------------------------------------
+// Ambient playlist that plays only while the start screen is visible (see MAIN_BGM_TRACKS) — paused
+// for the duration of an actual game session and resumed on return, and cut off by an external-link
+// click since the visitor's attention has moved elsewhere even though the tab itself hasn't
+// navigated. Autoplay-with-sound is blocked by the browser until a real gesture occurs, and iOS
+// Safari silently ignores HTMLMediaElement.volume — both handled the same way as the
+// single-page-promo-engineering skill's battle-tested background-audio-player reference (GainNode
+// volume + a self-removing "unlock" listener), adapted here to this app's overlay-visibility-driven
+// play/pause instead of a dedicated Stop button.
+const mainBgmAudio = document.querySelector<HTMLAudioElement>("#main-bgm-audio")!;
+const mainBgmPrevButton = document.querySelector<HTMLButtonElement>("#main-bgm-prev-button")!;
+const mainBgmPlayPauseButton = document.querySelector<HTMLButtonElement>("#main-bgm-play-pause-button")!;
+const mainBgmNextButton = document.querySelector<HTMLButtonElement>("#main-bgm-next-button")!;
+const mainBgmMuteButton = document.querySelector<HTMLButtonElement>("#main-bgm-mute-button")!;
+const mainBgmVolumeSlider = document.querySelector<HTMLInputElement>("#main-bgm-volume")!;
+const mainBgmMarqueeTrack = document.querySelector<HTMLDivElement>("#main-bgm-marquee-track")!;
+const mainBgmMarqueeCopies = document.querySelectorAll<HTMLSpanElement>(".main-bgm-marquee-copy");
+
+const MAIN_BGM_VOLUME_STORAGE_KEY = "bdj-mainbgm-volume";
+
+let mainBgmTrackIndex = 0;
+let mainBgmWasPlayingBeforeLeaving = false;
+let mainBgmPreMuteVolume = 0.5;
+
+// iOS Safari silently ignores HTMLMediaElement.volume (the value reads back fine, nothing audible
+// changes) — routing gain through a Web Audio GainNode sidesteps this, since iOS doesn't lock that
+// down. audio.volume is still set too, since it works natively on desktop/Android; whichever
+// mechanism actually applies on a given platform ends up correct.
+let mainBgmAudioCtx: AudioContext | null = null;
+let mainBgmGainNode: GainNode | null = null;
+function setupMainBgmAudioGraph(): void {
+  if (mainBgmGainNode) return;
+  try {
+    mainBgmAudioCtx = new AudioContext();
+    const source = mainBgmAudioCtx.createMediaElementSource(mainBgmAudio);
+    mainBgmGainNode = mainBgmAudioCtx.createGain();
+    mainBgmGainNode.gain.value = Number(mainBgmVolumeSlider.value);
+    source.connect(mainBgmGainNode).connect(mainBgmAudioCtx.destination);
+  } catch {
+    // Very old browsers without Web Audio support: falls back to audio.volume alone.
+  }
+}
+
+function applyMainBgmVolume(volume: number): void {
+  mainBgmAudio.volume = volume;
+  if (mainBgmGainNode) mainBgmGainNode.gain.value = volume;
+  mainBgmMuteButton.textContent = volume === 0 ? "🔇" : "🔊";
+}
+
+function loadMainBgmTrack(index: number): void {
+  mainBgmTrackIndex = ((index % MAIN_BGM_TRACKS.length) + MAIN_BGM_TRACKS.length) % MAIN_BGM_TRACKS.length;
+  const track = MAIN_BGM_TRACKS[mainBgmTrackIndex];
+  mainBgmAudio.src = track.fileUrl;
+  const marqueeText = `${track.title} — Produced by Yim Bongjin      `;
+  mainBgmMarqueeCopies.forEach((el) => {
+    el.textContent = marqueeText;
+  });
+  // Longer titles get a longer scroll duration so the reading speed stays roughly constant instead
+  // of a long title whipping past in the same fixed time a short one takes.
+  mainBgmMarqueeTrack.style.animationDuration = `${Math.max(8, marqueeText.length * 0.3)}s`;
+}
+
+function setMainBgmPlayIcon(isPlaying: boolean): void {
+  mainBgmPlayPauseButton.textContent = isPlaying ? "⏸" : "▶";
+}
+
+function playMainBgm(): void {
+  setupMainBgmAudioGraph();
+  if (mainBgmAudioCtx?.state === "suspended") void mainBgmAudioCtx.resume();
+  void mainBgmAudio
+    .play()
+    .then(() => setMainBgmPlayIcon(true))
+    .catch(() => setMainBgmPlayIcon(false));
+}
+
+function pauseMainBgm(): void {
+  mainBgmAudio.pause();
+  setMainBgmPlayIcon(false);
+}
+
+mainBgmAudio.addEventListener("ended", () => {
+  loadMainBgmTrack(mainBgmTrackIndex + 1);
+  playMainBgm();
+});
+
+// Self-review catch: a 404/decode failure on one track (e.g. a bad deploy) fires 'error', never
+// 'ended' — without this, the playlist would just silently hang on that one track forever instead
+// of skipping past it. mainBgmConsecutiveErrors caps the auto-skip at one full lap of the playlist
+// so a deploy where every track is broken fails loud (via console.error below) instead of hammering
+// play()/error in an infinite loop.
+let mainBgmConsecutiveErrors = 0;
+mainBgmAudio.addEventListener("playing", () => {
+  mainBgmConsecutiveErrors = 0;
+});
+mainBgmAudio.addEventListener("error", () => {
+  console.error("메인 BGM 트랙 로드 실패:", MAIN_BGM_TRACKS[mainBgmTrackIndex]?.fileUrl, mainBgmAudio.error);
+  mainBgmConsecutiveErrors += 1;
+  if (mainBgmConsecutiveErrors >= MAIN_BGM_TRACKS.length) return;
+  loadMainBgmTrack(mainBgmTrackIndex + 1);
+  playMainBgm();
+});
+
+mainBgmPlayPauseButton.addEventListener("click", () => {
+  if (mainBgmAudio.paused) {
+    playMainBgm();
+  } else {
+    pauseMainBgm();
+    // A manual pause is a deliberate choice — without this, the autoplay-unlock listener below
+    // (still attached if the very first gesture on the page was this exact click) would see the
+    // next click anywhere and immediately resume playback, fighting the visitor's own Pause.
+    stopTryingToUnlockMainBgm();
+  }
+});
+mainBgmNextButton.addEventListener("click", () => {
+  loadMainBgmTrack(mainBgmTrackIndex + 1);
+  playMainBgm();
+});
+mainBgmPrevButton.addEventListener("click", () => {
+  loadMainBgmTrack(mainBgmTrackIndex - 1);
+  playMainBgm();
+});
+mainBgmMuteButton.addEventListener("click", () => {
+  const currentVolume = Number(mainBgmVolumeSlider.value);
+  if (currentVolume > 0) {
+    mainBgmPreMuteVolume = currentVolume;
+    mainBgmVolumeSlider.value = "0";
+    applyMainBgmVolume(0);
+  } else {
+    mainBgmVolumeSlider.value = String(mainBgmPreMuteVolume);
+    applyMainBgmVolume(mainBgmPreMuteVolume);
+  }
+});
+mainBgmVolumeSlider.addEventListener("input", () => {
+  const volume = Number(mainBgmVolumeSlider.value);
+  applyMainBgmVolume(volume);
+  try {
+    localStorage.setItem(MAIN_BGM_VOLUME_STORAGE_KEY, String(volume));
+  } catch {
+    // Private mode etc.
+  }
+});
+
+/** True while the start screen is the visible scene — reads the exact same style.display the game
+ *  code already flips on #start-overlay (see startButton's click handler above and the various
+ *  return-to-start-screen call sites in runSession/finalizeSession), so this needs no changes to
+ *  that game-flow code to stay in sync. */
+function isMainScreenActive(): boolean {
+  return startOverlay.style.display !== "none";
+}
+
+// Autoplay-with-sound is blocked until a real user gesture. The fix is a document-level listener
+// that attempts playback on the next click/touch/key/scroll anywhere, removing itself the moment a
+// native 'play' event actually fires so it can never fight a later manual pause. Gated on
+// isMainScreenActive() (not just "is it paused") so a gesture that itself just left the main screen
+// (e.g. clicking "Let's Start BDJ" as literally the page's first-ever interaction) can't re-trigger
+// playback after that same click already hid the start screen synchronously moments earlier.
+const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchstart", "keydown", "scroll"] as const;
+function tryUnlockMainBgm(): void {
+  if (!isMainScreenActive() || !mainBgmAudio.paused) return;
+  playMainBgm();
+}
+function stopTryingToUnlockMainBgm(): void {
+  MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.removeEventListener(evt, tryUnlockMainBgm));
+}
+mainBgmAudio.addEventListener("play", stopTryingToUnlockMainBgm, { once: true });
+MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.addEventListener(evt, tryUnlockMainBgm, { passive: true }));
+
+// Leaving the main screen (game start) pauses BGM; returning to it (game end/abort) resumes only if
+// it was actually playing beforehand. Driven by a MutationObserver on #start-overlay's own style
+// attribute rather than new hooks in the game code, since that already toggles display:none/'' at
+// every "session started"/"back to start screen" point in runSession/finalizeSession/abortWithMessage.
+const mainBgmOverlayObserver = new MutationObserver(() => {
+  if (isMainScreenActive()) {
+    if (mainBgmWasPlayingBeforeLeaving) playMainBgm();
+  } else {
+    mainBgmWasPlayingBeforeLeaving = !mainBgmAudio.paused;
+    pauseMainBgm();
+  }
+});
+mainBgmOverlayObserver.observe(startOverlay, { attributes: true, attributeFilter: ["style"] });
+
+// Every external social/website/Beejay-Bros link banner opens target="_blank" — the visitor's
+// attention has left the main screen even though the tab itself hasn't navigated anywhere, so BGM
+// stops the same way it would if they'd started the game. One delegated listener covers all of them
+// (present and future) instead of wiring each container separately.
+startOverlay.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).closest('a[target="_blank"]')) {
+    pauseMainBgm();
+    stopTryingToUnlockMainBgm();
+  }
+});
+
+{
+  let initialVolume = 0.5;
+  try {
+    const stored = localStorage.getItem(MAIN_BGM_VOLUME_STORAGE_KEY);
+    if (stored !== null && Number.isFinite(Number(stored))) initialVolume = Number(stored);
+  } catch {
+    // Private mode etc.
+  }
+  mainBgmVolumeSlider.value = String(initialVolume);
+  applyMainBgmVolume(initialVolume);
+  loadMainBgmTrack(0);
+  // Attempt autoplay on load — succeeds on desktop browsers with a permissive autoplay policy, and
+  // falls back to the gesture-unlock path above everywhere else.
+  playMainBgm();
+}
