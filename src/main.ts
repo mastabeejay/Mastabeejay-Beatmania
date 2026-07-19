@@ -374,6 +374,403 @@ const chatbotCloseButton = document.querySelector<HTMLButtonElement>("#chatbot-c
 const chatbotToggleButton = document.querySelector<HTMLButtonElement>("#chatbot-toggle-button")!;
 const ctx = canvas.getContext("2d")!;
 
+// --- Main-screen BGM player ------------------------------------------------------------------
+// Perf fix: this whole section used to sit at the very bottom of the file — functionally fine, but
+// it meant playMainBgmNative()'s bare audio.play() call (and the mainBgmAudio.src assignment inside
+// loadMainBgmTrack(), which is what lets the browser actually start fetching the audio bytes) didn't
+// run until the JS engine had first finished ~3300 lines of unrelated synchronous work: building the
+// language dropdown, i18n setup, and — the big one — kicking off the page's ~10 parallel Supabase
+// preload calls (leaderboard/guestbook/social-links/etc.). None of that is awaited before continuing,
+// so it was never a *blocking* delay in the async sense, but it's still real wall-clock time the
+// script has to execute through first, especially once you add slower parsing/execution on a mobile
+// CPU. Moving this block up here — right after the last of the #stage/canvas/chatbot DOM refs it
+// doesn't even depend on — means the very first thing the script does after grabbing its own
+// elements is attempt to start audio, well before any of that other work begins. Nothing below reads
+// from anything defined later in the file (this feature is self-contained), so this is a pure
+// reordering with no behavior change beyond "starts sooner."
+// Ambient playlist that plays only while the start screen is visible (see MAIN_BGM_TRACKS) — paused
+// for the duration of an actual game session and resumed on return, and cut off by an external-link
+// click since the visitor's attention has moved elsewhere even though the tab itself hasn't
+// navigated. Autoplay-with-sound is blocked by the browser until a real gesture occurs, and iOS
+// Safari silently ignores HTMLMediaElement.volume — both handled the same way as the
+// single-page-promo-engineering skill's battle-tested background-audio-player reference (GainNode
+// volume + a self-removing "unlock" listener), adapted here to this app's overlay-visibility-driven
+// play/pause instead of a dedicated Stop button.
+const mainBgmAudio = document.querySelector<HTMLAudioElement>("#main-bgm-audio")!;
+const mainBgmPrevButton = document.querySelector<HTMLButtonElement>("#main-bgm-prev-button")!;
+const mainBgmPlayPauseButton = document.querySelector<HTMLButtonElement>("#main-bgm-play-pause-button")!;
+const mainBgmStopButton = document.querySelector<HTMLButtonElement>("#main-bgm-stop-button")!;
+const mainBgmNextButton = document.querySelector<HTMLButtonElement>("#main-bgm-next-button")!;
+const mainBgmMuteButton = document.querySelector<HTMLButtonElement>("#main-bgm-mute-button")!;
+const mainBgmSeekSlider = document.querySelector<HTMLInputElement>("#main-bgm-seek")!;
+const mainBgmVolumeSlider = document.querySelector<HTMLInputElement>("#main-bgm-volume")!;
+const mainBgmMarqueeTrack = document.querySelector<HTMLDivElement>("#main-bgm-marquee-track")!;
+const mainBgmMarqueeCopies = document.querySelectorAll<HTMLSpanElement>(".main-bgm-marquee-copy");
+
+const MAIN_BGM_VOLUME_STORAGE_KEY = "bdj-mainbgm-volume";
+
+let mainBgmTrackIndex = 0;
+let mainBgmPreMuteVolume = 0.5;
+let mainBgmSeeking = false;
+let mainBgmErrorRetryTimer = 0;
+
+// iOS Safari silently ignores HTMLMediaElement.volume (the value reads back fine, nothing audible
+// changes) — routing gain through a Web Audio GainNode sidesteps this, since iOS doesn't lock that
+// down. audio.volume is still set too, since it works natively on desktop/Android; whichever
+// mechanism actually applies on a given platform ends up correct.
+//
+// Root-cause note (mobile fix): this graph must NOT be set up until the first real user gesture.
+// createMediaElementSource() permanently reroutes this <audio> element's output through the
+// AudioContext — from that point on, nothing is audible unless the context is 'running'. Doing
+// this eagerly at page load (before any gesture) created an AudioContext that mobile Safari/Chrome
+// would only partially/unreliably resume even from a later real gesture — matching exactly what
+// was reported: playback showing as started (paused=false) with total silence until the play/pause
+// button was toggled several times (each toggle was a fresh gesture attempt at resume(), and one
+// eventually happened to land). Deferring setup to the first gesture-driven call (see
+// playMainBgmNative below for the ambient, no-gesture page-load attempt) avoids that entirely — the
+// very first time this runs, it is guaranteed to be inside a trusted gesture.
+let mainBgmAudioCtx: AudioContext | null = null;
+let mainBgmGainNode: GainNode | null = null;
+function setupMainBgmAudioGraph(): void {
+  if (mainBgmGainNode) return;
+  try {
+    mainBgmAudioCtx = new AudioContext();
+    const source = mainBgmAudioCtx.createMediaElementSource(mainBgmAudio);
+    mainBgmGainNode = mainBgmAudioCtx.createGain();
+    mainBgmGainNode.gain.value = Number(mainBgmVolumeSlider.value);
+    source.connect(mainBgmGainNode).connect(mainBgmAudioCtx.destination);
+  } catch {
+    // Very old browsers without Web Audio support: falls back to audio.volume alone.
+  }
+}
+
+function applyMainBgmVolume(volume: number): void {
+  mainBgmAudio.volume = volume;
+  if (mainBgmGainNode) mainBgmGainNode.gain.value = volume;
+  mainBgmMuteButton.textContent = volume === 0 ? "🔇" : "🔊";
+}
+
+function loadMainBgmTrack(index: number): void {
+  // Self-review catch: without this, a manual Next/Prev click during the 700ms error-retry delay
+  // (see the 'error' listener below) left that stale timer armed — it read mainBgmTrackIndex fresh
+  // at fire time rather than the value from when it was scheduled, so it would silently overwrite
+  // whatever track the visitor had just manually picked with "the one after the track that failed
+  // earlier," a moment after they'd already moved on. Every track change (manual or automatic)
+  // funnels through this one function, so cancelling here covers every case with one line.
+  window.clearTimeout(mainBgmErrorRetryTimer);
+  mainBgmTrackIndex = ((index % MAIN_BGM_TRACKS.length) + MAIN_BGM_TRACKS.length) % MAIN_BGM_TRACKS.length;
+  const track = MAIN_BGM_TRACKS[mainBgmTrackIndex];
+  mainBgmAudio.src = track.fileUrl;
+  // Reset immediately rather than waiting for 'loadedmetadata' on the new track — otherwise the
+  // seek bar would briefly keep showing the previous track's stale position/length.
+  mainBgmSeekSlider.value = "0";
+  mainBgmSeekSlider.max = "0";
+  const marqueeText = `${track.title} — Produced by Yim Bongjin      `;
+  mainBgmMarqueeCopies.forEach((el) => {
+    el.textContent = marqueeText;
+  });
+  // Longer titles get a longer scroll duration so the reading speed stays roughly constant instead
+  // of a long title whipping past in the same fixed time a short one takes.
+  mainBgmMarqueeTrack.style.animationDuration = `${Math.max(8, marqueeText.length * 0.3)}s`;
+}
+
+function setMainBgmPlayIcon(isPlaying: boolean): void {
+  mainBgmPlayPauseButton.textContent = isPlaying ? "⏸" : "▶";
+}
+
+/** Bare HTMLMediaElement attempt with no Web Audio graph touched — used only for the ambient
+ *  autoplay try at page load, before any real gesture has happened. See setupMainBgmAudioGraph's
+ *  comment above for why the graph must not be created here. */
+function playMainBgmNative(): void {
+  void mainBgmAudio
+    .play()
+    .then(() => setMainBgmPlayIcon(true))
+    .catch(() => setMainBgmPlayIcon(false));
+}
+
+/** Root-cause fix (2nd round): resume() must be *awaited* before play() — calling it fire-and-
+ *  forget (the previous version of this function) meant audio.play() ran essentially in parallel
+ *  with the AudioContext still mid-resume, so the very first play attempt after any suspend (the
+ *  page's initial gesture-driven unlock, and every "return to the main screen and press play"
+ *  after a pause) raced ahead of the context actually becoming audible — producing exactly the
+ *  reported symptom: playback shows as started but is silent, and it takes a second press (by
+ *  which point the earlier resume() has quietly finished) to actually hear anything. */
+async function playMainBgm(): Promise<void> {
+  setupMainBgmAudioGraph();
+  if (mainBgmAudioCtx && mainBgmAudioCtx.state === "suspended") {
+    try {
+      await mainBgmAudioCtx.resume();
+    } catch {
+      // Falls through to the play() attempt below regardless — if resume() itself is rejected
+      // (e.g. called outside a context this specific browser accepts), that attempt's own
+      // success/failure is what actually determines the icon state, not this.
+    }
+  }
+  try {
+    await mainBgmAudio.play();
+    setMainBgmPlayIcon(true);
+  } catch {
+    setMainBgmPlayIcon(false);
+  }
+}
+
+/** Pauses playback AND suspends the AudioContext — root-cause fix for the "infinite stutter/
+ *  repeat" reported when starting a game session while BGM was playing: pausing the *element*
+ *  alone left this player's AudioContext sitting 'running' (open on the shared hardware audio
+ *  output) at the exact moment the game created its own separate AudioContext for sound effects,
+ *  and the two contended for the same mobile audio session. Suspending here releases it fully, and
+ *  is also the fix for "no residual noise / doesn't come back alive later" — nothing downstream of
+ *  this can produce sound until playMainBgm() explicitly resumes the context again.
+ *
+ *  Self-review catch (two gaps, same class of bug): first, this also cancels any pending
+ *  error-retry timer (see the 'error' listener below) — without it, a track failure right before
+ *  the visitor paused/stopped/left would still fire its 700ms-delayed retry afterward, since
+ *  loadMainBgmTrack() only clears that timer when a track actually changes, which none of
+ *  pause/stop/leaving-the-main-screen do. Second, this also permanently disables the
+ *  autoplay-unlock listener (stopTryingToUnlockMainBgm, defined further down as a hoisted function
+ *  declaration) — previously each individual call site (Pause button, Stop button, external-link
+ *  click, leaving the main screen) had to remember to call that separately, and the exit-site
+ *  button's own handler had quietly been missing it, leaving a real path where — if that exact
+ *  click happened to be the page's first-ever gesture — clicking Exit would immediately resume
+ *  audio moments after stopping it. Centralizing both here means every current AND future caller
+ *  gets a genuinely complete stop for free, instead of depending on each one remembering both
+ *  cleanup calls individually. */
+function pauseMainBgm(): void {
+  window.clearTimeout(mainBgmErrorRetryTimer);
+  mainBgmAudio.pause();
+  setMainBgmPlayIcon(false);
+  if (mainBgmAudioCtx && mainBgmAudioCtx.state === "running") {
+    void mainBgmAudioCtx.suspend();
+  }
+  stopTryingToUnlockMainBgm();
+}
+
+/** Full stop for the dedicated Stop button — same as pauseMainBgm plus rewinding to the start,
+ *  matching a conventional player's Stop (vs. Pause, which resumes where it left off). */
+function stopMainBgm(): void {
+  pauseMainBgm();
+  mainBgmAudio.currentTime = 0;
+  mainBgmSeekSlider.value = "0";
+}
+
+mainBgmAudio.addEventListener("ended", () => {
+  loadMainBgmTrack(mainBgmTrackIndex + 1);
+  void playMainBgm();
+});
+
+// Self-review catch: a 404/decode failure on one track (e.g. a bad deploy) fires 'error', never
+// 'ended' — without this, the playlist would just silently hang on that one track forever instead
+// of skipping past it. mainBgmConsecutiveErrors caps the auto-skip at one full lap of the playlist
+// so a deploy where every track is broken fails loud (via console.error below) instead of retrying
+// forever. The 700ms delay before each retry is itself a bug fix, found while verifying this: with
+// no delay, a transient network hiccup on one track fired 'error' -> retry -> 'error' again fast
+// enough to storm the connection with dozens of requests within milliseconds, which is what turned
+// a single flaky track into a cascade of failures across the whole playlist.
+const MAIN_BGM_ERROR_RETRY_DELAY_MS = 700;
+let mainBgmConsecutiveErrors = 0;
+mainBgmAudio.addEventListener("playing", () => {
+  mainBgmConsecutiveErrors = 0;
+});
+// Self-review catch (found live, verifying the fix above): preload="auto" on this element means
+// the browser can keep trying to buffer the currently-set src in the background even while
+// paused — so 'error' can fire at any time, including well after the visitor has already left the
+// main screen, not just from a foreground retry. Without the isMainScreenActive() checks below,
+// that background failure would arm (or fire, if already armed before leaving) a retry that calls
+// playMainBgm() regardless — reviving audio during an actual game session, which is exactly the
+// "must never come back alive on its own" guarantee this whole feature exists to uphold. Checked
+// both when the error fires AND again inside the delayed callback, since the visitor can also leave
+// during the 700ms gap between the two.
+mainBgmAudio.addEventListener("error", () => {
+  console.error("메인 BGM 트랙 로드 실패:", MAIN_BGM_TRACKS[mainBgmTrackIndex]?.fileUrl, mainBgmAudio.error);
+  mainBgmConsecutiveErrors += 1;
+  if (mainBgmConsecutiveErrors >= MAIN_BGM_TRACKS.length || !isMainScreenActive()) return;
+  mainBgmErrorRetryTimer = window.setTimeout(() => {
+    if (!isMainScreenActive()) return;
+    loadMainBgmTrack(mainBgmTrackIndex + 1);
+    void playMainBgm();
+  }, MAIN_BGM_ERROR_RETRY_DELAY_MS);
+});
+
+mainBgmAudio.addEventListener("loadedmetadata", () => {
+  mainBgmSeekSlider.max = String(mainBgmAudio.duration || 0);
+});
+mainBgmAudio.addEventListener("timeupdate", () => {
+  if (mainBgmSeeking) return;
+  mainBgmSeekSlider.value = String(mainBgmAudio.currentTime);
+});
+mainBgmSeekSlider.addEventListener("pointerdown", () => {
+  mainBgmSeeking = true;
+});
+mainBgmSeekSlider.addEventListener("input", () => {
+  mainBgmAudio.currentTime = Number(mainBgmSeekSlider.value);
+});
+// Self-review catch: 'change' alone left a way to get permanently stuck with mainBgmSeeking=true —
+// if the drag gets interrupted before a 'change' fires (the pointer gets captured by something else,
+// e.g. a phone call/notification on mobile, or the tab loses focus mid-drag), the seek bar would
+// freeze at wherever it was and silently stop tracking real playback forever (timeupdate's handler
+// above early-returns while this stays true). pointerup/pointercancel are a safety net that always
+// fires once the drag ends for any reason, not just a clean release.
+mainBgmSeekSlider.addEventListener("change", () => {
+  mainBgmSeeking = false;
+});
+mainBgmSeekSlider.addEventListener("pointerup", () => {
+  mainBgmSeeking = false;
+});
+mainBgmSeekSlider.addEventListener("pointercancel", () => {
+  mainBgmSeeking = false;
+});
+
+mainBgmPlayPauseButton.addEventListener("click", () => {
+  if (mainBgmAudio.paused) {
+    void playMainBgm();
+  } else {
+    pauseMainBgm();
+  }
+});
+mainBgmStopButton.addEventListener("click", () => {
+  stopMainBgm();
+});
+mainBgmNextButton.addEventListener("click", () => {
+  loadMainBgmTrack(mainBgmTrackIndex + 1);
+  void playMainBgm();
+});
+mainBgmPrevButton.addEventListener("click", () => {
+  loadMainBgmTrack(mainBgmTrackIndex - 1);
+  void playMainBgm();
+});
+mainBgmMuteButton.addEventListener("click", () => {
+  const currentVolume = Number(mainBgmVolumeSlider.value);
+  if (currentVolume > 0) {
+    mainBgmPreMuteVolume = currentVolume;
+    mainBgmVolumeSlider.value = "0";
+    applyMainBgmVolume(0);
+  } else {
+    mainBgmVolumeSlider.value = String(mainBgmPreMuteVolume);
+    applyMainBgmVolume(mainBgmPreMuteVolume);
+  }
+});
+mainBgmVolumeSlider.addEventListener("input", () => {
+  const volume = Number(mainBgmVolumeSlider.value);
+  applyMainBgmVolume(volume);
+  // Self-review catch: mainBgmPreMuteVolume was only ever updated from the Mute button's own click
+  // handler — dragging the slider straight down to 0 by hand (bypassing that button entirely) left
+  // it holding a stale value, so clicking Mute (now showing 🔇, since volume is genuinely 0)
+  // afterward to "unmute" would restore whatever old volume happened to be stored instead of
+  // anything the visitor actually set. Keeping this updated here for every non-zero value keeps the
+  // "restore to" target correct regardless of which control silenced it.
+  if (volume > 0) mainBgmPreMuteVolume = volume;
+  try {
+    localStorage.setItem(MAIN_BGM_VOLUME_STORAGE_KEY, String(volume));
+  } catch {
+    // Private mode etc.
+  }
+});
+
+/** True while the start screen is the visible scene — reads the exact same style.display the game
+ *  code already flips on #start-overlay (see startButton's click handler above and the various
+ *  return-to-start-screen call sites in runSession/finalizeSession), so this needs no changes to
+ *  that game-flow code to stay in sync. */
+function isMainScreenActive(): boolean {
+  return startOverlay.style.display !== "none";
+}
+
+// Autoplay-with-sound is blocked until a real user gesture. The fix is a document-level listener
+// that attempts playback on the next click/touch/key anywhere, removing itself the moment a native
+// 'play' event actually fires so it can never fight a later manual pause. Gated on
+// isMainScreenActive() (not just "is it paused") so a gesture that itself just left the main screen
+// (e.g. clicking "Let's Start BDJ" as literally the page's first-ever interaction) can't re-trigger
+// playback after that same click already hid the start screen synchronously moments earlier.
+//
+// Root-cause fix (2nd round): 'scroll' was deliberately removed from this list. It is NOT a
+// browser-recognized user-activation gesture for autoplay purposes — but this code was treating it
+// as one, and on a phone "scroll to look around" is very often the very first thing a visitor does,
+// well before their first real tap. That fired this same unlock path anyway, setting up the Web
+// Audio graph and calling resume() from a non-gesture context that some mobile browsers never fully
+// honor — silently reproducing the exact "shows as playing but is actually silent" bug this
+// function exists to prevent, just moved from page-load to first-scroll instead of fixing it.
+//
+// Self-review catch (same lesson, smaller degree): 'keydown' has the identical risk — whether it
+// counts as "real" user activation for autoplay purposes is inconsistent across browsers (some
+// specifically exclude Tab, since it's page navigation rather than "interaction with the page"),
+// unlike click/touchstart which are universally honored everywhere. Since this is a mouse/touch/
+// hand-tracking game with no meaningful keyboard-only play path, there's no real cost to dropping
+// the uncertain trigger and keeping only the two unambiguous ones.
+const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchstart"] as const;
+function tryUnlockMainBgm(): void {
+  if (!isMainScreenActive() || !mainBgmAudio.paused) return;
+  void playMainBgm();
+}
+function stopTryingToUnlockMainBgm(): void {
+  MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.removeEventListener(evt, tryUnlockMainBgm));
+}
+mainBgmAudio.addEventListener("play", stopTryingToUnlockMainBgm, { once: true });
+MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.addEventListener(evt, tryUnlockMainBgm, { passive: true }));
+
+// Leaving the main screen (game start) fully stops BGM. Returning to it (game end/abort) does NOT
+// resume it — by explicit request, coming back from a game session should land on a stopped
+// player, not one that silently picked up again, so the visitor has to press play themselves.
+// Driven by a MutationObserver on #start-overlay's own style attribute rather than new hooks in the
+// game code, since that already toggles display:none/'' at every "session started"/"back to start
+// screen" point in runSession/finalizeSession/abortWithMessage.
+const mainBgmOverlayObserver = new MutationObserver(() => {
+  if (!isMainScreenActive()) {
+    stopMainBgm();
+  }
+});
+mainBgmOverlayObserver.observe(startOverlay, { attributes: true, attributeFilter: ["style"] });
+
+// Self-reflection catch (found by tracing the code, not from a live report): the last frame's
+// key-zone/scratch-disk graphics stayed painted on #overlay-canvas after a session ended — the
+// render loop's own `if (stopped) return;` guard (inside renderFrame, above) exits before its
+// clearRect ever runs again — and were faintly visible through #start-overlay's own ~85%-opaque
+// background afterward. Reusing the exact same reactive pattern as the BGM observer above (same
+// startOverlay style attribute, only ever touched by the game's own start/stop code) clears it the
+// moment the start screen reappears, without adding a clear call to each of the ~7 scattered
+// "return to start screen" code paths individually. CameraManager.stop() (see that file) is the
+// matching fix for the other half of the same symptom — the frozen last camera frame underneath.
+//
+// Same reasoning applies to runSession()'s per-session resize/orientationchange listeners: rather
+// than patching every "return to start screen" exit path (normal end, abort, camera/resource-load
+// failure) individually, runSession() stashes one cleanup closure here and this observer runs it
+// the moment the start screen reappears, however it got there.
+let cleanupSessionResizeHandlers: (() => void) | null = null;
+const stageCleanupObserver = new MutationObserver(() => {
+  if (isMainScreenActive()) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    cleanupSessionResizeHandlers?.();
+    cleanupSessionResizeHandlers = null;
+  }
+});
+stageCleanupObserver.observe(startOverlay, { attributes: true, attributeFilter: ["style"] });
+
+// Every external social/website/Beejay-Bros link banner opens target="_blank" — the visitor's
+// attention has left the main screen even though the tab itself hasn't navigated anywhere, so BGM
+// stops the same way it would if they'd started the game (same "stays stopped" rule — no
+// auto-resume when they come back). One delegated listener covers all of them (present and future)
+// instead of wiring each container separately.
+startOverlay.addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).closest('a[target="_blank"]')) {
+    stopMainBgm();
+  }
+});
+
+{
+  let initialVolume = 0.5;
+  try {
+    const stored = localStorage.getItem(MAIN_BGM_VOLUME_STORAGE_KEY);
+    if (stored !== null && Number.isFinite(Number(stored))) initialVolume = Number(stored);
+  } catch {
+    // Private mode etc.
+  }
+  mainBgmVolumeSlider.value = String(initialVolume);
+  applyMainBgmVolume(initialVolume);
+  loadMainBgmTrack(0);
+  // Ambient attempt on load — succeeds instantly (native, no Web Audio graph) on desktop browsers
+  // with a permissive autoplay policy, and falls back to the gesture-unlock path above everywhere
+  // else, which is what first sets up the Web Audio graph (see setupMainBgmAudioGraph's comment).
+  playMainBgmNative();
+}
+
 // --- Language selector ("Language" label + a closed dropdown sharing the BEST-20-title line) -------
 // Rendered from LANGUAGES rather than hand-written in index.html so the flag/label/default-active
 // state all come from one source of truth (src/i18n/translations.ts). Closed by default (matches
@@ -2704,13 +3101,20 @@ const websiteLinksPreload = loadWebsiteLinks();
 const beejayBrosLinksPreload = loadBeejayBrosLinks();
 void renderBanner(); // doesn't reference adminPassword at all — no need to wait for anything
 
-void initAdminSession().then(async () => {
-  void renderLeaderboard(await leaderboardPreload);
-  void renderGuestbook(await guestbookPreload);
-  void renderSocialLinks(await socialLinksPreload);
-  void renderWebsiteLinks(await websiteLinksPreload);
-  void renderBeejayBrosLinks(await beejayBrosLinksPreload);
-});
+// Perf fix: each render used to `await` its own preload one after another inside a single chain —
+// so e.g. renderGuestbook() couldn't run until renderLeaderboard()'s own await resolved, even though
+// guestbook's data may have already arrived first. That's an artificial coupling with no reason
+// behind it (each section is independent), and on a slow connection it turned "5 sections populate
+// as their own data arrives" into "5 sections populate in strict relay order, gated by whichever is
+// slowest of the ones before it" — a visible contributor to the main screen filling in gradually
+// instead of all at once. Each pair below still waits for admin-session status (shared, so it's
+// resolved once) AND its own data, but the 5 are otherwise fully independent of each other now.
+const adminSessionReady = initAdminSession();
+void Promise.all([adminSessionReady, leaderboardPreload]).then(([, data]) => renderLeaderboard(data));
+void Promise.all([adminSessionReady, guestbookPreload]).then(([, data]) => renderGuestbook(data));
+void Promise.all([adminSessionReady, socialLinksPreload]).then(([, data]) => renderSocialLinks(data));
+void Promise.all([adminSessionReady, websiteLinksPreload]).then(([, data]) => renderWebsiteLinks(data));
+void Promise.all([adminSessionReady, beejayBrosLinksPreload]).then(([, data]) => renderBeejayBrosLinks(data));
 
 // A reload of an already-open tab shouldn't bump the visit counter again — only the very first load
 // in this browser session does. sessionStorage (unlike localStorage) is cleared once the tab/browser
@@ -3584,6 +3988,15 @@ async function runSession(
   try {
     await camera.start();
   } catch (err) {
+    // Self-review catch: this early return used to skip past the hand-tracker init and audio-
+    // sample fetch kicked off just above — both were still running in the background against a
+    // session that's now abandoned, leaking a live AudioContext (and, via SfxEngine, its scratch-
+    // sample player's setInterval tick) indefinitely. Same cleanup the function's other exit paths
+    // already perform. No camera.stop() here — camera.start() itself is what threw, so no stream
+    // was ever assigned.
+    handTracker.dispose();
+    sfxEngine.dispose();
+    void audioCtx.close();
     hud.textContent = t("hudCameraFailedTemplate", { msg: (err as Error).message });
     startOverlay.style.removeProperty("display");
     gameTitleEl.style.visibility = "hidden";
@@ -3617,6 +4030,16 @@ async function runSession(
   scheduleResync();
   window.addEventListener("resize", scheduleResync);
   window.addEventListener("orientationchange", scheduleResync);
+  // Picked up by stageCleanupObserver above the moment the start screen reappears — covers every
+  // exit path (normal end, abort, resource-load failure below) from one place instead of needing
+  // a matching removeEventListener at each. Without this, every "Let's Start BDJ" click permanently
+  // stacked one more pair of listeners for the rest of the tab's life, each doing a full canvas/
+  // stage resize computation on every future resize/rotation event.
+  cleanupSessionResizeHandlers = () => {
+    window.clearTimeout(resyncRetryTimer);
+    window.removeEventListener("resize", scheduleResync);
+    window.removeEventListener("orientationchange", scheduleResync);
+  };
 
   hud.textContent = t("hudResourceLoadingTemplate", { delegate });
   // Own try/catch (rather than letting this reject up into the caller's single catch-all) so a hand-
@@ -3626,6 +4049,13 @@ async function runSession(
   try {
     await resourcesPromise;
   } catch (err) {
+    // Same leak as the camera.start() catch above, plus camera.stop() specifically here — unlike
+    // that earlier path, camera.start() already succeeded by this point, so there's a live stream
+    // to release, not just a discarded attempt.
+    camera.stop();
+    handTracker.dispose();
+    sfxEngine.dispose();
+    void audioCtx.close();
     hud.textContent = t("hudResourceFailedTemplate", { msg: (err as Error).message });
     startOverlay.style.removeProperty("display");
     gameTitleEl.style.visibility = "hidden";
@@ -3713,378 +4143,3 @@ startButton.addEventListener("click", () => {
     });
 });
 
-// --- Main-screen BGM player ------------------------------------------------------------------
-// Ambient playlist that plays only while the start screen is visible (see MAIN_BGM_TRACKS) — paused
-// for the duration of an actual game session and resumed on return, and cut off by an external-link
-// click since the visitor's attention has moved elsewhere even though the tab itself hasn't
-// navigated. Autoplay-with-sound is blocked by the browser until a real gesture occurs, and iOS
-// Safari silently ignores HTMLMediaElement.volume — both handled the same way as the
-// single-page-promo-engineering skill's battle-tested background-audio-player reference (GainNode
-// volume + a self-removing "unlock" listener), adapted here to this app's overlay-visibility-driven
-// play/pause instead of a dedicated Stop button.
-const mainBgmAudio = document.querySelector<HTMLAudioElement>("#main-bgm-audio")!;
-const mainBgmPrevButton = document.querySelector<HTMLButtonElement>("#main-bgm-prev-button")!;
-const mainBgmPlayPauseButton = document.querySelector<HTMLButtonElement>("#main-bgm-play-pause-button")!;
-const mainBgmStopButton = document.querySelector<HTMLButtonElement>("#main-bgm-stop-button")!;
-const mainBgmNextButton = document.querySelector<HTMLButtonElement>("#main-bgm-next-button")!;
-const mainBgmMuteButton = document.querySelector<HTMLButtonElement>("#main-bgm-mute-button")!;
-const mainBgmSeekSlider = document.querySelector<HTMLInputElement>("#main-bgm-seek")!;
-const mainBgmVolumeSlider = document.querySelector<HTMLInputElement>("#main-bgm-volume")!;
-const mainBgmMarqueeTrack = document.querySelector<HTMLDivElement>("#main-bgm-marquee-track")!;
-const mainBgmMarqueeCopies = document.querySelectorAll<HTMLSpanElement>(".main-bgm-marquee-copy");
-
-const MAIN_BGM_VOLUME_STORAGE_KEY = "bdj-mainbgm-volume";
-
-let mainBgmTrackIndex = 0;
-let mainBgmPreMuteVolume = 0.5;
-let mainBgmSeeking = false;
-let mainBgmErrorRetryTimer = 0;
-
-// iOS Safari silently ignores HTMLMediaElement.volume (the value reads back fine, nothing audible
-// changes) — routing gain through a Web Audio GainNode sidesteps this, since iOS doesn't lock that
-// down. audio.volume is still set too, since it works natively on desktop/Android; whichever
-// mechanism actually applies on a given platform ends up correct.
-//
-// Root-cause note (mobile fix): this graph must NOT be set up until the first real user gesture.
-// createMediaElementSource() permanently reroutes this <audio> element's output through the
-// AudioContext — from that point on, nothing is audible unless the context is 'running'. Doing
-// this eagerly at page load (before any gesture) created an AudioContext that mobile Safari/Chrome
-// would only partially/unreliably resume even from a later real gesture — matching exactly what
-// was reported: playback showing as started (paused=false) with total silence until the play/pause
-// button was toggled several times (each toggle was a fresh gesture attempt at resume(), and one
-// eventually happened to land). Deferring setup to the first gesture-driven call (see
-// playMainBgmNative below for the ambient, no-gesture page-load attempt) avoids that entirely — the
-// very first time this runs, it is guaranteed to be inside a trusted gesture.
-let mainBgmAudioCtx: AudioContext | null = null;
-let mainBgmGainNode: GainNode | null = null;
-function setupMainBgmAudioGraph(): void {
-  if (mainBgmGainNode) return;
-  try {
-    mainBgmAudioCtx = new AudioContext();
-    const source = mainBgmAudioCtx.createMediaElementSource(mainBgmAudio);
-    mainBgmGainNode = mainBgmAudioCtx.createGain();
-    mainBgmGainNode.gain.value = Number(mainBgmVolumeSlider.value);
-    source.connect(mainBgmGainNode).connect(mainBgmAudioCtx.destination);
-  } catch {
-    // Very old browsers without Web Audio support: falls back to audio.volume alone.
-  }
-}
-
-function applyMainBgmVolume(volume: number): void {
-  mainBgmAudio.volume = volume;
-  if (mainBgmGainNode) mainBgmGainNode.gain.value = volume;
-  mainBgmMuteButton.textContent = volume === 0 ? "🔇" : "🔊";
-}
-
-function loadMainBgmTrack(index: number): void {
-  // Self-review catch: without this, a manual Next/Prev click during the 700ms error-retry delay
-  // (see the 'error' listener below) left that stale timer armed — it read mainBgmTrackIndex fresh
-  // at fire time rather than the value from when it was scheduled, so it would silently overwrite
-  // whatever track the visitor had just manually picked with "the one after the track that failed
-  // earlier," a moment after they'd already moved on. Every track change (manual or automatic)
-  // funnels through this one function, so cancelling here covers every case with one line.
-  window.clearTimeout(mainBgmErrorRetryTimer);
-  mainBgmTrackIndex = ((index % MAIN_BGM_TRACKS.length) + MAIN_BGM_TRACKS.length) % MAIN_BGM_TRACKS.length;
-  const track = MAIN_BGM_TRACKS[mainBgmTrackIndex];
-  mainBgmAudio.src = track.fileUrl;
-  // Reset immediately rather than waiting for 'loadedmetadata' on the new track — otherwise the
-  // seek bar would briefly keep showing the previous track's stale position/length.
-  mainBgmSeekSlider.value = "0";
-  mainBgmSeekSlider.max = "0";
-  const marqueeText = `${track.title} — Produced by Yim Bongjin      `;
-  mainBgmMarqueeCopies.forEach((el) => {
-    el.textContent = marqueeText;
-  });
-  // Longer titles get a longer scroll duration so the reading speed stays roughly constant instead
-  // of a long title whipping past in the same fixed time a short one takes.
-  mainBgmMarqueeTrack.style.animationDuration = `${Math.max(8, marqueeText.length * 0.3)}s`;
-}
-
-function setMainBgmPlayIcon(isPlaying: boolean): void {
-  mainBgmPlayPauseButton.textContent = isPlaying ? "⏸" : "▶";
-}
-
-/** Bare HTMLMediaElement attempt with no Web Audio graph touched — used only for the ambient
- *  autoplay try at page load, before any real gesture has happened. See setupMainBgmAudioGraph's
- *  comment above for why the graph must not be created here. */
-function playMainBgmNative(): void {
-  void mainBgmAudio
-    .play()
-    .then(() => setMainBgmPlayIcon(true))
-    .catch(() => setMainBgmPlayIcon(false));
-}
-
-/** Root-cause fix (2nd round): resume() must be *awaited* before play() — calling it fire-and-
- *  forget (the previous version of this function) meant audio.play() ran essentially in parallel
- *  with the AudioContext still mid-resume, so the very first play attempt after any suspend (the
- *  page's initial gesture-driven unlock, and every "return to the main screen and press play"
- *  after a pause) raced ahead of the context actually becoming audible — producing exactly the
- *  reported symptom: playback shows as started but is silent, and it takes a second press (by
- *  which point the earlier resume() has quietly finished) to actually hear anything. */
-async function playMainBgm(): Promise<void> {
-  setupMainBgmAudioGraph();
-  if (mainBgmAudioCtx && mainBgmAudioCtx.state === "suspended") {
-    try {
-      await mainBgmAudioCtx.resume();
-    } catch {
-      // Falls through to the play() attempt below regardless — if resume() itself is rejected
-      // (e.g. called outside a context this specific browser accepts), that attempt's own
-      // success/failure is what actually determines the icon state, not this.
-    }
-  }
-  try {
-    await mainBgmAudio.play();
-    setMainBgmPlayIcon(true);
-  } catch {
-    setMainBgmPlayIcon(false);
-  }
-}
-
-/** Pauses playback AND suspends the AudioContext — root-cause fix for the "infinite stutter/
- *  repeat" reported when starting a game session while BGM was playing: pausing the *element*
- *  alone left this player's AudioContext sitting 'running' (open on the shared hardware audio
- *  output) at the exact moment the game created its own separate AudioContext for sound effects,
- *  and the two contended for the same mobile audio session. Suspending here releases it fully, and
- *  is also the fix for "no residual noise / doesn't come back alive later" — nothing downstream of
- *  this can produce sound until playMainBgm() explicitly resumes the context again.
- *
- *  Self-review catch (two gaps, same class of bug): first, this also cancels any pending
- *  error-retry timer (see the 'error' listener below) — without it, a track failure right before
- *  the visitor paused/stopped/left would still fire its 700ms-delayed retry afterward, since
- *  loadMainBgmTrack() only clears that timer when a track actually changes, which none of
- *  pause/stop/leaving-the-main-screen do. Second, this also permanently disables the
- *  autoplay-unlock listener (stopTryingToUnlockMainBgm, defined further down as a hoisted function
- *  declaration) — previously each individual call site (Pause button, Stop button, external-link
- *  click, leaving the main screen) had to remember to call that separately, and the exit-site
- *  button's own handler had quietly been missing it, leaving a real path where — if that exact
- *  click happened to be the page's first-ever gesture — clicking Exit would immediately resume
- *  audio moments after stopping it. Centralizing both here means every current AND future caller
- *  gets a genuinely complete stop for free, instead of depending on each one remembering both
- *  cleanup calls individually. */
-function pauseMainBgm(): void {
-  window.clearTimeout(mainBgmErrorRetryTimer);
-  mainBgmAudio.pause();
-  setMainBgmPlayIcon(false);
-  if (mainBgmAudioCtx && mainBgmAudioCtx.state === "running") {
-    void mainBgmAudioCtx.suspend();
-  }
-  stopTryingToUnlockMainBgm();
-}
-
-/** Full stop for the dedicated Stop button — same as pauseMainBgm plus rewinding to the start,
- *  matching a conventional player's Stop (vs. Pause, which resumes where it left off). */
-function stopMainBgm(): void {
-  pauseMainBgm();
-  mainBgmAudio.currentTime = 0;
-  mainBgmSeekSlider.value = "0";
-}
-
-mainBgmAudio.addEventListener("ended", () => {
-  loadMainBgmTrack(mainBgmTrackIndex + 1);
-  void playMainBgm();
-});
-
-// Self-review catch: a 404/decode failure on one track (e.g. a bad deploy) fires 'error', never
-// 'ended' — without this, the playlist would just silently hang on that one track forever instead
-// of skipping past it. mainBgmConsecutiveErrors caps the auto-skip at one full lap of the playlist
-// so a deploy where every track is broken fails loud (via console.error below) instead of retrying
-// forever. The 700ms delay before each retry is itself a bug fix, found while verifying this: with
-// no delay, a transient network hiccup on one track fired 'error' -> retry -> 'error' again fast
-// enough to storm the connection with dozens of requests within milliseconds, which is what turned
-// a single flaky track into a cascade of failures across the whole playlist.
-const MAIN_BGM_ERROR_RETRY_DELAY_MS = 700;
-let mainBgmConsecutiveErrors = 0;
-mainBgmAudio.addEventListener("playing", () => {
-  mainBgmConsecutiveErrors = 0;
-});
-// Self-review catch (found live, verifying the fix above): preload="auto" on this element means
-// the browser can keep trying to buffer the currently-set src in the background even while
-// paused — so 'error' can fire at any time, including well after the visitor has already left the
-// main screen, not just from a foreground retry. Without the isMainScreenActive() checks below,
-// that background failure would arm (or fire, if already armed before leaving) a retry that calls
-// playMainBgm() regardless — reviving audio during an actual game session, which is exactly the
-// "must never come back alive on its own" guarantee this whole feature exists to uphold. Checked
-// both when the error fires AND again inside the delayed callback, since the visitor can also leave
-// during the 700ms gap between the two.
-mainBgmAudio.addEventListener("error", () => {
-  console.error("메인 BGM 트랙 로드 실패:", MAIN_BGM_TRACKS[mainBgmTrackIndex]?.fileUrl, mainBgmAudio.error);
-  mainBgmConsecutiveErrors += 1;
-  if (mainBgmConsecutiveErrors >= MAIN_BGM_TRACKS.length || !isMainScreenActive()) return;
-  mainBgmErrorRetryTimer = window.setTimeout(() => {
-    if (!isMainScreenActive()) return;
-    loadMainBgmTrack(mainBgmTrackIndex + 1);
-    void playMainBgm();
-  }, MAIN_BGM_ERROR_RETRY_DELAY_MS);
-});
-
-mainBgmAudio.addEventListener("loadedmetadata", () => {
-  mainBgmSeekSlider.max = String(mainBgmAudio.duration || 0);
-});
-mainBgmAudio.addEventListener("timeupdate", () => {
-  if (mainBgmSeeking) return;
-  mainBgmSeekSlider.value = String(mainBgmAudio.currentTime);
-});
-mainBgmSeekSlider.addEventListener("pointerdown", () => {
-  mainBgmSeeking = true;
-});
-mainBgmSeekSlider.addEventListener("input", () => {
-  mainBgmAudio.currentTime = Number(mainBgmSeekSlider.value);
-});
-// Self-review catch: 'change' alone left a way to get permanently stuck with mainBgmSeeking=true —
-// if the drag gets interrupted before a 'change' fires (the pointer gets captured by something else,
-// e.g. a phone call/notification on mobile, or the tab loses focus mid-drag), the seek bar would
-// freeze at wherever it was and silently stop tracking real playback forever (timeupdate's handler
-// above early-returns while this stays true). pointerup/pointercancel are a safety net that always
-// fires once the drag ends for any reason, not just a clean release.
-mainBgmSeekSlider.addEventListener("change", () => {
-  mainBgmSeeking = false;
-});
-mainBgmSeekSlider.addEventListener("pointerup", () => {
-  mainBgmSeeking = false;
-});
-mainBgmSeekSlider.addEventListener("pointercancel", () => {
-  mainBgmSeeking = false;
-});
-
-mainBgmPlayPauseButton.addEventListener("click", () => {
-  if (mainBgmAudio.paused) {
-    void playMainBgm();
-  } else {
-    pauseMainBgm();
-  }
-});
-mainBgmStopButton.addEventListener("click", () => {
-  stopMainBgm();
-});
-mainBgmNextButton.addEventListener("click", () => {
-  loadMainBgmTrack(mainBgmTrackIndex + 1);
-  void playMainBgm();
-});
-mainBgmPrevButton.addEventListener("click", () => {
-  loadMainBgmTrack(mainBgmTrackIndex - 1);
-  void playMainBgm();
-});
-mainBgmMuteButton.addEventListener("click", () => {
-  const currentVolume = Number(mainBgmVolumeSlider.value);
-  if (currentVolume > 0) {
-    mainBgmPreMuteVolume = currentVolume;
-    mainBgmVolumeSlider.value = "0";
-    applyMainBgmVolume(0);
-  } else {
-    mainBgmVolumeSlider.value = String(mainBgmPreMuteVolume);
-    applyMainBgmVolume(mainBgmPreMuteVolume);
-  }
-});
-mainBgmVolumeSlider.addEventListener("input", () => {
-  const volume = Number(mainBgmVolumeSlider.value);
-  applyMainBgmVolume(volume);
-  // Self-review catch: mainBgmPreMuteVolume was only ever updated from the Mute button's own click
-  // handler — dragging the slider straight down to 0 by hand (bypassing that button entirely) left
-  // it holding a stale value, so clicking Mute (now showing 🔇, since volume is genuinely 0)
-  // afterward to "unmute" would restore whatever old volume happened to be stored instead of
-  // anything the visitor actually set. Keeping this updated here for every non-zero value keeps the
-  // "restore to" target correct regardless of which control silenced it.
-  if (volume > 0) mainBgmPreMuteVolume = volume;
-  try {
-    localStorage.setItem(MAIN_BGM_VOLUME_STORAGE_KEY, String(volume));
-  } catch {
-    // Private mode etc.
-  }
-});
-
-/** True while the start screen is the visible scene — reads the exact same style.display the game
- *  code already flips on #start-overlay (see startButton's click handler above and the various
- *  return-to-start-screen call sites in runSession/finalizeSession), so this needs no changes to
- *  that game-flow code to stay in sync. */
-function isMainScreenActive(): boolean {
-  return startOverlay.style.display !== "none";
-}
-
-// Autoplay-with-sound is blocked until a real user gesture. The fix is a document-level listener
-// that attempts playback on the next click/touch/key anywhere, removing itself the moment a native
-// 'play' event actually fires so it can never fight a later manual pause. Gated on
-// isMainScreenActive() (not just "is it paused") so a gesture that itself just left the main screen
-// (e.g. clicking "Let's Start BDJ" as literally the page's first-ever interaction) can't re-trigger
-// playback after that same click already hid the start screen synchronously moments earlier.
-//
-// Root-cause fix (2nd round): 'scroll' was deliberately removed from this list. It is NOT a
-// browser-recognized user-activation gesture for autoplay purposes — but this code was treating it
-// as one, and on a phone "scroll to look around" is very often the very first thing a visitor does,
-// well before their first real tap. That fired this same unlock path anyway, setting up the Web
-// Audio graph and calling resume() from a non-gesture context that some mobile browsers never fully
-// honor — silently reproducing the exact "shows as playing but is actually silent" bug this
-// function exists to prevent, just moved from page-load to first-scroll instead of fixing it.
-//
-// Self-review catch (same lesson, smaller degree): 'keydown' has the identical risk — whether it
-// counts as "real" user activation for autoplay purposes is inconsistent across browsers (some
-// specifically exclude Tab, since it's page navigation rather than "interaction with the page"),
-// unlike click/touchstart which are universally honored everywhere. Since this is a mouse/touch/
-// hand-tracking game with no meaningful keyboard-only play path, there's no real cost to dropping
-// the uncertain trigger and keeping only the two unambiguous ones.
-const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchstart"] as const;
-function tryUnlockMainBgm(): void {
-  if (!isMainScreenActive() || !mainBgmAudio.paused) return;
-  void playMainBgm();
-}
-function stopTryingToUnlockMainBgm(): void {
-  MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.removeEventListener(evt, tryUnlockMainBgm));
-}
-mainBgmAudio.addEventListener("play", stopTryingToUnlockMainBgm, { once: true });
-MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.addEventListener(evt, tryUnlockMainBgm, { passive: true }));
-
-// Leaving the main screen (game start) fully stops BGM. Returning to it (game end/abort) does NOT
-// resume it — by explicit request, coming back from a game session should land on a stopped
-// player, not one that silently picked up again, so the visitor has to press play themselves.
-// Driven by a MutationObserver on #start-overlay's own style attribute rather than new hooks in the
-// game code, since that already toggles display:none/'' at every "session started"/"back to start
-// screen" point in runSession/finalizeSession/abortWithMessage.
-const mainBgmOverlayObserver = new MutationObserver(() => {
-  if (!isMainScreenActive()) {
-    stopMainBgm();
-  }
-});
-mainBgmOverlayObserver.observe(startOverlay, { attributes: true, attributeFilter: ["style"] });
-
-// Self-reflection catch (found by tracing the code, not from a live report): the last frame's
-// key-zone/scratch-disk graphics stayed painted on #overlay-canvas after a session ended — the
-// render loop's own `if (stopped) return;` guard (inside renderFrame, above) exits before its
-// clearRect ever runs again — and were faintly visible through #start-overlay's own ~85%-opaque
-// background afterward. Reusing the exact same reactive pattern as the BGM observer above (same
-// startOverlay style attribute, only ever touched by the game's own start/stop code) clears it the
-// moment the start screen reappears, without adding a clear call to each of the ~7 scattered
-// "return to start screen" code paths individually. CameraManager.stop() (see that file) is the
-// matching fix for the other half of the same symptom — the frozen last camera frame underneath.
-const stageCleanupObserver = new MutationObserver(() => {
-  if (isMainScreenActive()) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }
-});
-stageCleanupObserver.observe(startOverlay, { attributes: true, attributeFilter: ["style"] });
-
-// Every external social/website/Beejay-Bros link banner opens target="_blank" — the visitor's
-// attention has left the main screen even though the tab itself hasn't navigated anywhere, so BGM
-// stops the same way it would if they'd started the game (same "stays stopped" rule — no
-// auto-resume when they come back). One delegated listener covers all of them (present and future)
-// instead of wiring each container separately.
-startOverlay.addEventListener("click", (e) => {
-  if ((e.target as HTMLElement).closest('a[target="_blank"]')) {
-    stopMainBgm();
-  }
-});
-
-{
-  let initialVolume = 0.5;
-  try {
-    const stored = localStorage.getItem(MAIN_BGM_VOLUME_STORAGE_KEY);
-    if (stored !== null && Number.isFinite(Number(stored))) initialVolume = Number(stored);
-  } catch {
-    // Private mode etc.
-  }
-  mainBgmVolumeSlider.value = String(initialVolume);
-  applyMainBgmVolume(initialVolume);
-  loadMainBgmTrack(0);
-  // Ambient attempt on load — succeeds instantly (native, no Web Audio graph) on desktop browsers
-  // with a permissive autoplay policy, and falls back to the gesture-unlock path above everywhere
-  // else, which is what first sets up the Web Audio graph (see setupMainBgmAudioGraph's comment).
-  playMainBgmNative();
-}
