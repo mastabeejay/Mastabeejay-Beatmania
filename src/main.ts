@@ -482,6 +482,14 @@ function setMainBgmPlayIcon(isPlaying: boolean): void {
  *  autoplay try at page load, before any real gesture has happened. See setupMainBgmAudioGraph's
  *  comment above for why the graph must not be created here. */
 function playMainBgmNative(): void {
+  // Debug affordance: ?bgm-no-autoplay makes every ambient (non-gesture) attempt act as if the
+  // browser had blocked it, the way phones do. Desktop browsers' permissive autoplay policy
+  // otherwise lets these attempts always succeed, which makes the gesture-unlock path — the one
+  // that actually matters on mobile — untestable from a desktop browser.
+  if (new URLSearchParams(location.search).has("bgm-no-autoplay")) {
+    setMainBgmPlayIcon(false);
+    return;
+  }
   void mainBgmAudio
     .play()
     .then(() => setMainBgmPlayIcon(true))
@@ -691,16 +699,45 @@ function isMainScreenActive(): boolean {
 //
 // Self-review catch (same lesson, smaller degree): 'keydown' has the identical risk — whether it
 // counts as "real" user activation for autoplay purposes is inconsistent across browsers (some
-// specifically exclude Tab, since it's page navigation rather than "interaction with the page"),
-// unlike click/touchstart which are universally honored everywhere. Since this is a mouse/touch/
-// hand-tracking game with no meaningful keyboard-only play path, there's no real cost to dropping
-// the uncertain trigger and keeping only the two unambiguous ones.
-const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchstart"] as const;
+// specifically exclude Tab, since it's page navigation rather than "interaction with the page").
+// Since this is a mouse/touch/hand-tracking game with no meaningful keyboard-only play path,
+// there's no real cost to dropping the uncertain trigger.
+//
+// Root-cause fix (3rd round — iPhone "autoplay never starts" after the section was relocated to
+// the top of the file): this list previously used 'touchstart', which WebKit does NOT grant user
+// activation for — activation is granted at touchend/click. That flaw was invisible while this
+// section sat at the bottom of the file: on a phone, the script finished executing seconds after
+// first paint, the visitor had usually already touched the page by then, and WebKit's
+// transient-activation window (a few seconds after any touch) let the ambient script-end play()
+// attempt through — so music started via THAT path, and the broken touchstart trigger never
+// mattered. Relocating the section for faster startup removed that accidental crutch: the ambient
+// attempt now fires before any touch (always rejected), every scroll/tap then hit this unlock path
+// via touchstart with no activation (play() rejected every time — and worse, it built the Web
+// Audio graph outside a gesture, recreating the poisoned-suspended-graph silence documented on
+// setupMainBgmAudioGraph), and iOS often doesn't bubble a document-level 'click' for taps on
+// non-interactive elements at all, so the click trigger couldn't save it either. 'touchend' is the
+// event WebKit actually grants activation on (it also fires for taps on non-interactive elements),
+// which makes the very first tap anywhere genuinely able to start playback.
+const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchend"] as const;
+// True until the unlock listeners are torn down (first successful play, or any pause/stop). The
+// delayed ambient re-attempts below check this so they can never revive audio the visitor has
+// since paused/stopped — same guarantee the error-retry timer upholds via isMainScreenActive().
+let mainBgmUnlockArmed = true;
 function tryUnlockMainBgm(): void {
   if (!isMainScreenActive() || !mainBgmAudio.paused) return;
+  // Where the browser exposes it (Safari 16.4+/Chrome 105+), skip the attempt outright when this
+  // event carries no user activation (e.g. the touchend that ends a scroll pan on platforms that
+  // don't count panning as interaction). Without this, a no-activation attempt doesn't just fail —
+  // its setupMainBgmAudioGraph() call would permanently reroute the element through an
+  // AudioContext born suspended outside any gesture (the exact silent-playback poison described on
+  // that function), and resume() called without activation never settles on iOS, leaving
+  // playMainBgm() stuck awaiting forever. Older browsers without the API fall through unchanged.
+  const activation = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation;
+  if (activation && !activation.isActive) return;
   void playMainBgm();
 }
 function stopTryingToUnlockMainBgm(): void {
+  mainBgmUnlockArmed = false;
   MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.removeEventListener(evt, tryUnlockMainBgm));
 }
 mainBgmAudio.addEventListener("play", stopTryingToUnlockMainBgm, { once: true });
@@ -769,6 +806,20 @@ startOverlay.addEventListener("click", (e) => {
   // with a permissive autoplay policy, and falls back to the gesture-unlock path above everywhere
   // else, which is what first sets up the Web Audio graph (see setupMainBgmAudioGraph's comment).
   playMainBgmNative();
+  // Two delayed ambient re-attempts, restoring on purpose what the section's old bottom-of-file
+  // position did by accident (see the MAIN_BGM_UNLOCK_EVENTS comment above): on a phone the visitor
+  // has usually already touched the page within the first seconds while it's still loading, and
+  // WebKit's transient-activation window lets a bare play() through for a few seconds after any
+  // touch — so a late attempt can genuinely start music without waiting for a *further* tap. The
+  // attempt above now runs long before any touch (that's the point of the relocation), so it alone
+  // can never catch that window. Both re-attempts are no-ops (a caught rejection) when no touch has
+  // happened, and mainBgmUnlockArmed keeps them from ever reviving audio after a successful start
+  // that the visitor then paused/stopped.
+  const ambientReattempt = () => {
+    if (mainBgmUnlockArmed && isMainScreenActive() && mainBgmAudio.paused) playMainBgmNative();
+  };
+  window.setTimeout(ambientReattempt, 2500);
+  window.addEventListener("load", ambientReattempt, { once: true });
 }
 
 // --- Language selector ("Language" label + a closed dropdown sharing the BEST-20-title line) -------
