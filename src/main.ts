@@ -34,6 +34,7 @@ import {
   type LeaderboardEntry,
 } from "./game/Leaderboard";
 import {
+  adminDeleteMembers,
   countMembers,
   loadMembers,
   memberLogin,
@@ -265,6 +266,7 @@ const membershipProfileWithdrawButton = document.querySelector<HTMLButtonElement
 const membersDirectoryOpenCard = document.querySelector<HTMLButtonElement>("#members-directory-open-card")!;
 const membersDirectoryOverlay = document.querySelector<HTMLDivElement>("#members-directory-overlay")!;
 const membersDirectoryRefreshButton = document.querySelector<HTMLButtonElement>("#members-directory-refresh-button")!;
+const membersDirectoryAdminDeleteButton = document.querySelector<HTMLButtonElement>("#members-directory-admin-delete-button")!;
 const membersDirectoryCloseButton = document.querySelector<HTMLButtonElement>("#members-directory-close-button")!;
 const directChatOverlay = document.querySelector<HTMLDivElement>("#direct-chat-overlay")!;
 const directChatTitle = document.querySelector<HTMLDivElement>("#direct-chat-title")!;
@@ -766,20 +768,44 @@ startOverlay.addEventListener("click", (e) => {
   // Ambient attempt on load — succeeds instantly on desktop browsers with a permissive autoplay
   // policy, and falls back to the gesture-unlock path above everywhere else.
   playMainBgmAmbient();
-  // Two delayed ambient re-attempts, restoring on purpose what the section's old bottom-of-file
-  // position did by accident (see the MAIN_BGM_UNLOCK_EVENTS comment above): on a phone the visitor
-  // has usually already touched the page within the first seconds while it's still loading, and
-  // WebKit's transient-activation window lets a bare play() through for a few seconds after any
-  // touch — so a late attempt can genuinely start music without waiting for a *further* tap. The
-  // attempt above now runs long before any touch (that's the point of the relocation), so it alone
-  // can never catch that window. Both re-attempts are no-ops (a caught rejection) when no touch has
-  // happened, and mainBgmUnlockArmed keeps them from ever reviving audio after a successful start
-  // that the visitor then paused/stopped.
-  const ambientReattempt = () => {
-    if (mainBgmUnlockArmed && isMainScreenActive() && mainBgmAudio.paused) playMainBgmAmbient();
-  };
-  window.setTimeout(ambientReattempt, 2500);
-  window.addEventListener("load", ambientReattempt, { once: true });
+  // Self-review catch (reported live: "autoplay eventually works but takes a long time, and on a
+  // retry it sometimes doesn't happen at all" — pressing the play button itself always worked
+  // instantly, which is the tell that this is purely about how *often* the ambient path re-checks,
+  // not a playback bug). A single fixed-delay retry only gets one chance at whatever brief
+  // transient-activation window a phone's autoplay policy might be honoring after an earlier touch
+  // (e.g. scrolling to look around the page) — miss that window and there's nothing left to catch
+  // it "sometimes not working at all" on a later visit. Polling every second instead gives every
+  // one of those windows its own chance, so playback starts as soon as physically possible after
+  // whatever touch opened one, rather than waiting on a guessed fixed delay.
+  //
+  // Important: none of this is a substitute for the real user gesture the gesture-unlock listener
+  // above (MAIN_BGM_UNLOCK_EVENTS) reacts to. iOS/Chrome autoplay policy checks the browser's own
+  // user-activation state, not merely "was play() called from some code" — so a JS-synthesized
+  // .click() on the play button (which is a tempting-looking shortcut) would be exactly as
+  // unactivated as calling play() directly, and buys nothing over what's already happening here.
+  // Genuinely soundless-until-any-touch is an Apple platform restriction with no code-side bypass,
+  // on this or any other site — the honest fix is to poll aggressively so the *first* real touch
+  // (anywhere on the page, not necessarily the player itself) is caught as fast as possible, and to
+  // tell the visitor a touch is what's needed instead of leaving the delay unexplained (see the
+  // hint toast below).
+  const AMBIENT_RETRY_INTERVAL_MS = 1000;
+  const AMBIENT_RETRY_MAX_ATTEMPTS = 30; // ~30s — long enough to catch a slow page read, not forever
+  let ambientRetryCount = 0;
+  const ambientRetryTimer = window.setInterval(() => {
+    ambientRetryCount += 1;
+    if (!mainBgmUnlockArmed || !isMainScreenActive() || !mainBgmAudio.paused || ambientRetryCount >= AMBIENT_RETRY_MAX_ATTEMPTS) {
+      window.clearInterval(ambientRetryTimer);
+      return;
+    }
+    playMainBgmAmbient();
+  }, AMBIENT_RETRY_INTERVAL_MS);
+  // One-time, honest explanation for the delay rather than silence: if a few seconds have passed
+  // and there's still no sound, the visitor almost certainly hasn't touched the screen yet (the
+  // ambient retries above only succeed off the back of a touch elsewhere on the page) — telling
+  // them so turns "why isn't there music" into something they can immediately act on.
+  window.setTimeout(() => {
+    if (mainBgmUnlockArmed && isMainScreenActive() && mainBgmAudio.paused) showToast(t("bgmTapToStartHint"));
+  }, 4000);
 }
 
 // --- Language selector ("Language" label + a closed dropdown sharing the BEST-20-title line) -------
@@ -938,6 +964,7 @@ let stepSelectedSongFile: File | null = null;
 let adminPassword: string | null = sessionStorage.getItem("bdj-admin-password");
 const selectedLeaderboardIds = new Set<number>();
 const selectedGuestbookIds = new Set<number>();
+const selectedMemberIds = new Set<number>();
 
 // BDJ Membership: same no-session pattern as admin above, but cached in localStorage instead of
 // sessionStorage so a member stays logged in across browser restarts (a "membership" login should
@@ -2394,9 +2421,13 @@ function renderMembersDirectoryEntryHtml(entry: MemberDirectoryEntry, signupOrde
   const canChat = isOnline && entry.id !== member?.id;
   const chatAttrs = canChat ? ` data-chat-member-id="${entry.id}" data-chat-member-name="${escapeHtml(entry.name)}"` : "";
   const chatClass = canChat ? " members-directory-chat-trigger" : "";
+  // Injected into the existing number column rather than a dedicated column — same space-saving
+  // approach as the leaderboard's own admin checkbox, and it means no header/colspan changes are
+  // needed just because an admin happens to also be logged in.
+  const adminCheckbox = adminPassword ? `<input type="checkbox" class="members-directory-select-checkbox" data-id="${entry.id}" /> ` : "";
   return `
     <tr>
-      <td class="members-directory-number">${signupOrder}</td>
+      <td class="members-directory-number">${adminCheckbox}${signupOrder}</td>
       <td><div class="members-directory-avatar${entry.photoData ? " has-photo" : ""}" data-member-id="${entry.id}"></div></td>
       <td class="members-directory-name${chatClass}"${chatAttrs}>${escapeHtml(entry.name)}</td>
       <td>${genderLabel}</td>
@@ -2438,34 +2469,44 @@ function compareMembersForDirectory(a: MemberDirectoryEntry, b: MemberDirectoryE
   return a.name.localeCompare(b.name, "ko");
 }
 
-async function renderMembersDirectory(): Promise<void> {
-  // Crew-only — same login requirement as every other member action, just checked client-side
-  // first so a guest sees an explanatory message instead of a request that's just going to be
-  // rejected server-side anyway (list_members() also enforces this — see its own comment).
-  if (!member || !memberPassword) {
-    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoginRequiredRow")}</td></tr>`;
-    return;
-  }
-
-  // The roster fetch (photos included) can take a real moment — without this, the popup just sat
-  // there unchanged until it landed, indistinguishable from the click not having registered.
-  membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoadingRow")}</td></tr>`;
+/** preloaded, when given, skips the roster fetch entirely — same reuse-the-mutation's-own-return-
+ *  value pattern as renderLeaderboard/renderGuestbook, used after the admin force-withdraw action
+ *  below already got the fresh list back from admin_delete_members(). */
+async function renderMembersDirectory(preloaded?: MemberDirectoryEntry[]): Promise<void> {
+  membersDirectoryAdminDeleteButton.hidden = !adminPassword;
+  selectedMemberIds.clear();
 
   let members: MemberDirectoryEntry[];
-  try {
-    members = await loadMembers(member.name, memberPassword);
-  } catch (err) {
-    if (err instanceof WrongMemberPasswordError) {
-      membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("guestbookErrorMemberExpired")}</td></tr>`;
-      clearMemberSession();
+  if (preloaded) {
+    members = preloaded;
+  } else {
+    // Crew-only — same login requirement as every other member action, just checked client-side
+    // first so a guest sees an explanatory message instead of a request that's just going to be
+    // rejected server-side anyway (list_members() also enforces this — see its own comment).
+    if (!member || !memberPassword) {
+      membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoginRequiredRow")}</td></tr>`;
       return;
     }
-    // Distinct from the empty state below — "no members yet" when the view can't even be read
-    // would hide a real problem (most likely the members_public/list_members migration not having
-    // been run yet).
-    console.error("회원 명부 조회 실패:", err);
-    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoadFailedRow")}</td></tr>`;
-    return;
+
+    // The roster fetch (photos included) can take a real moment — without this, the popup just sat
+    // there unchanged until it landed, indistinguishable from the click not having registered.
+    membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoadingRow")}</td></tr>`;
+
+    try {
+      members = await loadMembers(member.name, memberPassword);
+    } catch (err) {
+      if (err instanceof WrongMemberPasswordError) {
+        membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("guestbookErrorMemberExpired")}</td></tr>`;
+        clearMemberSession();
+        return;
+      }
+      // Distinct from the empty state below — "no members yet" when the view can't even be read
+      // would hide a real problem (most likely the members_public/list_members migration not having
+      // been run yet).
+      console.error("회원 명부 조회 실패:", err);
+      membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsLoadFailedRow")}</td></tr>`;
+      return;
+    }
   }
   if (members.length === 0) {
     membersDirectoryList.innerHTML = `<tr id="members-directory-empty"><td colspan="9">${t("crewsEmptyRow")}</td></tr>`;
@@ -2501,6 +2542,35 @@ membersDirectoryRefreshButton.addEventListener("click", () => {
 
 membersDirectoryCloseButton.addEventListener("click", () => {
   membersDirectoryOverlay.style.display = "none";
+});
+
+membersDirectoryList.addEventListener("change", (event) => {
+  const checkbox = event.target as HTMLInputElement;
+  if (!checkbox.classList.contains("members-directory-select-checkbox")) return;
+  const id = Number(checkbox.dataset.id);
+  if (checkbox.checked) selectedMemberIds.add(id);
+  else selectedMemberIds.delete(id);
+});
+
+// Force-withdrawal ("kick") — same shape as the leaderboard/guestbook admin bulk-delete buttons:
+// confirm, call the RPC with the shared admin password, then re-render from its own returned
+// (already-fresh) roster instead of re-fetching.
+membersDirectoryAdminDeleteButton.addEventListener("click", () => {
+  if (!adminPassword || selectedMemberIds.size === 0) return;
+  if (!window.confirm(`선택한 ${selectedMemberIds.size}명을 강제 탈퇴시키겠습니까? 되돌릴 수 없습니다.`)) return;
+  void adminDeleteMembers(Array.from(selectedMemberIds), adminPassword)
+    .then((roster) => {
+      showToast("강제 탈퇴가 완료되었습니다.");
+      return renderMembersDirectory(roster);
+    })
+    .catch((err) => {
+      if (err instanceof WrongAdminPasswordError) {
+        forceAdminLogout("관리자 인증이 만료되었습니다. 다시 로그인해주세요.");
+      } else {
+        console.error("회원 강제 탈퇴 실패:", err);
+        window.alert("탈퇴 처리 중 오류가 발생했습니다. 다시 시도해주세요.");
+      }
+    });
 });
 
 // --- BDJ Crews direct chat --------------------------------------------------------------------

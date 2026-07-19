@@ -1,3 +1,4 @@
+import { WrongAdminPasswordError } from "./Admin";
 import { supabase } from "./supabaseClient";
 
 export type MemberGender = "male" | "female";
@@ -173,15 +174,8 @@ export async function countMembers(): Promise<number> {
   return data;
 }
 
-/** Crew-only — requires the caller's own member credentials (verified server-side by
- *  list_members(), same re-verify-every-time pattern as every other member action), so a guest
- *  can never read this directly, even via the raw Supabase REST API. THROWS on error instead of
- *  returning [] — the directory popup needs to tell "no members yet" apart from "couldn't be
- *  reached", since an empty-looking directory with registered members hides a real problem. */
-export async function loadMembers(name: string, password: string): Promise<MemberDirectoryEntry[]> {
-  const { data, error } = await supabase.rpc("list_members", { p_name: name, p_password: password });
-  if (error) throwMemberError(error);
-  return ((data as MemberDirectoryRow[] | null) ?? []).map((row) => ({
+function toDirectoryEntry(row: MemberDirectoryRow): MemberDirectoryEntry {
+  return {
     id: row.id,
     name: row.name,
     gender: row.gender,
@@ -190,5 +184,29 @@ export async function loadMembers(name: string, password: string): Promise<Membe
     email: row.email,
     photoData: row.photo_data,
     dateIso: row.created_at,
-  }));
+  };
+}
+
+/** Crew-only — requires the caller's own member credentials (verified server-side by
+ *  list_members(), same re-verify-every-time pattern as every other member action), so a guest
+ *  can never read this directly, even via the raw Supabase REST API. THROWS on error instead of
+ *  returning [] — the directory popup needs to tell "no members yet" apart from "couldn't be
+ *  reached", since an empty-looking directory with registered members hides a real problem. */
+export async function loadMembers(name: string, password: string): Promise<MemberDirectoryEntry[]> {
+  const { data, error } = await supabase.rpc("list_members", { p_name: name, p_password: password });
+  if (error) throwMemberError(error);
+  return ((data as MemberDirectoryRow[] | null) ?? []).map(toDirectoryEntry);
+}
+
+/** Admin-only force withdrawal ("kick") — bypasses the member's own password entirely, gated
+ *  purely by the shared admin password (re-verified server-side every call), same shape as
+ *  adminDeleteLeaderboardEntries/adminDeleteGuestbookEntries. Same on-delete-set-null cascade as
+ *  self-service withdrawMember — past guestbook/leaderboard rows stick around unowned. */
+export async function adminDeleteMembers(ids: number[], adminPassword: string): Promise<MemberDirectoryEntry[]> {
+  const { data, error } = await supabase.rpc("admin_delete_members", { p_ids: ids, p_admin_password: adminPassword });
+  if (error) {
+    if (error.message === "wrong_password") throw new WrongAdminPasswordError();
+    throw new Error(error.message);
+  }
+  return ((data as MemberDirectoryRow[] | null) ?? []).map(toDirectoryEntry);
 }

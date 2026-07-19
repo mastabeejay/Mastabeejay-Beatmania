@@ -219,6 +219,9 @@ export const T: Record<string, Dict> = {
   difficultyExtreme: { ko: "개어려움", en: "Extreme", zh: "极难", vi: "Cực khó", ja: "超難関", es: "Extrema", fr: "Extrême" },
   bgmCustomDisplay: { ko: "자유 음원", en: "Custom Track", zh: "自选音源", vi: "Nhạc tự chọn", ja: "自由音源", es: "Pista personalizada", fr: "Piste personnalisée" },
   bgmNoneDisplay: { ko: "무반주", en: "No BGM", zh: "无伴奏", vi: "Không nhạc nền", ja: "伴奏なし", es: "Sin acompañamiento", fr: "Sans accompagnement" },
+  bgmTapToStartHint: {
+    ko: "🔈 화면을 터치하면 음악이 재생됩니다", en: "🔈 Tap anywhere to start the music", zh: "🔈 点按屏幕即可播放音乐", vi: "🔈 Chạm vào màn hình để phát nhạc", ja: "🔈 画面をタップすると音楽が再生されます", es: "🔈 Toca la pantalla para reproducir la música", fr: "🔈 Touchez l'écran pour lancer la musique",
+  },
 
   // --- Control groups: Track / Level / Option ------------------------------------------------------
   trackGroupTitle: { ko: "Track", en: "Track", zh: "音轨", vi: "Bản nhạc", ja: "トラック", es: "Pista", fr: "Piste" },

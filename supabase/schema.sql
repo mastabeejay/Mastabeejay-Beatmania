@@ -726,6 +726,22 @@ begin
 end;
 $$;
 
+-- Admin force-withdrawal ("kick") — same shape as admin_delete_guestbook_entries/
+-- admin_delete_leaderboard_entries further below: verify the shared admin password, delete, return
+-- the fresh roster. Same on-delete-set-null cascade as member_withdraw above — a kicked member's
+-- past guestbook/leaderboard rows stick around unowned rather than vanishing.
+create or replace function admin_delete_members(p_ids bigint[], p_admin_password text)
+returns setof members_public
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  delete from members where id = any(p_ids);
+  return query select * from members_public;
+end;
+$$;
+
 -- Crews direct chat: the client is responsible for only ever offering this against a member who's
 -- currently online (there's no DB-level online concept — that's Realtime Presence, see
 -- src/game/Presence.ts — so this can't enforce it server-side); here we just verify the sender and
@@ -1134,6 +1150,7 @@ grant execute on function member_login(text, text) to anon, authenticated;
 grant execute on function member_update_profile(text, text, text, date, text, text, text, text) to anon, authenticated;
 grant execute on function member_withdraw(text, text) to anon, authenticated;
 grant execute on function list_members(text, text) to anon, authenticated;
+grant execute on function admin_delete_members(bigint[], text) to anon, authenticated;
 grant execute on function send_direct_message(text, text, bigint, text) to anon, authenticated;
 grant execute on function load_direct_messages(text, text, bigint) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;
