@@ -3815,13 +3815,30 @@ function playMainBgmNative(): void {
     .catch(() => setMainBgmPlayIcon(false));
 }
 
-function playMainBgm(): void {
+/** Root-cause fix (2nd round): resume() must be *awaited* before play() — calling it fire-and-
+ *  forget (the previous version of this function) meant audio.play() ran essentially in parallel
+ *  with the AudioContext still mid-resume, so the very first play attempt after any suspend (the
+ *  page's initial gesture-driven unlock, and every "return to the main screen and press play"
+ *  after a pause) raced ahead of the context actually becoming audible — producing exactly the
+ *  reported symptom: playback shows as started but is silent, and it takes a second press (by
+ *  which point the earlier resume() has quietly finished) to actually hear anything. */
+async function playMainBgm(): Promise<void> {
   setupMainBgmAudioGraph();
-  if (mainBgmAudioCtx?.state === "suspended") void mainBgmAudioCtx.resume();
-  void mainBgmAudio
-    .play()
-    .then(() => setMainBgmPlayIcon(true))
-    .catch(() => setMainBgmPlayIcon(false));
+  if (mainBgmAudioCtx && mainBgmAudioCtx.state === "suspended") {
+    try {
+      await mainBgmAudioCtx.resume();
+    } catch {
+      // Falls through to the play() attempt below regardless — if resume() itself is rejected
+      // (e.g. called outside a context this specific browser accepts), that attempt's own
+      // success/failure is what actually determines the icon state, not this.
+    }
+  }
+  try {
+    await mainBgmAudio.play();
+    setMainBgmPlayIcon(true);
+  } catch {
+    setMainBgmPlayIcon(false);
+  }
 }
 
 /** Pauses playback AND suspends the AudioContext — root-cause fix for the "infinite stutter/
@@ -3849,7 +3866,7 @@ function stopMainBgm(): void {
 
 mainBgmAudio.addEventListener("ended", () => {
   loadMainBgmTrack(mainBgmTrackIndex + 1);
-  playMainBgm();
+  void playMainBgm();
 });
 
 // Self-review catch: a 404/decode failure on one track (e.g. a bad deploy) fires 'error', never
@@ -3871,7 +3888,7 @@ mainBgmAudio.addEventListener("error", () => {
   if (mainBgmConsecutiveErrors >= MAIN_BGM_TRACKS.length) return;
   mainBgmErrorRetryTimer = window.setTimeout(() => {
     loadMainBgmTrack(mainBgmTrackIndex + 1);
-    playMainBgm();
+    void playMainBgm();
   }, MAIN_BGM_ERROR_RETRY_DELAY_MS);
 });
 
@@ -3906,7 +3923,7 @@ mainBgmSeekSlider.addEventListener("pointercancel", () => {
 
 mainBgmPlayPauseButton.addEventListener("click", () => {
   if (mainBgmAudio.paused) {
-    playMainBgm();
+    void playMainBgm();
   } else {
     pauseMainBgm();
     // A manual pause is a deliberate choice — without this, the autoplay-unlock listener below
@@ -3921,11 +3938,11 @@ mainBgmStopButton.addEventListener("click", () => {
 });
 mainBgmNextButton.addEventListener("click", () => {
   loadMainBgmTrack(mainBgmTrackIndex + 1);
-  playMainBgm();
+  void playMainBgm();
 });
 mainBgmPrevButton.addEventListener("click", () => {
   loadMainBgmTrack(mainBgmTrackIndex - 1);
-  playMainBgm();
+  void playMainBgm();
 });
 mainBgmMuteButton.addEventListener("click", () => {
   const currentVolume = Number(mainBgmVolumeSlider.value);
@@ -3964,15 +3981,23 @@ function isMainScreenActive(): boolean {
 }
 
 // Autoplay-with-sound is blocked until a real user gesture. The fix is a document-level listener
-// that attempts playback on the next click/touch/key/scroll anywhere, removing itself the moment a
-// native 'play' event actually fires so it can never fight a later manual pause. Gated on
+// that attempts playback on the next click/touch/key anywhere, removing itself the moment a native
+// 'play' event actually fires so it can never fight a later manual pause. Gated on
 // isMainScreenActive() (not just "is it paused") so a gesture that itself just left the main screen
 // (e.g. clicking "Let's Start BDJ" as literally the page's first-ever interaction) can't re-trigger
 // playback after that same click already hid the start screen synchronously moments earlier.
-const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchstart", "keydown", "scroll"] as const;
+//
+// Root-cause fix (2nd round): 'scroll' was deliberately removed from this list. It is NOT a
+// browser-recognized user-activation gesture for autoplay purposes — but this code was treating it
+// as one, and on a phone "scroll to look around" is very often the very first thing a visitor does,
+// well before their first real tap. That fired this same unlock path anyway, setting up the Web
+// Audio graph and calling resume() from a non-gesture context that some mobile browsers never fully
+// honor — silently reproducing the exact "shows as playing but is actually silent" bug this
+// function exists to prevent, just moved from page-load to first-scroll instead of fixing it.
+const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchstart", "keydown"] as const;
 function tryUnlockMainBgm(): void {
   if (!isMainScreenActive() || !mainBgmAudio.paused) return;
-  playMainBgm();
+  void playMainBgm();
 }
 function stopTryingToUnlockMainBgm(): void {
   MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.removeEventListener(evt, tryUnlockMainBgm));
@@ -3986,7 +4011,7 @@ MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.addEventListener(evt, tryUnlock
 // every "session started"/"back to start screen" point in runSession/finalizeSession/abortWithMessage.
 const mainBgmOverlayObserver = new MutationObserver(() => {
   if (isMainScreenActive()) {
-    if (mainBgmWasPlayingBeforeLeaving) playMainBgm();
+    if (mainBgmWasPlayingBeforeLeaving) void playMainBgm();
   } else {
     mainBgmWasPlayingBeforeLeaving = !mainBgmAudio.paused;
     pauseMainBgm();
