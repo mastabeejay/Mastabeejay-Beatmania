@@ -376,7 +376,7 @@ const ctx = canvas.getContext("2d")!;
 
 // --- Main-screen BGM player ------------------------------------------------------------------
 // Perf fix: this whole section used to sit at the very bottom of the file — functionally fine, but
-// it meant playMainBgmNative()'s bare audio.play() call (and the mainBgmAudio.src assignment inside
+// it meant playMainBgmAmbient()'s bare audio.play() call (and the mainBgmAudio.src assignment inside
 // loadMainBgmTrack(), which is what lets the browser actually start fetching the audio bytes) didn't
 // run until the JS engine had first finished ~3300 lines of unrelated synchronous work: building the
 // language dropdown, i18n setup, and — the big one — kicking off the page's ~10 parallel Supabase
@@ -414,39 +414,25 @@ let mainBgmPreMuteVolume = 0.5;
 let mainBgmSeeking = false;
 let mainBgmErrorRetryTimer = 0;
 
-// iOS Safari silently ignores HTMLMediaElement.volume (the value reads back fine, nothing audible
-// changes) — routing gain through a Web Audio GainNode sidesteps this, since iOS doesn't lock that
-// down. audio.volume is still set too, since it works natively on desktop/Android; whichever
-// mechanism actually applies on a given platform ends up correct.
-//
-// Root-cause note (mobile fix): this graph must NOT be set up until the first real user gesture.
-// createMediaElementSource() permanently reroutes this <audio> element's output through the
-// AudioContext — from that point on, nothing is audible unless the context is 'running'. Doing
-// this eagerly at page load (before any gesture) created an AudioContext that mobile Safari/Chrome
-// would only partially/unreliably resume even from a later real gesture — matching exactly what
-// was reported: playback showing as started (paused=false) with total silence until the play/pause
-// button was toggled several times (each toggle was a fresh gesture attempt at resume(), and one
-// eventually happened to land). Deferring setup to the first gesture-driven call (see
-// playMainBgmNative below for the ambient, no-gesture page-load attempt) avoids that entirely — the
-// very first time this runs, it is guaranteed to be inside a trusted gesture.
-let mainBgmAudioCtx: AudioContext | null = null;
-let mainBgmGainNode: GainNode | null = null;
-function setupMainBgmAudioGraph(): void {
-  if (mainBgmGainNode) return;
-  try {
-    mainBgmAudioCtx = new AudioContext();
-    const source = mainBgmAudioCtx.createMediaElementSource(mainBgmAudio);
-    mainBgmGainNode = mainBgmAudioCtx.createGain();
-    mainBgmGainNode.gain.value = Number(mainBgmVolumeSlider.value);
-    source.connect(mainBgmGainNode).connect(mainBgmAudioCtx.destination);
-  } catch {
-    // Very old browsers without Web Audio support: falls back to audio.volume alone.
-  }
-}
-
+// Root-cause fix (4th round — "shows playing but silent until the page is fully reloaded", reported
+// live on iPhone): this player used to route output through an AudioContext+GainNode purely so the
+// volume slider could work around iOS Safari silently ignoring HTMLMediaElement.volume. That graph
+// was created lazily, only inside a real gesture, specifically to avoid the poisoned-graph bug two
+// rounds ago — but it turned out to be a second, independent source of the same class of failure:
+// the *first* AudioContext a page creates can, in some real-world conditions on iOS, end up in a
+// state where resume() resolves and .state reports 'running' while the audio session still never
+// actually reaches the speaker. A full page reload (a brand new AudioContext, on a clean page load)
+// then works on the very next press — exactly the reported symptom. Rather than keep chasing this
+// undocumented iOS state machine through a 4th, 5th... round, the graph is removed entirely: this is
+// now a plain <audio> element with no Web Audio involved at all, identical to the ambient/no-gesture
+// attempt (playMainBgmAmbient below) that has reliably worked every other time it's been tested.
+// Trade-off, accepted deliberately: the volume slider no longer has any audible effect on iOS Safari
+// specifically — audio.volume was always silently ignored there, with or without this graph; the
+// graph was a workaround for that, not a fix for anything this feature's actual priority (autoplay +
+// reliably audible playback) depends on. Desktop/Android are unaffected, since audio.volume works
+// natively there.
 function applyMainBgmVolume(volume: number): void {
   mainBgmAudio.volume = volume;
-  if (mainBgmGainNode) mainBgmGainNode.gain.value = volume;
   mainBgmMuteButton.textContent = volume === 0 ? "🔇" : "🔊";
 }
 
@@ -478,42 +464,12 @@ function setMainBgmPlayIcon(isPlaying: boolean): void {
   mainBgmPlayPauseButton.textContent = isPlaying ? "⏸" : "▶";
 }
 
-/** Bare HTMLMediaElement attempt with no Web Audio graph touched — used only for the ambient
- *  autoplay try at page load, before any real gesture has happened. See setupMainBgmAudioGraph's
- *  comment above for why the graph must not be created here. */
-function playMainBgmNative(): void {
-  // Debug affordance: ?bgm-no-autoplay makes every ambient (non-gesture) attempt act as if the
-  // browser had blocked it, the way phones do. Desktop browsers' permissive autoplay policy
-  // otherwise lets these attempts always succeed, which makes the gesture-unlock path — the one
-  // that actually matters on mobile — untestable from a desktop browser.
-  if (new URLSearchParams(location.search).has("bgm-no-autoplay")) {
-    setMainBgmPlayIcon(false);
-    return;
-  }
-  void mainBgmAudio
-    .play()
-    .then(() => setMainBgmPlayIcon(true))
-    .catch(() => setMainBgmPlayIcon(false));
-}
-
-/** Root-cause fix (2nd round): resume() must be *awaited* before play() — calling it fire-and-
- *  forget (the previous version of this function) meant audio.play() ran essentially in parallel
- *  with the AudioContext still mid-resume, so the very first play attempt after any suspend (the
- *  page's initial gesture-driven unlock, and every "return to the main screen and press play"
- *  after a pause) raced ahead of the context actually becoming audible — producing exactly the
- *  reported symptom: playback shows as started but is silent, and it takes a second press (by
- *  which point the earlier resume() has quietly finished) to actually hear anything. */
+/** The one real playback attempt, used by every caller — player buttons, the document-level unlock
+ *  listener, track-end/error auto-advance, and (via playMainBgmAmbient below) the ambient page-load
+ *  tries. No Web Audio graph involved (see applyMainBgmVolume's comment for why that was removed) —
+ *  just a plain play() call, so there's no separate context state that can end up in the "reports
+ *  running but silent" state that caused this exact symptom before. */
 async function playMainBgm(): Promise<void> {
-  setupMainBgmAudioGraph();
-  if (mainBgmAudioCtx && mainBgmAudioCtx.state === "suspended") {
-    try {
-      await mainBgmAudioCtx.resume();
-    } catch {
-      // Falls through to the play() attempt below regardless — if resume() itself is rejected
-      // (e.g. called outside a context this specific browser accepts), that attempt's own
-      // success/failure is what actually determines the icon state, not this.
-    }
-  }
   try {
     await mainBgmAudio.play();
     setMainBgmPlayIcon(true);
@@ -522,13 +478,25 @@ async function playMainBgm(): Promise<void> {
   }
 }
 
-/** Pauses playback AND suspends the AudioContext — root-cause fix for the "infinite stutter/
- *  repeat" reported when starting a game session while BGM was playing: pausing the *element*
- *  alone left this player's AudioContext sitting 'running' (open on the shared hardware audio
- *  output) at the exact moment the game created its own separate AudioContext for sound effects,
- *  and the two contended for the same mobile audio session. Suspending here releases it fully, and
- *  is also the fix for "no residual noise / doesn't come back alive later" — nothing downstream of
- *  this can produce sound until playMainBgm() explicitly resumes the context again.
+/** Ambient (no-gesture) attempt — the page-load try and the two delayed re-attempts further below.
+ *  Functionally identical to playMainBgm() now; kept as its own thin wrapper only for the
+ *  ?bgm-no-autoplay debug flag, which must simulate a blocked *ambient* attempt without also
+ *  blocking a real gesture-driven click — the gesture-unlock path is the one that actually matters
+ *  on mobile, and desktop browsers' own permissive autoplay policy would otherwise make it
+ *  impossible to exercise from a desktop browser. */
+function playMainBgmAmbient(): void {
+  if (new URLSearchParams(location.search).has("bgm-no-autoplay")) {
+    setMainBgmPlayIcon(false);
+    return;
+  }
+  void playMainBgm();
+}
+
+/** Pauses playback — also the fix for the "infinite stutter/repeat" once reported when starting a
+ *  game session while BGM was playing: pausing the plain <audio> element (there's no separate
+ *  AudioContext to also release now — see applyMainBgmVolume's comment) fully frees it from the
+ *  shared mobile audio session before the game creates its own AudioContext for sound effects, so
+ *  the two no longer contend for the same output.
  *
  *  Self-review catch (two gaps, same class of bug): first, this also cancels any pending
  *  error-retry timer (see the 'error' listener below) — without it, a track failure right before
@@ -547,9 +515,6 @@ function pauseMainBgm(): void {
   window.clearTimeout(mainBgmErrorRetryTimer);
   mainBgmAudio.pause();
   setMainBgmPlayIcon(false);
-  if (mainBgmAudioCtx && mainBgmAudioCtx.state === "running") {
-    void mainBgmAudioCtx.suspend();
-  }
   stopTryingToUnlockMainBgm();
 }
 
@@ -712,28 +677,24 @@ function isMainScreenActive(): boolean {
 // attempt through — so music started via THAT path, and the broken touchstart trigger never
 // mattered. Relocating the section for faster startup removed that accidental crutch: the ambient
 // attempt now fires before any touch (always rejected), every scroll/tap then hit this unlock path
-// via touchstart with no activation (play() rejected every time — and worse, it built the Web
-// Audio graph outside a gesture, recreating the poisoned-suspended-graph silence documented on
-// setupMainBgmAudioGraph), and iOS often doesn't bubble a document-level 'click' for taps on
-// non-interactive elements at all, so the click trigger couldn't save it either. 'touchend' is the
-// event WebKit actually grants activation on (it also fires for taps on non-interactive elements),
-// which makes the very first tap anywhere genuinely able to start playback.
+// via touchstart with no activation (play() rejected every time), and iOS often doesn't bubble a
+// document-level 'click' for taps on non-interactive elements at all, so the click trigger couldn't
+// save it either. 'touchend' is the event WebKit actually grants activation on (it also fires for
+// taps on non-interactive elements), which makes the very first tap anywhere genuinely able to
+// start playback.
 const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchend"] as const;
 // True until the unlock listeners are torn down (first successful play, or any pause/stop). The
 // delayed ambient re-attempts below check this so they can never revive audio the visitor has
 // since paused/stopped — same guarantee the error-retry timer upholds via isMainScreenActive().
 let mainBgmUnlockArmed = true;
+// Note: this used to also skip attempts where navigator.userActivation.isActive was false (e.g. a
+// touchend ending a scroll pan) — that check existed purely to avoid building the Web Audio graph
+// outside a real gesture. Now that there's no graph to poison (see applyMainBgmVolume's comment),
+// the check is gone: every click/touchend just tries play() and lets the browser itself be the
+// judge, which also means a genuinely-activating event is never skipped by our own overly
+// conservative guess at what "counts."
 function tryUnlockMainBgm(): void {
   if (!isMainScreenActive() || !mainBgmAudio.paused) return;
-  // Where the browser exposes it (Safari 16.4+/Chrome 105+), skip the attempt outright when this
-  // event carries no user activation (e.g. the touchend that ends a scroll pan on platforms that
-  // don't count panning as interaction). Without this, a no-activation attempt doesn't just fail —
-  // its setupMainBgmAudioGraph() call would permanently reroute the element through an
-  // AudioContext born suspended outside any gesture (the exact silent-playback poison described on
-  // that function), and resume() called without activation never settles on iOS, leaving
-  // playMainBgm() stuck awaiting forever. Older browsers without the API fall through unchanged.
-  const activation = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation;
-  if (activation && !activation.isActive) return;
   void playMainBgm();
 }
 function stopTryingToUnlockMainBgm(): void {
@@ -802,10 +763,9 @@ startOverlay.addEventListener("click", (e) => {
   mainBgmVolumeSlider.value = String(initialVolume);
   applyMainBgmVolume(initialVolume);
   loadMainBgmTrack(0);
-  // Ambient attempt on load — succeeds instantly (native, no Web Audio graph) on desktop browsers
-  // with a permissive autoplay policy, and falls back to the gesture-unlock path above everywhere
-  // else, which is what first sets up the Web Audio graph (see setupMainBgmAudioGraph's comment).
-  playMainBgmNative();
+  // Ambient attempt on load — succeeds instantly on desktop browsers with a permissive autoplay
+  // policy, and falls back to the gesture-unlock path above everywhere else.
+  playMainBgmAmbient();
   // Two delayed ambient re-attempts, restoring on purpose what the section's old bottom-of-file
   // position did by accident (see the MAIN_BGM_UNLOCK_EVENTS comment above): on a phone the visitor
   // has usually already touched the page within the first seconds while it's still loading, and
@@ -816,7 +776,7 @@ startOverlay.addEventListener("click", (e) => {
   // happened, and mainBgmUnlockArmed keeps them from ever reviving audio after a successful start
   // that the visitor then paused/stopped.
   const ambientReattempt = () => {
-    if (mainBgmUnlockArmed && isMainScreenActive() && mainBgmAudio.paused) playMainBgmNative();
+    if (mainBgmUnlockArmed && isMainScreenActive() && mainBgmAudio.paused) playMainBgmAmbient();
   };
   window.setTimeout(ambientReattempt, 2500);
   window.addEventListener("load", ambientReattempt, { once: true });

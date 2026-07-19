@@ -12,4 +12,6 @@ export const MAIN_BGM_TRACKS: MainBgmTrack[] = [
   { fileUrl: "/audio/mainbgm/mainbgm-02.mp3", title: "Beat Breaker - Classic instru." },
   { fileUrl: "/audio/mainbgm/mainbgm-03.mp3", title: "Beat Breaker - DJ ver." },
   { fileUrl: "/audio/mainbgm/mainbgm-04.mp3", title: "무한대" },
+  { fileUrl: "/audio/mainbgm/mainbgm-05.mp3", title: "Emotional Beat" },
+  { fileUrl: "/audio/mainbgm/mainbgm-06.mp3", title: "비트대마왕" },
 ];
