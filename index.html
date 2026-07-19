@@ -233,16 +233,20 @@
         <div id="main-screen-bottom-dock">
           <div id="main-bgm-player">
             <audio id="main-bgm-audio" preload="auto"></audio>
-            <button id="main-bgm-prev-button" type="button" aria-label="이전 곡" title="이전 곡">⏮</button>
-            <button id="main-bgm-play-pause-button" type="button" aria-label="재생/일시정지" title="재생/일시정지">▶</button>
-            <button id="main-bgm-next-button" type="button" aria-label="다음 곡" title="다음 곡">⏭</button>
-            <div id="main-bgm-marquee">
-              <div id="main-bgm-marquee-track">
-                <span class="main-bgm-marquee-copy"></span>
-                <span class="main-bgm-marquee-copy" aria-hidden="true"></span>
+            <div id="main-bgm-controls-row">
+              <button id="main-bgm-prev-button" type="button" aria-label="이전 곡" title="이전 곡">⏮</button>
+              <button id="main-bgm-play-pause-button" type="button" aria-label="재생/일시정지" title="재생/일시정지">▶</button>
+              <button id="main-bgm-stop-button" type="button" aria-label="정지" title="정지">⏹</button>
+              <button id="main-bgm-next-button" type="button" aria-label="다음 곡" title="다음 곡">⏭</button>
+              <div id="main-bgm-marquee">
+                <div id="main-bgm-marquee-track">
+                  <span class="main-bgm-marquee-copy"></span>
+                  <span class="main-bgm-marquee-copy" aria-hidden="true"></span>
+                </div>
               </div>
+              <button id="main-bgm-mute-button" type="button" aria-label="음소거" title="음소거">🔊</button>
             </div>
-            <button id="main-bgm-mute-button" type="button" aria-label="음소거" title="음소거">🔊</button>
+            <input type="range" id="main-bgm-seek" min="0" max="0" step="0.1" value="0" aria-label="재생 위치" />
             <input type="range" id="main-bgm-volume" min="0" max="1" step="0.01" value="0.5" aria-label="음량 조절" />
           </div>
           <div id="install-guide-section">

@@ -141,7 +141,6 @@ html.theme-frosted .website-link-banner,
 html.theme-frosted #beejay-bros-panel-inner,
 html.theme-frosted .install-guide-card,
 html.theme-frosted #chatbot-panel,
-html.theme-frosted #chatbot-toggle-button,
 html.theme-frosted #guestbook-overlay-panel,
 html.theme-frosted .guestbook-entry,
 html.theme-frosted #admin-login-panel,
@@ -343,7 +342,6 @@ html:is(.theme-agentic, .theme-uxbooster) .website-link-banner,
 html:is(.theme-agentic, .theme-uxbooster) #beejay-bros-panel-inner,
 html:is(.theme-agentic, .theme-uxbooster) .install-guide-card,
 html:is(.theme-agentic, .theme-uxbooster) #chatbot-panel,
-html:is(.theme-agentic, .theme-uxbooster) #chatbot-toggle-button,
 html:is(.theme-agentic, .theme-uxbooster) #guestbook-overlay-panel,
 html:is(.theme-agentic, .theme-uxbooster) .guestbook-entry,
 html:is(.theme-agentic, .theme-uxbooster) #admin-login-panel,
@@ -478,7 +476,13 @@ html:is(.theme-agentic, .theme-uxbooster) #members-directory-table td.members-di
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 700;
-  color: var(--color-cyber-silver);
+  /* Root-cause fix: this overlay's own background (#05070d, above) is a fixed dark color that
+     never changes with the active skin — but var(--color-cyber-silver) DOES change, and on the
+     light skins (Agentic, UXBooster) it flips to a near-black ink meant for THEIR light canvas.
+     Paired with this overlay's permanently-dark background, that read as near-invisible dark-on-
+     dark text. A hardcoded light color (matching the fixed dark background it's actually always
+     shown against) fixes it regardless of which skin is active. */
+  color: #eafeff;
   line-height: 1.6;
 }
 
@@ -800,28 +804,36 @@ body::before {
   gap: 6px;
 }
 
-/* Same boxed-panel look as the install-guide cards below it, just a horizontal control row instead
-   of a card grid. Fixed width keeps the marquee's scroll distance (and therefore its reading
-   speed) consistent regardless of track-title length. */
+/* Same boxed-panel look as the install-guide cards below it. Width matches that 3-card row exactly
+   (74px card * 3 + 6px gap * 2 = 234px) so the two elements in the dock line up flush left/right
+   instead of the player looking like a mismatched guess. Column layout: the button/marquee row on
+   top, then the seek bar directly above the volume bar underneath it. */
 #main-bgm-player {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 260px;
+  flex-direction: column;
+  gap: 4px;
+  width: calc(74px * 3 + 6px * 2);
   padding: 6px 10px;
   border-radius: 10px;
   border: 1px solid rgba(var(--rgb-accent), 0.3);
   background: rgba(var(--rgb-panel), 0.7);
 }
 
+#main-bgm-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 #main-bgm-prev-button,
 #main-bgm-play-pause-button,
+#main-bgm-stop-button,
 #main-bgm-next-button,
 #main-bgm-mute-button {
   flex-shrink: 0;
   font-size: 14px;
   line-height: 1;
-  padding: 4px 6px;
+  padding: 4px 5px;
   border-radius: 6px;
   border: none;
   background: transparent;
@@ -832,6 +844,7 @@ body::before {
 
 #main-bgm-prev-button:hover,
 #main-bgm-play-pause-button:hover,
+#main-bgm-stop-button:hover,
 #main-bgm-next-button:hover,
 #main-bgm-mute-button:hover {
   background: rgba(var(--rgb-accent), 0.14);
@@ -869,9 +882,9 @@ body::before {
   }
 }
 
+#main-bgm-seek,
 #main-bgm-volume {
-  flex-shrink: 0;
-  width: 56px;
+  width: 100%;
   accent-color: var(--color-cyber-cyan);
 }
 
@@ -4588,10 +4601,13 @@ select option:disabled {
     align-items: center;
   }
 
-  /* Full-width row in the scrolling column instead of the desktop's narrow right-aligned bar —
+  /* Full-width bar in the scrolling column instead of the desktop's narrow right-aligned one —
      matches how #install-guide-section itself reflows at this breakpoint. */
   #main-bgm-player {
     width: 100%;
+  }
+
+  #main-bgm-controls-row {
     justify-content: center;
   }
 

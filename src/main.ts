@@ -3725,8 +3725,10 @@ startButton.addEventListener("click", () => {
 const mainBgmAudio = document.querySelector<HTMLAudioElement>("#main-bgm-audio")!;
 const mainBgmPrevButton = document.querySelector<HTMLButtonElement>("#main-bgm-prev-button")!;
 const mainBgmPlayPauseButton = document.querySelector<HTMLButtonElement>("#main-bgm-play-pause-button")!;
+const mainBgmStopButton = document.querySelector<HTMLButtonElement>("#main-bgm-stop-button")!;
 const mainBgmNextButton = document.querySelector<HTMLButtonElement>("#main-bgm-next-button")!;
 const mainBgmMuteButton = document.querySelector<HTMLButtonElement>("#main-bgm-mute-button")!;
+const mainBgmSeekSlider = document.querySelector<HTMLInputElement>("#main-bgm-seek")!;
 const mainBgmVolumeSlider = document.querySelector<HTMLInputElement>("#main-bgm-volume")!;
 const mainBgmMarqueeTrack = document.querySelector<HTMLDivElement>("#main-bgm-marquee-track")!;
 const mainBgmMarqueeCopies = document.querySelectorAll<HTMLSpanElement>(".main-bgm-marquee-copy");
@@ -3736,11 +3738,24 @@ const MAIN_BGM_VOLUME_STORAGE_KEY = "bdj-mainbgm-volume";
 let mainBgmTrackIndex = 0;
 let mainBgmWasPlayingBeforeLeaving = false;
 let mainBgmPreMuteVolume = 0.5;
+let mainBgmSeeking = false;
+let mainBgmErrorRetryTimer = 0;
 
 // iOS Safari silently ignores HTMLMediaElement.volume (the value reads back fine, nothing audible
 // changes) — routing gain through a Web Audio GainNode sidesteps this, since iOS doesn't lock that
 // down. audio.volume is still set too, since it works natively on desktop/Android; whichever
 // mechanism actually applies on a given platform ends up correct.
+//
+// Root-cause note (mobile fix): this graph must NOT be set up until the first real user gesture.
+// createMediaElementSource() permanently reroutes this <audio> element's output through the
+// AudioContext — from that point on, nothing is audible unless the context is 'running'. Doing
+// this eagerly at page load (before any gesture) created an AudioContext that mobile Safari/Chrome
+// would only partially/unreliably resume even from a later real gesture — matching exactly what
+// was reported: playback showing as started (paused=false) with total silence until the play/pause
+// button was toggled several times (each toggle was a fresh gesture attempt at resume(), and one
+// eventually happened to land). Deferring setup to the first gesture-driven call (see
+// playMainBgmNative below for the ambient, no-gesture page-load attempt) avoids that entirely — the
+// very first time this runs, it is guaranteed to be inside a trusted gesture.
 let mainBgmAudioCtx: AudioContext | null = null;
 let mainBgmGainNode: GainNode | null = null;
 function setupMainBgmAudioGraph(): void {
@@ -3763,9 +3778,20 @@ function applyMainBgmVolume(volume: number): void {
 }
 
 function loadMainBgmTrack(index: number): void {
+  // Self-review catch: without this, a manual Next/Prev click during the 700ms error-retry delay
+  // (see the 'error' listener below) left that stale timer armed — it read mainBgmTrackIndex fresh
+  // at fire time rather than the value from when it was scheduled, so it would silently overwrite
+  // whatever track the visitor had just manually picked with "the one after the track that failed
+  // earlier," a moment after they'd already moved on. Every track change (manual or automatic)
+  // funnels through this one function, so cancelling here covers every case with one line.
+  window.clearTimeout(mainBgmErrorRetryTimer);
   mainBgmTrackIndex = ((index % MAIN_BGM_TRACKS.length) + MAIN_BGM_TRACKS.length) % MAIN_BGM_TRACKS.length;
   const track = MAIN_BGM_TRACKS[mainBgmTrackIndex];
   mainBgmAudio.src = track.fileUrl;
+  // Reset immediately rather than waiting for 'loadedmetadata' on the new track — otherwise the
+  // seek bar would briefly keep showing the previous track's stale position/length.
+  mainBgmSeekSlider.value = "0";
+  mainBgmSeekSlider.max = "0";
   const marqueeText = `${track.title} — Produced by Yim Bongjin      `;
   mainBgmMarqueeCopies.forEach((el) => {
     el.textContent = marqueeText;
@@ -3779,6 +3805,16 @@ function setMainBgmPlayIcon(isPlaying: boolean): void {
   mainBgmPlayPauseButton.textContent = isPlaying ? "⏸" : "▶";
 }
 
+/** Bare HTMLMediaElement attempt with no Web Audio graph touched — used only for the ambient
+ *  autoplay try at page load, before any real gesture has happened. See setupMainBgmAudioGraph's
+ *  comment above for why the graph must not be created here. */
+function playMainBgmNative(): void {
+  void mainBgmAudio
+    .play()
+    .then(() => setMainBgmPlayIcon(true))
+    .catch(() => setMainBgmPlayIcon(false));
+}
+
 function playMainBgm(): void {
   setupMainBgmAudioGraph();
   if (mainBgmAudioCtx?.state === "suspended") void mainBgmAudioCtx.resume();
@@ -3788,9 +3824,27 @@ function playMainBgm(): void {
     .catch(() => setMainBgmPlayIcon(false));
 }
 
+/** Pauses playback AND suspends the AudioContext — root-cause fix for the "infinite stutter/
+ *  repeat" reported when starting a game session while BGM was playing: pausing the *element*
+ *  alone left this player's AudioContext sitting 'running' (open on the shared hardware audio
+ *  output) at the exact moment the game created its own separate AudioContext for sound effects,
+ *  and the two contended for the same mobile audio session. Suspending here releases it fully, and
+ *  is also the fix for "no residual noise / doesn't come back alive later" — nothing downstream of
+ *  this can produce sound until playMainBgm() explicitly resumes the context again. */
 function pauseMainBgm(): void {
   mainBgmAudio.pause();
   setMainBgmPlayIcon(false);
+  if (mainBgmAudioCtx && mainBgmAudioCtx.state === "running") {
+    void mainBgmAudioCtx.suspend();
+  }
+}
+
+/** Full stop for the dedicated Stop button — same as pauseMainBgm plus rewinding to the start,
+ *  matching a conventional player's Stop (vs. Pause, which resumes where it left off). */
+function stopMainBgm(): void {
+  pauseMainBgm();
+  mainBgmAudio.currentTime = 0;
+  mainBgmSeekSlider.value = "0";
 }
 
 mainBgmAudio.addEventListener("ended", () => {
@@ -3801,8 +3855,12 @@ mainBgmAudio.addEventListener("ended", () => {
 // Self-review catch: a 404/decode failure on one track (e.g. a bad deploy) fires 'error', never
 // 'ended' — without this, the playlist would just silently hang on that one track forever instead
 // of skipping past it. mainBgmConsecutiveErrors caps the auto-skip at one full lap of the playlist
-// so a deploy where every track is broken fails loud (via console.error below) instead of hammering
-// play()/error in an infinite loop.
+// so a deploy where every track is broken fails loud (via console.error below) instead of retrying
+// forever. The 700ms delay before each retry is itself a bug fix, found while verifying this: with
+// no delay, a transient network hiccup on one track fired 'error' -> retry -> 'error' again fast
+// enough to storm the connection with dozens of requests within milliseconds, which is what turned
+// a single flaky track into a cascade of failures across the whole playlist.
+const MAIN_BGM_ERROR_RETRY_DELAY_MS = 700;
 let mainBgmConsecutiveErrors = 0;
 mainBgmAudio.addEventListener("playing", () => {
   mainBgmConsecutiveErrors = 0;
@@ -3811,8 +3869,39 @@ mainBgmAudio.addEventListener("error", () => {
   console.error("메인 BGM 트랙 로드 실패:", MAIN_BGM_TRACKS[mainBgmTrackIndex]?.fileUrl, mainBgmAudio.error);
   mainBgmConsecutiveErrors += 1;
   if (mainBgmConsecutiveErrors >= MAIN_BGM_TRACKS.length) return;
-  loadMainBgmTrack(mainBgmTrackIndex + 1);
-  playMainBgm();
+  mainBgmErrorRetryTimer = window.setTimeout(() => {
+    loadMainBgmTrack(mainBgmTrackIndex + 1);
+    playMainBgm();
+  }, MAIN_BGM_ERROR_RETRY_DELAY_MS);
+});
+
+mainBgmAudio.addEventListener("loadedmetadata", () => {
+  mainBgmSeekSlider.max = String(mainBgmAudio.duration || 0);
+});
+mainBgmAudio.addEventListener("timeupdate", () => {
+  if (mainBgmSeeking) return;
+  mainBgmSeekSlider.value = String(mainBgmAudio.currentTime);
+});
+mainBgmSeekSlider.addEventListener("pointerdown", () => {
+  mainBgmSeeking = true;
+});
+mainBgmSeekSlider.addEventListener("input", () => {
+  mainBgmAudio.currentTime = Number(mainBgmSeekSlider.value);
+});
+// Self-review catch: 'change' alone left a way to get permanently stuck with mainBgmSeeking=true —
+// if the drag gets interrupted before a 'change' fires (the pointer gets captured by something else,
+// e.g. a phone call/notification on mobile, or the tab loses focus mid-drag), the seek bar would
+// freeze at wherever it was and silently stop tracking real playback forever (timeupdate's handler
+// above early-returns while this stays true). pointerup/pointercancel are a safety net that always
+// fires once the drag ends for any reason, not just a clean release.
+mainBgmSeekSlider.addEventListener("change", () => {
+  mainBgmSeeking = false;
+});
+mainBgmSeekSlider.addEventListener("pointerup", () => {
+  mainBgmSeeking = false;
+});
+mainBgmSeekSlider.addEventListener("pointercancel", () => {
+  mainBgmSeeking = false;
 });
 
 mainBgmPlayPauseButton.addEventListener("click", () => {
@@ -3825,6 +3914,10 @@ mainBgmPlayPauseButton.addEventListener("click", () => {
     // next click anywhere and immediately resume playback, fighting the visitor's own Pause.
     stopTryingToUnlockMainBgm();
   }
+});
+mainBgmStopButton.addEventListener("click", () => {
+  stopMainBgm();
+  stopTryingToUnlockMainBgm();
 });
 mainBgmNextButton.addEventListener("click", () => {
   loadMainBgmTrack(mainBgmTrackIndex + 1);
@@ -3848,6 +3941,13 @@ mainBgmMuteButton.addEventListener("click", () => {
 mainBgmVolumeSlider.addEventListener("input", () => {
   const volume = Number(mainBgmVolumeSlider.value);
   applyMainBgmVolume(volume);
+  // Self-review catch: mainBgmPreMuteVolume was only ever updated from the Mute button's own click
+  // handler — dragging the slider straight down to 0 by hand (bypassing that button entirely) left
+  // it holding a stale value, so clicking Mute (now showing 🔇, since volume is genuinely 0)
+  // afterward to "unmute" would restore whatever old volume happened to be stored instead of
+  // anything the visitor actually set. Keeping this updated here for every non-zero value keeps the
+  // "restore to" target correct regardless of which control silenced it.
+  if (volume > 0) mainBgmPreMuteVolume = volume;
   try {
     localStorage.setItem(MAIN_BGM_VOLUME_STORAGE_KEY, String(volume));
   } catch {
@@ -3916,7 +4016,8 @@ startOverlay.addEventListener("click", (e) => {
   mainBgmVolumeSlider.value = String(initialVolume);
   applyMainBgmVolume(initialVolume);
   loadMainBgmTrack(0);
-  // Attempt autoplay on load — succeeds on desktop browsers with a permissive autoplay policy, and
-  // falls back to the gesture-unlock path above everywhere else.
-  playMainBgm();
+  // Ambient attempt on load — succeeds instantly (native, no Web Audio graph) on desktop browsers
+  // with a permissive autoplay policy, and falls back to the gesture-unlock path above everywhere
+  // else, which is what first sets up the Web Audio graph (see setupMainBgmAudioGraph's comment).
+  playMainBgmNative();
 }
