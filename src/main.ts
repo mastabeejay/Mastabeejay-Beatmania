@@ -2877,9 +2877,9 @@ exitSiteButton.addEventListener("click", () => {
   if (!window.confirm(t("exitConfirmMsg"))) return;
   // Self-review catch: window.close() below silently no-ops on some platforms (iOS standalone in
   // particular — see the fallback overlay further down), leaving the page open with BGM still
-  // audibly playing behind a screen that's asking the visitor to leave. pauseMainBgm is declared
+  // audibly playing behind a screen that's asking the visitor to leave. stopMainBgm is declared
   // later in this file as a hoisted function declaration, so calling it here is safe.
-  pauseMainBgm();
+  stopMainBgm();
   // `open("", "_self")` re-targets this window as "opened by script" first — several Android
   // WebView/Chrome builds only allow a page to window.close() itself when that's true, and
   // otherwise silently no-op it (this is why it worked on PC — a desktop PWA's window already
@@ -3736,7 +3736,6 @@ const mainBgmMarqueeCopies = document.querySelectorAll<HTMLSpanElement>(".main-b
 const MAIN_BGM_VOLUME_STORAGE_KEY = "bdj-mainbgm-volume";
 
 let mainBgmTrackIndex = 0;
-let mainBgmWasPlayingBeforeLeaving = false;
 let mainBgmPreMuteVolume = 0.5;
 let mainBgmSeeking = false;
 let mainBgmErrorRetryTimer = 0;
@@ -3847,13 +3846,29 @@ async function playMainBgm(): Promise<void> {
  *  output) at the exact moment the game created its own separate AudioContext for sound effects,
  *  and the two contended for the same mobile audio session. Suspending here releases it fully, and
  *  is also the fix for "no residual noise / doesn't come back alive later" — nothing downstream of
- *  this can produce sound until playMainBgm() explicitly resumes the context again. */
+ *  this can produce sound until playMainBgm() explicitly resumes the context again.
+ *
+ *  Self-review catch (two gaps, same class of bug): first, this also cancels any pending
+ *  error-retry timer (see the 'error' listener below) — without it, a track failure right before
+ *  the visitor paused/stopped/left would still fire its 700ms-delayed retry afterward, since
+ *  loadMainBgmTrack() only clears that timer when a track actually changes, which none of
+ *  pause/stop/leaving-the-main-screen do. Second, this also permanently disables the
+ *  autoplay-unlock listener (stopTryingToUnlockMainBgm, defined further down as a hoisted function
+ *  declaration) — previously each individual call site (Pause button, Stop button, external-link
+ *  click, leaving the main screen) had to remember to call that separately, and the exit-site
+ *  button's own handler had quietly been missing it, leaving a real path where — if that exact
+ *  click happened to be the page's first-ever gesture — clicking Exit would immediately resume
+ *  audio moments after stopping it. Centralizing both here means every current AND future caller
+ *  gets a genuinely complete stop for free, instead of depending on each one remembering both
+ *  cleanup calls individually. */
 function pauseMainBgm(): void {
+  window.clearTimeout(mainBgmErrorRetryTimer);
   mainBgmAudio.pause();
   setMainBgmPlayIcon(false);
   if (mainBgmAudioCtx && mainBgmAudioCtx.state === "running") {
     void mainBgmAudioCtx.suspend();
   }
+  stopTryingToUnlockMainBgm();
 }
 
 /** Full stop for the dedicated Stop button — same as pauseMainBgm plus rewinding to the start,
@@ -3882,11 +3897,21 @@ let mainBgmConsecutiveErrors = 0;
 mainBgmAudio.addEventListener("playing", () => {
   mainBgmConsecutiveErrors = 0;
 });
+// Self-review catch (found live, verifying the fix above): preload="auto" on this element means
+// the browser can keep trying to buffer the currently-set src in the background even while
+// paused — so 'error' can fire at any time, including well after the visitor has already left the
+// main screen, not just from a foreground retry. Without the isMainScreenActive() checks below,
+// that background failure would arm (or fire, if already armed before leaving) a retry that calls
+// playMainBgm() regardless — reviving audio during an actual game session, which is exactly the
+// "must never come back alive on its own" guarantee this whole feature exists to uphold. Checked
+// both when the error fires AND again inside the delayed callback, since the visitor can also leave
+// during the 700ms gap between the two.
 mainBgmAudio.addEventListener("error", () => {
   console.error("메인 BGM 트랙 로드 실패:", MAIN_BGM_TRACKS[mainBgmTrackIndex]?.fileUrl, mainBgmAudio.error);
   mainBgmConsecutiveErrors += 1;
-  if (mainBgmConsecutiveErrors >= MAIN_BGM_TRACKS.length) return;
+  if (mainBgmConsecutiveErrors >= MAIN_BGM_TRACKS.length || !isMainScreenActive()) return;
   mainBgmErrorRetryTimer = window.setTimeout(() => {
+    if (!isMainScreenActive()) return;
     loadMainBgmTrack(mainBgmTrackIndex + 1);
     void playMainBgm();
   }, MAIN_BGM_ERROR_RETRY_DELAY_MS);
@@ -3926,15 +3951,10 @@ mainBgmPlayPauseButton.addEventListener("click", () => {
     void playMainBgm();
   } else {
     pauseMainBgm();
-    // A manual pause is a deliberate choice — without this, the autoplay-unlock listener below
-    // (still attached if the very first gesture on the page was this exact click) would see the
-    // next click anywhere and immediately resume playback, fighting the visitor's own Pause.
-    stopTryingToUnlockMainBgm();
   }
 });
 mainBgmStopButton.addEventListener("click", () => {
   stopMainBgm();
-  stopTryingToUnlockMainBgm();
 });
 mainBgmNextButton.addEventListener("click", () => {
   loadMainBgmTrack(mainBgmTrackIndex + 1);
@@ -3994,7 +4014,14 @@ function isMainScreenActive(): boolean {
 // Audio graph and calling resume() from a non-gesture context that some mobile browsers never fully
 // honor — silently reproducing the exact "shows as playing but is actually silent" bug this
 // function exists to prevent, just moved from page-load to first-scroll instead of fixing it.
-const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchstart", "keydown"] as const;
+//
+// Self-review catch (same lesson, smaller degree): 'keydown' has the identical risk — whether it
+// counts as "real" user activation for autoplay purposes is inconsistent across browsers (some
+// specifically exclude Tab, since it's page navigation rather than "interaction with the page"),
+// unlike click/touchstart which are universally honored everywhere. Since this is a mouse/touch/
+// hand-tracking game with no meaningful keyboard-only play path, there's no real cost to dropping
+// the uncertain trigger and keeping only the two unambiguous ones.
+const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchstart"] as const;
 function tryUnlockMainBgm(): void {
   if (!isMainScreenActive() || !mainBgmAudio.paused) return;
   void playMainBgm();
@@ -4005,28 +4032,43 @@ function stopTryingToUnlockMainBgm(): void {
 mainBgmAudio.addEventListener("play", stopTryingToUnlockMainBgm, { once: true });
 MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.addEventListener(evt, tryUnlockMainBgm, { passive: true }));
 
-// Leaving the main screen (game start) pauses BGM; returning to it (game end/abort) resumes only if
-// it was actually playing beforehand. Driven by a MutationObserver on #start-overlay's own style
-// attribute rather than new hooks in the game code, since that already toggles display:none/'' at
-// every "session started"/"back to start screen" point in runSession/finalizeSession/abortWithMessage.
+// Leaving the main screen (game start) fully stops BGM. Returning to it (game end/abort) does NOT
+// resume it — by explicit request, coming back from a game session should land on a stopped
+// player, not one that silently picked up again, so the visitor has to press play themselves.
+// Driven by a MutationObserver on #start-overlay's own style attribute rather than new hooks in the
+// game code, since that already toggles display:none/'' at every "session started"/"back to start
+// screen" point in runSession/finalizeSession/abortWithMessage.
 const mainBgmOverlayObserver = new MutationObserver(() => {
-  if (isMainScreenActive()) {
-    if (mainBgmWasPlayingBeforeLeaving) void playMainBgm();
-  } else {
-    mainBgmWasPlayingBeforeLeaving = !mainBgmAudio.paused;
-    pauseMainBgm();
+  if (!isMainScreenActive()) {
+    stopMainBgm();
   }
 });
 mainBgmOverlayObserver.observe(startOverlay, { attributes: true, attributeFilter: ["style"] });
 
+// Self-reflection catch (found by tracing the code, not from a live report): the last frame's
+// key-zone/scratch-disk graphics stayed painted on #overlay-canvas after a session ended — the
+// render loop's own `if (stopped) return;` guard (inside renderFrame, above) exits before its
+// clearRect ever runs again — and were faintly visible through #start-overlay's own ~85%-opaque
+// background afterward. Reusing the exact same reactive pattern as the BGM observer above (same
+// startOverlay style attribute, only ever touched by the game's own start/stop code) clears it the
+// moment the start screen reappears, without adding a clear call to each of the ~7 scattered
+// "return to start screen" code paths individually. CameraManager.stop() (see that file) is the
+// matching fix for the other half of the same symptom — the frozen last camera frame underneath.
+const stageCleanupObserver = new MutationObserver(() => {
+  if (isMainScreenActive()) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+});
+stageCleanupObserver.observe(startOverlay, { attributes: true, attributeFilter: ["style"] });
+
 // Every external social/website/Beejay-Bros link banner opens target="_blank" — the visitor's
 // attention has left the main screen even though the tab itself hasn't navigated anywhere, so BGM
-// stops the same way it would if they'd started the game. One delegated listener covers all of them
-// (present and future) instead of wiring each container separately.
+// stops the same way it would if they'd started the game (same "stays stopped" rule — no
+// auto-resume when they come back). One delegated listener covers all of them (present and future)
+// instead of wiring each container separately.
 startOverlay.addEventListener("click", (e) => {
   if ((e.target as HTMLElement).closest('a[target="_blank"]')) {
-    pauseMainBgm();
-    stopTryingToUnlockMainBgm();
+    stopMainBgm();
   }
 });
 

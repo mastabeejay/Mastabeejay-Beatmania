@@ -94,5 +94,11 @@ export class CameraManager {
   stop(): void {
     this.running = false;
     this.stream?.getTracks().forEach((track) => track.stop());
+    // Self-review catch: stopping the tracks alone leaves the <video> element showing its last
+    // decoded frame, frozen — clearing srcObject is what actually blanks it. Without this, that
+    // frozen frame (plus the overlay canvas's own last-drawn frame, cleared separately in main.ts)
+    // stayed faintly visible behind the start screen's translucent background after every session.
+    this.stream = null;
+    this.video.srcObject = null;
   }
 }
