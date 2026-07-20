@@ -215,6 +215,19 @@ create table if not exists site_banner_images (
   created_at timestamptz not null default now()
 );
 
+-- Up to 3 admin-authored popup notices shown in a dismissible modal the instant the main screen
+-- loads — distinct from site_notice's own singleton inline banner (display_mode picks ONE of
+-- notice/graffiti/images to show inline on the page): this is a separate, stackable list, each
+-- independently enable-able without deleting its saved text. Same capped-list shape as
+-- site_banner_images/website_links (RLS public-read + admin-write RPCs further down).
+create table if not exists notice_popups (
+  id bigint generated always as identity primary key,
+  content text not null,
+  enabled boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 -- --- Row Level Security -------------------------------------------------------------------------
 -- Enabling RLS with no policy = deny-all by default. Only the policies below (plus the
 -- `security definer` functions further down, which bypass RLS) can touch these tables.
@@ -226,6 +239,7 @@ alter table admin_settings enable row level security;
 alter table social_links enable row level security;
 alter table site_notice enable row level security;
 alter table site_banner_images enable row level security;
+alter table notice_popups enable row level security;
 alter table members enable row level security;
 -- `admin_settings` has no policies at all — not even select. `members` is the same — every read
 -- and write goes through a security definer function below (admin_login()/member_login()/
@@ -255,6 +269,13 @@ grant select on site_notice to anon, authenticated;
 drop policy if exists "public read site_banner_images" on site_banner_images;
 create policy "public read site_banner_images" on site_banner_images for select using (true);
 grant select on site_banner_images to anon, authenticated;
+
+-- Public read includes disabled rows too (same "client decides what to do with it" shape as every
+-- other admin-managed list here) — the main-screen popup filters to enabled ones itself, while the
+-- admin panel needs to see disabled rows too so they can be re-enabled without re-typing them.
+drop policy if exists "public read notice_popups" on notice_popups;
+create policy "public read notice_popups" on notice_popups for select using (true);
+grant select on notice_popups to anon, authenticated;
 
 -- No select policy on `guestbook` itself — password_hash must never reach the client. Anon reads
 -- go through the view below instead, which is defined without `security_invoker`, so it queries
@@ -1131,6 +1152,57 @@ begin
 end;
 $$;
 
+-- Notice popups: same capped-list shape as banner images (add/update/delete, each returning the
+-- fresh full list), except capped at 3 and with a plain count check instead of an array-length one,
+-- since these are added one at a time (a single textarea + button), not a multi-file upload.
+create or replace function admin_add_notice_popup(p_content text, p_admin_password text)
+returns setof notice_popups
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_next_sort integer;
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  if p_content is null or length(trim(p_content)) = 0 then
+    raise exception 'empty_content';
+  end if;
+  if (select count(*) from notice_popups) >= 3 then
+    raise exception 'too_many_notices';
+  end if;
+  select coalesce(max(sort_order), -1) + 1 into v_next_sort from notice_popups;
+  insert into notice_popups (content, enabled, sort_order) values (trim(p_content), true, v_next_sort);
+  return query select * from notice_popups order by sort_order;
+end;
+$$;
+
+create or replace function admin_update_notice_popup(p_id bigint, p_content text, p_enabled boolean, p_admin_password text)
+returns setof notice_popups
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  if p_content is null or length(trim(p_content)) = 0 then
+    raise exception 'empty_content';
+  end if;
+  update notice_popups set content = trim(p_content), enabled = p_enabled where id = p_id;
+  return query select * from notice_popups order by sort_order;
+end;
+$$;
+
+create or replace function admin_delete_notice_popup(p_id bigint, p_admin_password text)
+returns setof notice_popups
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  delete from notice_popups where id = p_id;
+  return query select * from notice_popups order by sort_order;
+end;
+$$;
+
 grant execute on function submit_score(text, text, integer, text, text, text, text, integer, text, text) to anon, authenticated;
 grant execute on function edit_leaderboard_entry(bigint, text, text, text) to anon, authenticated;
 grant execute on function delete_leaderboard_entry(bigint, text, text) to anon, authenticated;
@@ -1163,6 +1235,9 @@ grant execute on function admin_set_chatbot_mode(text, text) to anon, authentica
 grant execute on function admin_set_skin_design(text, text) to anon, authenticated;
 grant execute on function admin_add_banner_images(text[], text) to anon, authenticated;
 grant execute on function admin_delete_banner_image(bigint, text) to anon, authenticated;
+grant execute on function admin_add_notice_popup(text, text) to anon, authenticated;
+grant execute on function admin_update_notice_popup(bigint, text, boolean, text) to anon, authenticated;
+grant execute on function admin_delete_notice_popup(bigint, text) to anon, authenticated;
 grant execute on function admin_add_website_link(text, text, integer, text, boolean, text, integer, text, boolean, text, text, text, text) to anon, authenticated;
 grant execute on function admin_update_website_link(bigint, text, text, integer, text, boolean, text, integer, text, boolean, text, text, text, text) to anon, authenticated;
 grant execute on function admin_delete_website_link(bigint, text) to anon, authenticated;

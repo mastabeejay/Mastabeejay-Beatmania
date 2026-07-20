@@ -58,6 +58,14 @@ import {
 import { JudgmentEngine, type JudgmentResult } from "./game/JudgmentEngine";
 import { adminAddBannerImages, adminDeleteBannerImage, loadBannerImages, type BannerImage } from "./game/BannerImages";
 import { adminSetBanner, loadBanner, type BannerMode } from "./game/Notice";
+import {
+  adminAddNoticePopup,
+  adminDeleteNoticePopup,
+  adminUpdateNoticePopup,
+  loadNoticePopups,
+  TooManyNoticePopupsError,
+  type NoticePopupItem,
+} from "./game/NoticePopups";
 import { MAIN_BGM_TRACKS } from "./game/MainBgm";
 import { NoteScheduler } from "./game/NoteScheduler";
 import { getPlatformIcon, PLATFORM_ICONS } from "./game/PlatformIcons";
@@ -292,6 +300,10 @@ const installGuideOverlay = document.querySelector<HTMLDivElement>("#install-gui
 const installGuideModalTitle = document.querySelector<HTMLDivElement>("#install-guide-modal-title")!;
 const installGuideModalSteps = document.querySelector<HTMLOListElement>("#install-guide-modal-steps")!;
 const installGuideCloseButton = document.querySelector<HTMLButtonElement>("#install-guide-close-button")!;
+const noticePopupOverlay = document.querySelector<HTMLDivElement>("#notice-popup-overlay")!;
+const noticePopupList = document.querySelector<HTMLDivElement>("#notice-popup-list")!;
+const noticePopupCloseButton = document.querySelector<HTMLButtonElement>("#notice-popup-close-button")!;
+const noticePopupHideTodayCheckbox = document.querySelector<HTMLInputElement>("#notice-popup-hide-today-checkbox")!;
 const adminLoginLink = document.querySelector<HTMLButtonElement>("#admin-login-link")!;
 const adminLogoutButton = document.querySelector<HTMLButtonElement>("#admin-logout-button")!;
 const adminLoginOverlay = document.querySelector<HTMLDivElement>("#admin-login-overlay")!;
@@ -355,6 +367,11 @@ const noticeBoardImages = document.querySelector<HTMLDivElement>("#notice-board-
 const footerRow = document.querySelector<HTMLDivElement>("#footer-row")!;
 const adminBannerImagesList = document.querySelector<HTMLDivElement>("#admin-banner-images-list")!;
 const adminBannerImagesInput = document.querySelector<HTMLInputElement>("#admin-banner-images-input")!;
+const adminNoticePopupsList = document.querySelector<HTMLDivElement>("#admin-notice-popups-list")!;
+const adminNoticePopupInput = document.querySelector<HTMLTextAreaElement>("#admin-notice-popup-input")!;
+const adminNoticePopupAddButton = document.querySelector<HTMLButtonElement>("#admin-notice-popup-add-button")!;
+const adminNoticePopupError = document.querySelector<HTMLSpanElement>("#admin-notice-popup-error")!;
+const adminNoticePopupSuccess = document.querySelector<HTMLSpanElement>("#admin-notice-popup-success")!;
 const adminBannerImagesFilenames = document.querySelector<HTMLSpanElement>("#admin-banner-images-filenames")!;
 const adminBannerImagesError = document.querySelector<HTMLSpanElement>("#admin-banner-images-error")!;
 const adminBannerImagesSuccess = document.querySelector<HTMLSpanElement>("#admin-banner-images-success")!;
@@ -1953,6 +1970,37 @@ async function renderAdminBannerImagesList(): Promise<void> {
   });
 }
 
+/** preloaded, when given, skips the fetch — same reuse-the-mutation's-own-return-value pattern as
+ *  renderLeaderboard/renderMembersDirectory, used after add/save/delete already got the fresh list
+ *  back from their own RPC call. Shows every notice regardless of enabled state (unlike the
+ *  main-screen popup itself) so the admin can re-enable one without re-typing it. */
+async function renderAdminNoticePopupsList(preloaded?: NoticePopupItem[]): Promise<void> {
+  const notices = preloaded ?? (await loadNoticePopups());
+  adminNoticePopupsList.innerHTML = notices
+    .map(
+      (notice) => `
+        <div class="admin-notice-popup-row" data-id="${notice.id}">
+          <textarea class="admin-notice-popup-edit-content" maxlength="300"></textarea>
+          <div class="admin-notice-popup-row-actions">
+            <label><input type="checkbox" class="admin-notice-popup-edit-enabled" /> 사용</label>
+            <button type="button" data-action="save-notice-popup" data-id="${notice.id}">저장</button>
+            <button type="button" data-action="delete-notice-popup" data-id="${notice.id}">삭제</button>
+          </div>
+        </div>`,
+    )
+    .join("");
+  notices.forEach((notice) => {
+    const row = adminNoticePopupsList.querySelector<HTMLDivElement>(`.admin-notice-popup-row[data-id="${notice.id}"]`);
+    if (!row) return;
+    row.querySelector<HTMLTextAreaElement>(".admin-notice-popup-edit-content")!.value = notice.content;
+    row.querySelector<HTMLInputElement>(".admin-notice-popup-edit-enabled")!.checked = notice.enabled;
+  });
+  // 3-of-3 used up — hide the add row entirely instead of letting the admin type into it and only
+  // finding out about the cap from an error after clicking Add.
+  adminNoticePopupAddButton.hidden = notices.length >= 3;
+  adminNoticePopupInput.hidden = notices.length >= 3;
+}
+
 /** Caps the notice-board's overall height (whichever of notice/graffiti/images it's showing) so
  *  its bottom edge stops a fixed gap above the footer (producer credit + admin link), which is
  *  position:fixed and would otherwise just sit under whatever content happens to reach that far
@@ -2710,6 +2758,7 @@ adminPanelOpenButton.addEventListener("click", () => {
   void renderAdminBannerImagesList();
   void renderAdminWebsiteLinksList();
   void renderAdminBeejayBrosLinksList();
+  void renderAdminNoticePopupsList();
   adminPanelOverlay.style.display = "flex";
 });
 
@@ -2852,6 +2901,60 @@ adminBannerImagesList.addEventListener("click", (event) => {
       return Promise.all([renderAdminBannerImagesList(), renderBanner()]);
     })
     .catch((err) => handleAdminPanelError(err, "이미지 삭제 실패:"));
+});
+
+adminNoticePopupAddButton.addEventListener("click", () => {
+  if (!adminPassword) return;
+  const content = adminNoticePopupInput.value.trim();
+  if (!content) return;
+  adminNoticePopupError.hidden = true;
+  adminNoticePopupSuccess.hidden = true;
+  const currentAdminPassword = adminPassword;
+  void withButtonLoading(adminNoticePopupAddButton, "추가 중...", () => adminAddNoticePopup(content, currentAdminPassword))
+    .then((notices) => {
+      adminNoticePopupInput.value = "";
+      adminNoticePopupSuccess.textContent = "공지가 추가되었습니다.";
+      adminNoticePopupSuccess.hidden = false;
+      return renderAdminNoticePopupsList(notices);
+    })
+    .catch((err) => {
+      if (err instanceof TooManyNoticePopupsError) {
+        adminNoticePopupError.textContent = "공지창 팝업은 최대 3개까지 등록할 수 있습니다.";
+        adminNoticePopupError.hidden = false;
+      } else {
+        handleAdminPanelError(err, "공지 추가 실패:", adminNoticePopupError);
+      }
+    });
+});
+
+adminNoticePopupsList.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
+  if (!button || !adminPassword) return;
+  const row = button.closest<HTMLDivElement>(".admin-notice-popup-row")!;
+  const id = Number(button.dataset.id);
+  const currentAdminPassword = adminPassword;
+
+  if (button.dataset.action === "save-notice-popup") {
+    const content = row.querySelector<HTMLTextAreaElement>(".admin-notice-popup-edit-content")!.value.trim();
+    const enabled = row.querySelector<HTMLInputElement>(".admin-notice-popup-edit-enabled")!.checked;
+    if (!content) return;
+    adminNoticePopupError.hidden = true;
+    adminNoticePopupSuccess.hidden = true;
+    void withButtonLoading(button, "저장 중...", () => adminUpdateNoticePopup(id, content, enabled, currentAdminPassword))
+      .then((notices) => {
+        showToast("저장되었습니다.");
+        return renderAdminNoticePopupsList(notices);
+      })
+      .catch((err) => handleAdminPanelError(err, "공지 저장 실패:", adminNoticePopupError));
+  } else if (button.dataset.action === "delete-notice-popup") {
+    if (!window.confirm("이 공지를 삭제하시겠습니까?")) return;
+    void adminDeleteNoticePopup(id, currentAdminPassword)
+      .then((notices) => {
+        showToast("삭제가 완료되었습니다.");
+        return renderAdminNoticePopupsList(notices);
+      })
+      .catch((err) => handleAdminPanelError(err, "공지 삭제 실패:", adminNoticePopupError));
+  }
 });
 
 // Same "reflect back what got picked" purpose as adminBannerImagesInput's change listener — the
@@ -3184,6 +3287,58 @@ const socialLinksPreload = loadSocialLinks();
 const websiteLinksPreload = loadWebsiteLinks();
 const beejayBrosLinksPreload = loadBeejayBrosLinks();
 void renderBanner(); // doesn't reference adminPassword at all — no need to wait for anything
+
+// --- Notice popup: up to 3 admin-authored notices in a dismissible modal on main-screen load -----
+const NOTICE_POPUP_HIDE_TODAY_KEY = "bdj-notice-popup-hide-date";
+
+/** YYYY-MM-DD in the viewer's local timezone — same shape as this file's other local-day helpers
+ *  (localDateOnly for the Crews directory), used here so "today" always means the visitor's own
+ *  calendar day, not UTC. */
+function todayDateString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function isNoticePopupHiddenToday(): boolean {
+  try {
+    return localStorage.getItem(NOTICE_POPUP_HIDE_TODAY_KEY) === todayDateString();
+  } catch {
+    return false; // Private mode etc. — just shows every visit instead of erroring.
+  }
+}
+
+function renderNoticePopupList(notices: NoticePopupItem[]): void {
+  noticePopupList.innerHTML = notices.map((n) => `<div class="notice-popup-item">${escapeHtml(n.content)}</div>`).join("");
+}
+
+/** Runs once at boot, independent of everything else above — a network fetch, so deliberately not
+ *  on any hot path (BGM autoplay, admin session) that's already been tuned for speed elsewhere in
+ *  this file. Silently does nothing if the check-today flag is set, or if there are no enabled
+ *  notices, rather than showing an empty/pointless popup. */
+async function maybeShowNoticePopup(): Promise<void> {
+  if (isNoticePopupHiddenToday()) return;
+  const notices = (await loadNoticePopups()).filter((n) => n.enabled);
+  if (notices.length === 0) return;
+  renderNoticePopupList(notices);
+  noticePopupHideTodayCheckbox.checked = false;
+  noticePopupOverlay.style.display = "flex";
+}
+void maybeShowNoticePopup();
+
+noticePopupCloseButton.addEventListener("click", () => {
+  noticePopupOverlay.style.display = "none";
+});
+// Checking the box both closes the popup immediately and remembers today's date so it doesn't
+// reappear on a later visit/reload the same day — the X button alone only closes it for now.
+noticePopupHideTodayCheckbox.addEventListener("change", () => {
+  if (!noticePopupHideTodayCheckbox.checked) return;
+  try {
+    localStorage.setItem(NOTICE_POPUP_HIDE_TODAY_KEY, todayDateString());
+  } catch {
+    // Private mode etc. — the popup still closes now, it just won't stay suppressed past this visit.
+  }
+  noticePopupOverlay.style.display = "none";
+});
 
 // Perf fix: each render used to `await` its own preload one after another inside a single chain —
 // so e.g. renderGuestbook() couldn't run until renderLeaderboard()'s own await resolved, even though

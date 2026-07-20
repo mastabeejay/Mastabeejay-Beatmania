@@ -299,6 +299,16 @@
           </div>
         </div>
       </div>
+      <div id="notice-popup-overlay">
+        <div id="notice-popup-panel">
+          <button id="notice-popup-close-button" type="button" aria-label="닫기">✕</button>
+          <div id="notice-popup-list"></div>
+          <label id="notice-popup-hide-today-label">
+            <input type="checkbox" id="notice-popup-hide-today-checkbox" />
+            오늘 하루 공지를 보지 않습니다
+          </label>
+        </div>
+      </div>
       <div id="admin-login-overlay">
         <div id="admin-login-panel">
           <div id="admin-login-title" class="text-metallic-gold">관리자 로그인</div>
@@ -478,6 +488,15 @@
             <div class="admin-banner-field-label">
               Original은 기존 사이버펑크 디자인, AI는 중성 다크 배경 + 에메랄드 포인트의 세련된 AI 스타일(v0 Pointer 템플릿 참고), Frosted Glass는 컬러 그라데이션 배경 위 반투명 유리 패널의 Apple풍 글래스 스타일(v0 Frosted Glass 템플릿 참고)입니다. 저장하면 모든 방문자에게 즉시 적용됩니다.
             </div>
+          </div>
+
+          <div class="admin-panel-section">
+            <div class="admin-panel-section-title">공지창 팝업 (최대 3개)</div>
+            <div id="admin-notice-popups-list"></div>
+            <label class="admin-banner-field-label">새 공지 내용<textarea id="admin-notice-popup-input" maxlength="300" placeholder="메인화면 접속 시 팝업으로 표시할 공지 내용을 입력하세요."></textarea></label>
+            <button id="admin-notice-popup-add-button" type="button">추가</button>
+            <span id="admin-notice-popup-error" class="admin-panel-inline-error" hidden></span>
+            <span id="admin-notice-popup-success" class="admin-panel-inline-success" hidden></span>
           </div>
 
           <button id="admin-panel-close-button" type="button">닫기</button>
