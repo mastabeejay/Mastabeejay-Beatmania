@@ -467,67 +467,41 @@ function setMainBgmPlayIcon(isPlaying: boolean): void {
 }
 
 /** The one real playback attempt, used by every caller — player buttons, the document-level unlock
- *  listener, track-end/error auto-advance. No Web Audio graph involved (see applyMainBgmVolume's
- *  comment for why that was removed) — just a plain play() call, so there's no separate context
- *  state that can end up in the "reports running but silent" state that caused a past symptom. */
+ *  listener, track-end/error auto-advance, and the ambient page-load try below. No Web Audio graph
+ *  involved (see applyMainBgmVolume's comment for why that was removed) — just a plain play() call,
+ *  so there's no separate context state that can end up in the "reports running but silent" state
+ *  that caused a past symptom.
+ *
+ *  Root-cause fix (6th round — mobile: autoplay inconsistent, and sometimes tapping the screen did
+ *  nothing at all even after the "tap to start" hint): a muted-autoplay-then-reveal scheme lived
+ *  here for one round, added to shave the delay between "first tap" and "audible sound." It's gone
+ *  again — it added real, hard-to-verify-without-a-physical-device risk (muted play() resolving
+ *  differently across iOS versions, promise-timing edges around the reveal) for a marginal gain,
+ *  and the *actual* bug turned out to be simpler and unrelated (see disarmMainBgmUnlock's comment).
+ *  Back to the plain, boring version: try to play, and every caller finds out whether it worked. */
 async function playMainBgm(): Promise<void> {
   try {
     await mainBgmAudio.play();
     setMainBgmPlayIcon(true);
-    stopTryingToUnlockMainBgm();
+    // First-ever successful play (ambient or gesture-driven) since this page load — the ambient
+    // unlock listener's one job is done, permanently. See disarmMainBgmUnlock's own comment for why
+    // this is the ONLY thing that should ever disarm it (pausing/stopping later must NOT).
+    disarmMainBgmUnlock();
   } catch {
     setMainBgmPlayIcon(false);
   }
 }
 
-/** Root-cause fix (5th round — mobile autoplay "works eventually but takes a long time, and
- *  sometimes not at all"): the ambient page-load attempt only ever tried *unmuted* playback, which
- *  is exactly what mobile browsers block outright with no gesture — so on a fresh mobile visit this
- *  always failed, leaving nothing to do but wait and hope a real tap arrived soon. That's a missing
- *  fallback tier, not a policy that can be argued with: muted autoplay carries no "surprise sound"
- *  risk, so browsers — iOS Safari included — allow it with zero gesture, the same well-established
- *  exemption every <video autoplay muted> hero background relies on. Falling back to it here means
- *  the track is already playing (silently) and perfectly in sync/buffered the instant the page
- *  loads, everywhere, no exceptions — the visitor's first tap anywhere (see tryUnlockMainBgm) then
- *  only has to flip muted back off, which is instantaneous: no fresh play() call, no buffering
- *  wait, no rejection risk. Compare to the previous approach, where that first tap triggered a
- *  brand-new play() attempt from scratch — this is what "sometimes works, sometimes takes a beat"
- *  actually was: however long *that* particular play() call happened to take, on top of however
- *  long the tap itself took to arrive. */
+/** Ambient attempt on page load — succeeds instantly on desktop's permissive autoplay policy
+ *  (matching the reported "PC works fine" baseline exactly), and is silently rejected on a fresh
+ *  mobile visit, falling back to the persistent tap-anywhere listener below (MAIN_BGM_UNLOCK_EVENTS)
+ *  to catch the visitor's first real tap whenever it arrives. */
 function startAmbientPlayback(): void {
   if (new URLSearchParams(location.search).has("bgm-no-autoplay")) {
-    // Debug affordance: simulate the fully-blocked case (unmuted AND muted attempts both act as if
-    // rejected) so the gesture-unlock path — the one that matters when even the muted fallback
-    // somehow fails — stays testable from a desktop browser's own permissive autoplay policy.
     setMainBgmPlayIcon(false);
     return;
   }
-  void mainBgmAudio
-    .play()
-    .then(() => setMainBgmPlayIcon(true))
-    .catch(() => {
-      mainBgmAudio.muted = true;
-      void mainBgmAudio.play().catch(() => {
-        // Even muted autoplay blocked (very old/unusual browser) — tryUnlockMainBgm's own full
-        // play() attempt, triggered by the eventual real gesture, is the final fallback.
-      });
-    });
-}
-
-/** If still in the pre-reveal muted-autoplay state started by startAmbientPlayback's fallback
- *  above, reveals the sound and reports true so the caller can skip its own paused/playing branch.
- *  Needed by more than just the document-level unlock listener below: the play/pause button's own
- *  click handler runs *before* that listener's bubbled invocation (event target phase precedes
- *  bubble phase) and would otherwise read "not paused" as "already playing, so pause it" — silencing
- *  the muted track instead of revealing it. Next/Prev have the same problem one step removed (they
- *  call playMainBgm() themselves, which resolves asynchronously — too late for this same click's own
- *  bubbled tryUnlockMainBgm to still catch it), so they call this directly too. */
-function revealMainBgmIfMuted(): boolean {
-  if (!mainBgmAudio.muted || mainBgmAudio.paused) return false;
-  mainBgmAudio.muted = false;
-  setMainBgmPlayIcon(true);
-  stopTryingToUnlockMainBgm();
-  return true;
+  void playMainBgm();
 }
 
 /** Pauses playback — also the fix for the "infinite stutter/repeat" once reported when starting a
@@ -536,29 +510,25 @@ function revealMainBgmIfMuted(): boolean {
  *  shared mobile audio session before the game creates its own AudioContext for sound effects, so
  *  the two no longer contend for the same output.
  *
- *  Self-review catch (two gaps, same class of bug): first, this also cancels any pending
- *  error-retry timer (see the 'error' listener below) — without it, a track failure right before
- *  the visitor paused/stopped/left would still fire its 700ms-delayed retry afterward, since
- *  loadMainBgmTrack() only clears that timer when a track actually changes, which none of
- *  pause/stop/leaving-the-main-screen do. Second, this also permanently disables the
- *  autoplay-unlock listener (stopTryingToUnlockMainBgm, defined further down as a hoisted function
- *  declaration) — previously each individual call site (Pause button, Stop button, external-link
- *  click, leaving the main screen) had to remember to call that separately, and the exit-site
- *  button's own handler had quietly been missing it, leaving a real path where — if that exact
- *  click happened to be the page's first-ever gesture — clicking Exit would immediately resume
- *  audio moments after stopping it. Centralizing both here means every current AND future caller
- *  gets a genuinely complete stop for free, instead of depending on each one remembering both
- *  cleanup calls individually. */
+ *  Self-review catch: this also cancels any pending error-retry timer (see the 'error' listener
+ *  below) — without it, a track failure right before the visitor paused/stopped/left would still
+ *  fire its 700ms-delayed retry afterward, since loadMainBgmTrack() only clears that timer when a
+ *  track actually changes, which none of pause/stop/leaving-the-main-screen do.
+ *
+ *  Root-cause fix (6th round): this used to ALSO permanently disarm the tap-anywhere unlock
+ *  listener on every pause/stop — including the automatic one that fires every single time a
+ *  visitor leaves the main screen to play a game (see mainBgmOverlayObserver below). That meant:
+ *  after literally one game session, the entire "tap anywhere to start music" mechanism silently
+ *  stopped working for the rest of that page load, with nothing left except the dedicated Play
+ *  button — exactly matching what was reported ("sometimes tapping does nothing at all"). Disarming
+ *  now happens ONLY on a genuinely successful play (see playMainBgm) — never here. The original
+ *  concern this was guarding against (Stop/Exit's own click bubbling to the document listener and
+ *  immediately re-triggering playback) is handled at its actual source instead — see the
+ *  stopPropagation() calls on this player's own buttons and the external-link handler below. */
 function pauseMainBgm(): void {
   window.clearTimeout(mainBgmErrorRetryTimer);
   mainBgmAudio.pause();
   setMainBgmPlayIcon(false);
-  stopTryingToUnlockMainBgm();
-  // Self-review catch: an explicit Pause/Stop click is itself a real gesture, so this is a safe,
-  // correct place to also clear any leftover pre-reveal mute — without this, a visitor who paused
-  // before ever tapping to reveal sound would press Play again later and hear silence, since muted
-  // otherwise only ever gets cleared by revealMainBgmIfMuted()/playMainBgm() paths this one bypasses.
-  mainBgmAudio.muted = false;
 }
 
 /** Full stop for the dedicated Stop button — same as pauseMainBgm plus rewinding to the start,
@@ -636,33 +606,34 @@ mainBgmSeekSlider.addEventListener("pointercancel", () => {
   mainBgmSeeking = false;
 });
 
-mainBgmPlayPauseButton.addEventListener("click", () => {
-  // Checked first — see revealMainBgmIfMuted's own comment for why this button's handler can't
-  // just rely on the document-level unlock listener's bubbled invocation to catch this instead.
-  if (revealMainBgmIfMuted()) return;
+// Every one of this player's own control buttons stops the click from bubbling to document — see
+// disarmMainBgmUnlock's comment for the "clicking Stop immediately un-stops itself" glitch this
+// prevents at the source, instead of the previous approach of tearing down the unlock listener on
+// every pause (which had the side effect of disabling it long-term, not just for this one click).
+mainBgmPlayPauseButton.addEventListener("click", (event) => {
+  event.stopPropagation();
   if (mainBgmAudio.paused) {
     void playMainBgm();
   } else {
     pauseMainBgm();
   }
 });
-mainBgmStopButton.addEventListener("click", () => {
+mainBgmStopButton.addEventListener("click", (event) => {
+  event.stopPropagation();
   stopMainBgm();
 });
-mainBgmNextButton.addEventListener("click", () => {
-  // A real click, so safe to reveal here directly — by the time this same click's bubbled
-  // tryUnlockMainBgm would otherwise run, the fresh track's own play() below hasn't resolved yet
-  // (still paused), so that later check alone would miss this exact opportunity.
-  revealMainBgmIfMuted();
+mainBgmNextButton.addEventListener("click", (event) => {
+  event.stopPropagation();
   loadMainBgmTrack(mainBgmTrackIndex + 1);
   void playMainBgm();
 });
-mainBgmPrevButton.addEventListener("click", () => {
-  revealMainBgmIfMuted();
+mainBgmPrevButton.addEventListener("click", (event) => {
+  event.stopPropagation();
   loadMainBgmTrack(mainBgmTrackIndex - 1);
   void playMainBgm();
 });
-mainBgmMuteButton.addEventListener("click", () => {
+mainBgmMuteButton.addEventListener("click", (event) => {
+  event.stopPropagation();
   const currentVolume = Number(mainBgmVolumeSlider.value);
   if (currentVolume > 0) {
     mainBgmPreMuteVolume = currentVolume;
@@ -734,30 +705,36 @@ function isMainScreenActive(): boolean {
 // taps on non-interactive elements), which makes the very first tap anywhere genuinely able to
 // start playback.
 const MAIN_BGM_UNLOCK_EVENTS = ["click", "touchend"] as const;
-// True until the unlock listeners are torn down (first successful play, or any pause/stop). The
-// delayed ambient re-attempts below check this so they can never revive audio the visitor has
-// since paused/stopped — same guarantee the error-retry timer upholds via isMainScreenActive().
+// True until the very first successful play since this page load (see disarmMainBgmUnlock).
 let mainBgmUnlockArmed = true;
 // Note: this used to also skip attempts where navigator.userActivation.isActive was false (e.g. a
 // touchend ending a scroll pan) — that check existed purely to avoid building the Web Audio graph
 // outside a real gesture. Now that there's no graph to poison (see applyMainBgmVolume's comment),
 // the check is gone: every click/touchend just tries play() and lets the browser itself be the
 // judge, which also means a genuinely-activating event is never skipped by our own overly
-// conservative guess at what "counts."
+// conservative guess at what "counts." Deliberately NOT torn down by pause/stop (see
+// disarmMainBgmUnlock) — as long as nothing has ever played yet, every single tap anywhere on the
+// page keeps trying, for as long as it takes, rather than a fixed number of attempts.
 function tryUnlockMainBgm(): void {
-  if (!isMainScreenActive() || revealMainBgmIfMuted()) return;
-  if (!mainBgmAudio.paused) return;
+  if (!mainBgmUnlockArmed || !isMainScreenActive() || !mainBgmAudio.paused) return;
   void playMainBgm();
 }
-function stopTryingToUnlockMainBgm(): void {
+/** Root-cause fix (6th round — mobile: "sometimes tapping the screen does nothing at all," even
+ *  after the on-screen hint): this used to also fire from pause/stop (Pause/Stop button, leaving the
+ *  main screen to play a game, etc.) — meaning after literally one game session, this permanently
+ *  stopped listening for the rest of the page's life, since it's never re-armed afterward. From then
+ *  on the *only* way to start music again was the dedicated Play button — any other tap anywhere
+ *  else on the page silently did nothing, which is exactly the reported symptom. Disarming now
+ *  happens only here, called once from playMainBgm()'s success path — a real "first successful play"
+ *  is the one and only condition that should ever retire this listener. The original reason
+ *  pause/stop used to also call this — Stop's own click bubbling to this same listener and
+ *  immediately restarting playback moments after stopping it — is now prevented at its actual
+ *  source: every one of this player's own buttons calls stopPropagation(), and so does the
+ *  external-link handler below. */
+function disarmMainBgmUnlock(): void {
   mainBgmUnlockArmed = false;
   MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.removeEventListener(evt, tryUnlockMainBgm));
 }
-// Root-cause fix (5th round): this used to be wired directly to the audio element's native 'play'
-// event ({once: true}) instead of called explicitly from playMainBgm()/revealMainBgmIfMuted() — but
-// 'play' fires just as much for the muted pre-reveal autoplay (see startAmbientPlayback) as for a
-// real unmuted start, so that wiring disarmed the unlock listeners the instant muted playback began,
-// moments after page load and well before the visitor's first tap ever had a chance to reveal it.
 MAIN_BGM_UNLOCK_EVENTS.forEach((evt) => document.addEventListener(evt, tryUnlockMainBgm, { passive: true }));
 
 // Leaving the main screen (game start) fully stops BGM. Returning to it (game end/abort) does NOT
@@ -804,6 +781,10 @@ stageCleanupObserver.observe(startOverlay, { attributes: true, attributeFilter: 
 // instead of wiring each container separately.
 startOverlay.addEventListener("click", (e) => {
   if ((e.target as HTMLElement).closest('a[target="_blank"]')) {
+    // Stops this same click from also reaching the document-level tryUnlockMainBgm — otherwise, if
+    // nothing has played yet this page load, this exact click (bubbling past startOverlay on its way
+    // to document) would immediately restart music a moment after the visitor clicked to leave.
+    e.stopPropagation();
     stopMainBgm();
   }
 });
@@ -819,19 +800,14 @@ startOverlay.addEventListener("click", (e) => {
   mainBgmVolumeSlider.value = String(initialVolume);
   applyMainBgmVolume(initialVolume);
   loadMainBgmTrack(0);
-  // Starts the track immediately — unmuted where the browser's autoplay policy allows it (desktop,
-  // etc.), muted-and-silent everywhere else (see startAmbientPlayback's own comment for why that's
-  // not a fallback of last resort but the actual fix). No retry-polling loop needed any more: the
-  // track is now playing (audibly or muted) the instant this line runs, on every browser, with no
-  // exceptions to wait out — the gesture-unlock listener above reveals it the moment a real tap
-  // arrives, which is as fast as it is physically possible to be.
+  // Ambient attempt — succeeds instantly on desktop's permissive autoplay policy (matching "PC works
+  // fine" exactly), and falls back to the persistent tap-anywhere listener above everywhere else.
   startAmbientPlayback();
-  // One-time, honest explanation for the delay rather than silence: if a few seconds have passed
-  // and there's still no *audible* sound (muted-but-playing counts as "still needs a tap", same as
-  // fully paused), the visitor almost certainly hasn't touched the screen yet — telling them so
-  // turns "why isn't there music" into something they can immediately act on.
+  // One-time, honest explanation for the delay rather than silence: if a few seconds have passed and
+  // there's still no sound, the visitor almost certainly hasn't touched the screen yet — telling them
+  // so turns "why isn't there music" into something they can immediately act on.
   window.setTimeout(() => {
-    if (mainBgmUnlockArmed && isMainScreenActive() && (mainBgmAudio.muted || mainBgmAudio.paused)) showToast(t("bgmTapToStartHint"));
+    if (mainBgmUnlockArmed && isMainScreenActive() && mainBgmAudio.paused) showToast(t("bgmTapToStartHint"));
   }, 4000);
 }
 
