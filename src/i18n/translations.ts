@@ -778,6 +778,9 @@ export const T: Record<string, Dict> = {
     es: "Si dejas un campo opcional en blanco, simplemente no se mostrará en el directorio de miembros.",
     fr: "Si vous laissez un champ facultatif vide, il ne sera tout simplement pas affiché dans l'annuaire des membres.",
   },
+  membershipSignupPasswordConfirmLabel: {
+    ko: "비밀번호 확인", en: "Confirm password", zh: "确认密码", vi: "Xác nhận mật khẩu", ja: "パスワード確認", es: "Confirmar contraseña", fr: "Confirmer le mot de passe",
+  },
   membershipSignupPhotoLabel: {
     ko: "📷 사진 등록 (선택)", en: "📷 Add photo (optional)", zh: "📷 上传照片（选填）", vi: "📷 Thêm ảnh (tùy chọn)", ja: "📷 写真登録（任意）", es: "📷 Añadir foto (opcional)", fr: "📷 Ajouter une photo (facultatif)",
   },
