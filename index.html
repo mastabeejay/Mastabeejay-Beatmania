@@ -300,14 +300,7 @@
         </div>
       </div>
       <div id="notice-popup-overlay">
-        <div id="notice-popup-panel">
-          <button id="notice-popup-close-button" type="button" aria-label="닫기">✕</button>
-          <div id="notice-popup-list"></div>
-          <label id="notice-popup-hide-today-label">
-            <input type="checkbox" id="notice-popup-hide-today-checkbox" />
-            오늘 하루 공지를 보지 않습니다
-          </label>
-        </div>
+        <div id="notice-popup-windows"></div>
       </div>
       <div id="admin-login-overlay">
         <div id="admin-login-panel">
@@ -497,6 +490,13 @@
             <button id="admin-notice-popup-add-button" type="button">추가</button>
             <span id="admin-notice-popup-error" class="admin-panel-inline-error" hidden></span>
             <span id="admin-notice-popup-success" class="admin-panel-inline-success" hidden></span>
+          </div>
+
+          <div class="admin-panel-section">
+            <div class="admin-panel-section-title">Crew 가입 승인 대기</div>
+            <div id="admin-pending-members-list"></div>
+            <span id="admin-pending-members-error" class="admin-panel-inline-error" hidden></span>
+            <span id="admin-pending-members-success" class="admin-panel-inline-success" hidden></span>
           </div>
 
           <button id="admin-panel-close-button" type="button">닫기</button>

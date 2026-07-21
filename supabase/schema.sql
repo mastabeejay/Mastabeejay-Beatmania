@@ -27,8 +27,21 @@ create table if not exists members (
   birthdate date,
   phone text,
   email text,
+  -- Two-tier membership: '수습' (probationary) can still play/appear everywhere a member normally
+  -- would except the guestbook, until an admin approves them to 'crew'. See the ALTER pair further
+  -- down for how an already-existing members table (the live project) picks this column up without
+  -- retroactively downgrading real members who signed up before this existed.
+  status text not null default 'crew',
   created_at timestamptz not null default now()
 );
+
+-- Retrofit for a members table that already existed without `status` (the live project): back-fill
+-- every existing row to 'crew' first — a real signed-up member today must never be silently
+-- downgraded to probationary — then flip the column default so brand-new signups from here on
+-- start at 'probationary' instead. Both lines are no-ops on a table created fresh by the statement
+-- above (which already has the column, defaulted to 'crew').
+alter table members add column if not exists status text not null default 'crew';
+alter table members alter column status set default 'probationary';
 
 -- BDJ Crews direct messages — a member can only message another member who's currently shown as
 -- online in the Crews directory (enforced client-side; nothing here stops an offline recipient
@@ -305,13 +318,19 @@ grant select on guestbook_public to anon, authenticated;
 -- Backs the "BDJ Crews" directory listing — signup order (oldest first). Includes birthdate/phone/
 -- email at the site owner's explicit request (the directory doubles as a crew contact list); still
 -- excludes password_hash, the one column that can never leave this table under any circumstance.
+-- Filtered to status = 'crew' — a probationary ('수습') applicant awaiting approval must not show up
+-- in the crew roster (or, via admin_delete_members further below, be manageable by the crew
+-- force-withdraw button — that's what admin_list_pending_members/admin_approve_member/
+-- admin_reject_member below are for instead).
 --
 -- NOT granted to anon/authenticated directly — unlike guestbook_public/leaderboard, this view is
 -- crew-only, not public. list_members() below is the only way to read it, and it requires valid
 -- member credentials first. CASCADE because list_members declares `returns setof members_public`.
 drop view if exists members_public cascade;
 create view members_public as
-  select id, name, gender, birthdate, phone, email, photo_data, created_at from members order by id asc;
+  select id, name, gender, birthdate, phone, email, photo_data, created_at from members
+  where status = 'crew'
+  order by id asc;
 
 -- `visits` has no policies at all — not even select. Only increment_visits() below can touch it.
 
@@ -400,6 +419,9 @@ drop function if exists add_guestbook_entry(text, text, text, bigint, text, text
 -- is ever hashed for a member-owned row, since ownership going forward is member_id, not a per-row
 -- password. The guest path (member params absent) is unchanged except the saved name now gets
 -- "(Guest)" appended, so at-a-glance every listing shows who's a registered member and who isn't.
+-- Two-tier membership: a '수습' (probationary) member can verify fine but is blocked from posting
+-- here — enforced server-side (not just the client's guestbookOpenCard.disabled gate) since a
+-- direct API call could otherwise bypass that UI-only check entirely.
 create or replace function add_guestbook_entry(
   p_name text, p_message text, p_password text default null, p_parent_id bigint default null,
   p_attachment_data text default null, p_attachment_type text default null,
@@ -414,6 +436,9 @@ declare
 begin
   if p_member_name is not null and p_member_password is not null then
     v_member_id := verify_member(p_member_name, p_member_password);
+    if not exists (select 1 from members where id = v_member_id and status = 'crew') then
+      raise exception 'guestbook_crew_only';
+    end if;
     v_final_name := p_member_name;
     v_password_hash := null;
   else
@@ -611,21 +636,22 @@ end;
 $$;
 
 -- Signature is unchanged from the first version, but the return type gained columns (gender/
--- birthdate/phone/email) so the client has the member's full profile in hand right after signup/
--- login without a separate fetch — CREATE OR REPLACE can't change a return type, so this needs an
--- explicit drop first.
+-- birthdate/phone/email, then status) so the client has the member's full profile in hand right
+-- after signup/login without a separate fetch — CREATE OR REPLACE can't change a return type, so
+-- this needs an explicit drop first.
 drop function if exists member_signup(text, text, text, text, date, text, text);
 drop function if exists member_login(text, text);
 
 -- `name` is the login handle, so it must be unique — raises name_taken rather than silently
 -- colliding with an existing account (two real people can share a Korean name; the second one just
--- has to pick a distinguishing variation).
+-- has to pick a distinguishing variation). status is never a parameter here — every new signup
+-- always starts at the members.status column default ('probationary').
 create or replace function member_signup(
   p_name text, p_password text, p_photo_data text default null,
   p_gender text default null, p_birthdate date default null,
   p_phone text default null, p_email text default null
 )
-returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text)
+returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text, status text)
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_name text := left(trim(p_name), 20);
@@ -656,23 +682,26 @@ begin
     nullif(trim(p_email), '')
   );
 
-  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email from members m where m.name = v_name;
+  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email, m.status from members m where m.name = v_name;
 end;
 $$;
 
 create or replace function member_login(p_name text, p_password text)
-returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text)
+returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text, status text)
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_id bigint;
 begin
   v_id := verify_member(p_name, p_password);
-  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email from members m where m.id = v_id;
+  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email, m.status from members m where m.id = v_id;
 end;
 $$;
 
 -- Signature gained a trailing param (p_new_password) — drop the prior 7-arg overload first.
 drop function if exists member_update_profile(text, text, text, date, text, text, text);
+-- Return type gained `status` — CREATE OR REPLACE can't change a return type, so drop the current
+-- 8-arg overload too.
+drop function if exists member_update_profile(text, text, text, date, text, text, text, text);
 
 -- Profile edit: re-verifies the password fresh (typed into the profile modal, not silently reused
 -- from the cached login credentials) — same "re-enter the current password even though already
@@ -682,13 +711,14 @@ drop function if exists member_update_profile(text, text, text, date, text, text
 -- value and resubmits it as-is when unchanged); a skipped photo re-upload (p_new_photo_data null)
 -- keeps the existing one via coalesce. p_new_password is optional (null/blank = keep the current
 -- one) — same digits-only rule as signup, enforced here too since the client-side check alone
--- never stops a direct API call.
+-- never stops a direct API call. status is never editable from here — only admin_approve_member/
+-- admin_reject_member ever change it.
 create or replace function member_update_profile(
   p_name text, p_password text, p_gender text,
   p_birthdate date default null, p_phone text default null, p_email text default null,
   p_new_photo_data text default null, p_new_password text default null
 )
-returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text)
+returns table(id bigint, name text, photo_data text, gender text, birthdate date, phone text, email text, status text)
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_id bigint;
@@ -716,7 +746,7 @@ begin
       email = nullif(trim(p_email), '')
   where m.id = v_id;
 
-  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email from members m where m.id = v_id;
+  return query select m.id, m.name, m.photo_data, m.gender, m.birthdate, m.phone, m.email, m.status from members m where m.id = v_id;
 end;
 $$;
 
@@ -760,6 +790,63 @@ begin
   end if;
   delete from members where id = any(p_ids);
   return query select * from members_public;
+end;
+$$;
+
+-- Two-tier membership admin panel: list every '수습' (probationary) signup awaiting approval, full
+-- registration info included so the admin can actually judge the application. Reads straight from
+-- the base table (not members_public, which is crew-only and would never show a pending row) —
+-- same admin_login gate as admin_delete_members above, just a pure read instead of a delete.
+create or replace function admin_list_pending_members(p_admin_password text)
+returns table(id bigint, name text, gender text, birthdate date, phone text, email text, photo_data text, created_at timestamptz)
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  return query
+    select m.id, m.name, m.gender, m.birthdate, m.phone, m.email, m.photo_data, m.created_at
+    from members m
+    where m.status = 'probationary'
+    order by m.created_at asc;
+end;
+$$;
+
+-- 승인: promotes to 'crew' — from that point on the member shows up in members_public/the Crews
+-- directory and can post to the guestbook. Returns the fresh pending list (same "mutating RPC
+-- returns the fresh full list" convention as every admin_add/delete_* RPC in this file) so the
+-- client never needs a separate re-fetch after its own write.
+create or replace function admin_approve_member(p_id bigint, p_admin_password text)
+returns table(id bigint, name text, gender text, birthdate date, phone text, email text, photo_data text, created_at timestamptz)
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  update members set status = 'crew' where id = p_id and status = 'probationary';
+  return query
+    select m.id, m.name, m.gender, m.birthdate, m.phone, m.email, m.photo_data, m.created_at
+    from members m
+    where m.status = 'probationary'
+    order by m.created_at asc;
+end;
+$$;
+
+-- 반려: the application is removed outright rather than left dangling — same rationale as
+-- member_withdraw (an applicant is free to sign up again if this was a mistake).
+create or replace function admin_reject_member(p_id bigint, p_admin_password text)
+returns table(id bigint, name text, gender text, birthdate date, phone text, email text, photo_data text, created_at timestamptz)
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not admin_login(p_admin_password) then
+    raise exception 'wrong_password';
+  end if;
+  delete from members where id = p_id and status = 'probationary';
+  return query
+    select m.id, m.name, m.gender, m.birthdate, m.phone, m.email, m.photo_data, m.created_at
+    from members m
+    where m.status = 'probationary'
+    order by m.created_at asc;
 end;
 $$;
 
@@ -1223,6 +1310,9 @@ grant execute on function member_update_profile(text, text, text, date, text, te
 grant execute on function member_withdraw(text, text) to anon, authenticated;
 grant execute on function list_members(text, text) to anon, authenticated;
 grant execute on function admin_delete_members(bigint[], text) to anon, authenticated;
+grant execute on function admin_list_pending_members(text) to anon, authenticated;
+grant execute on function admin_approve_member(bigint, text) to anon, authenticated;
+grant execute on function admin_reject_member(bigint, text) to anon, authenticated;
 grant execute on function send_direct_message(text, text, bigint, text) to anon, authenticated;
 grant execute on function load_direct_messages(text, text, bigint) to anon, authenticated;
 grant execute on function admin_delete_guestbook_entries(bigint[], text) to anon, authenticated;

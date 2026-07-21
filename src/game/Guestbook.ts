@@ -59,6 +59,15 @@ export class NotOwnerError extends Error {
   }
 }
 
+/** Thrown by addGuestbookEntry's member path when the verified member is still 'probationary'
+ *  ('수습') — mirrors the client-side guestbookOpenCard gate (see main.ts's setMembershipUI), but
+ *  enforced server-side too since a direct API call could otherwise bypass that UI-only check. */
+export class GuestbookCrewOnlyError extends Error {
+  constructor() {
+    super("Only approved Crew members can post to the guestbook");
+  }
+}
+
 /** Shared by editGuestbookEntry/deleteGuestbookEntry — both map the same set of RPC error codes to
  *  the same typed exceptions. */
 function throwGuestbookError(error: { message: string }): never {
@@ -120,6 +129,7 @@ export async function addGuestbookEntry(entry: {
   });
   if (error) {
     if (error.message === "wrong_member_password") throw new WrongMemberPasswordError();
+    if (error.message === "guestbook_crew_only") throw new GuestbookCrewOnlyError();
     throw new Error(error.message);
   }
   if (!data) throw new Error("Failed to add guestbook entry");

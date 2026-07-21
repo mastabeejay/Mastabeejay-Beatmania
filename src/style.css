@@ -1313,7 +1313,9 @@ body::before {
 }
 
 /* Kept deliberately compact ("사이즈는 너무 크지 않게") — this is a one-glance notice, not a modal
-   meant to hold a lot of content, so it caps out well short of the admin-login/panel overlays. */
+   meant to hold a lot of content, so it caps out well short of the admin-login/panel overlays.
+   Each enabled notice gets its OWN independent window (not one shared panel/list) — closing or
+   hiding one leaves the others open; the shared backdrop only clears once every window is gone. */
 #notice-popup-overlay {
   display: none;
   position: fixed;
@@ -1326,7 +1328,17 @@ body::before {
   z-index: 15;
 }
 
-#notice-popup-panel {
+#notice-popup-windows {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.notice-popup-window {
   position: relative;
   width: min(320px, 88vw);
   max-height: min(60vh, 420px);
@@ -1340,7 +1352,7 @@ body::before {
   gap: 12px;
 }
 
-#notice-popup-close-button {
+.notice-popup-window-close-button {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -1355,29 +1367,20 @@ body::before {
   cursor: pointer;
 }
 
-#notice-popup-list {
+/* Font/line-height/word-break must stay identical to #admin-notice-popup-input's own content box
+   (see that rule below) so a notice wraps exactly the way the admin saw it while typing. No
+   explicit width here on purpose — it stretches to fill .notice-popup-window's own content box
+   (280px at full size), which is also the width the admin textarea is fixed at. */
+.notice-popup-window-content {
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.notice-popup-item {
   font-family: var(--font-body);
   font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  padding-bottom: 12px;
-  border-bottom: 1px dashed rgba(var(--rgb-accent), 0.2);
 }
 
-.notice-popup-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-#notice-popup-hide-today-label {
+.notice-popup-window-hide-today-label {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1546,9 +1549,7 @@ body::before {
 }
 
 #admin-notice-input,
-#admin-graffiti-input,
-#admin-notice-popup-input,
-.admin-notice-popup-edit-content {
+#admin-graffiti-input {
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -1562,9 +1563,33 @@ body::before {
   color: var(--color-cyber-silver);
 }
 
-#admin-notice-input,
+#admin-notice-input {
+  min-height: 72px;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+/* Fixed width (304px border-box = 280px content, once the 12px×2 padding is subtracted) so this
+   textarea's content box is pixel-identical to .notice-popup-window-content's own width — combined
+   with the same font-family/font-size/line-height/word-break, the text wraps exactly the same way
+   here as it will in the popup. resize: vertical only (no horizontal) so dragging the textarea
+   taller/shorter can never desync that width. */
 #admin-notice-popup-input,
 .admin-notice-popup-edit-content {
+  display: block;
+  width: 304px;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--rgb-accent), 0.3);
+  background: rgba(var(--rgb-accent), 0.06);
+  color: var(--color-cyber-silver);
   min-height: 72px;
   resize: vertical;
   margin-bottom: 8px;
@@ -1600,6 +1625,47 @@ body::before {
 
 .admin-notice-popup-row-actions button {
   margin-left: auto;
+}
+
+.admin-pending-member-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--rgb-accent), 0.15);
+  background: rgba(var(--rgb-accent), 0.04);
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: rgba(var(--rgb-text), 0.85);
+}
+
+.admin-pending-member-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-cyber-silver);
+}
+
+.admin-pending-member-info {
+  color: rgba(var(--rgb-text), 0.65);
+}
+
+.admin-pending-member-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.admin-pending-member-actions button {
+  flex: 1;
+}
+
+.admin-pending-member-empty {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: rgba(var(--rgb-text), 0.5);
+  padding: 8px 0;
 }
 
 .admin-panel-password-input {

@@ -3,6 +3,10 @@ import { supabase } from "./supabaseClient";
 
 export type MemberGender = "male" | "female";
 
+/** Two-tier membership: a brand-new signup starts 'probationary' ('수습') — can still play/appear
+ *  as a member everywhere except the guestbook — until an admin approves them to 'crew'. */
+export type MemberStatus = "probationary" | "crew";
+
 export interface Member {
   id: number;
   name: string;
@@ -12,6 +16,7 @@ export interface Member {
   birthdate: string | null;
   phone: string | null;
   email: string | null;
+  status: MemberStatus;
 }
 
 interface MemberRow {
@@ -22,6 +27,7 @@ interface MemberRow {
   birthdate: string | null;
   phone: string | null;
   email: string | null;
+  status: MemberStatus;
 }
 
 /** One row of the public "BDJ Crews" directory (see members_public in supabase/schema.sql) —
@@ -80,6 +86,7 @@ function toMember(row: MemberRow): Member {
     birthdate: row.birthdate,
     phone: row.phone,
     email: row.email,
+    status: row.status,
   };
 }
 
@@ -201,7 +208,9 @@ export async function loadMembers(name: string, password: string): Promise<Membe
 /** Admin-only force withdrawal ("kick") — bypasses the member's own password entirely, gated
  *  purely by the shared admin password (re-verified server-side every call), same shape as
  *  adminDeleteLeaderboardEntries/adminDeleteGuestbookEntries. Same on-delete-set-null cascade as
- *  self-service withdrawMember — past guestbook/leaderboard rows stick around unowned. */
+ *  self-service withdrawMember — past guestbook/leaderboard rows stick around unowned. Only ever
+ *  returns 'crew' members (members_public is filtered to status = 'crew') — a probationary
+ *  applicant is handled via loadPendingMembers/approveMember/rejectMember below instead. */
 export async function adminDeleteMembers(ids: number[], adminPassword: string): Promise<MemberDirectoryEntry[]> {
   const { data, error } = await supabase.rpc("admin_delete_members", { p_ids: ids, p_admin_password: adminPassword });
   if (error) {
@@ -209,4 +218,69 @@ export async function adminDeleteMembers(ids: number[], adminPassword: string): 
     throw new Error(error.message);
   }
   return ((data as MemberDirectoryRow[] | null) ?? []).map(toDirectoryEntry);
+}
+
+/** One pending ('probationary') signup awaiting admin approval — same shape as
+ *  MemberDirectoryEntry minus dateIso naming (this one keeps createdAt, since "signup date" is the
+ *  point of showing this list at all, not incidental). */
+export interface PendingMemberEntry {
+  id: number;
+  name: string;
+  gender: MemberGender | null;
+  birthdate: string | null;
+  phone: string | null;
+  email: string | null;
+  photoData: string | null;
+  createdAt: string;
+}
+
+interface PendingMemberRow {
+  id: number;
+  name: string;
+  gender: MemberGender | null;
+  birthdate: string | null;
+  phone: string | null;
+  email: string | null;
+  photo_data: string | null;
+  created_at: string;
+}
+
+function toPendingMemberEntry(row: PendingMemberRow): PendingMemberEntry {
+  return {
+    id: row.id,
+    name: row.name,
+    gender: row.gender,
+    birthdate: row.birthdate,
+    phone: row.phone,
+    email: row.email,
+    photoData: row.photo_data,
+    createdAt: row.created_at,
+  };
+}
+
+function throwPendingMemberError(error: { message: string }): never {
+  if (error.message === "wrong_password") throw new WrongAdminPasswordError();
+  throw new Error(error.message);
+}
+
+/** Admin-only — every signup still awaiting 승인/반려 (approve/reject), oldest first. */
+export async function loadPendingMembers(adminPassword: string): Promise<PendingMemberEntry[]> {
+  const { data, error } = await supabase.rpc("admin_list_pending_members", { p_admin_password: adminPassword });
+  if (error) throwPendingMemberError(error);
+  return ((data as PendingMemberRow[] | null) ?? []).map(toPendingMemberEntry);
+}
+
+/** 승인 — promotes to 'crew'. Returns the fresh pending list (the just-approved id drops out of it)
+ *  so the caller never needs a separate re-fetch after its own write. */
+export async function approveMember(id: number, adminPassword: string): Promise<PendingMemberEntry[]> {
+  const { data, error } = await supabase.rpc("admin_approve_member", { p_id: id, p_admin_password: adminPassword });
+  if (error) throwPendingMemberError(error);
+  return ((data as PendingMemberRow[] | null) ?? []).map(toPendingMemberEntry);
+}
+
+/** 반려 — deletes the application outright rather than leaving it dangling. */
+export async function rejectMember(id: number, adminPassword: string): Promise<PendingMemberEntry[]> {
+  const { data, error } = await supabase.rpc("admin_reject_member", { p_id: id, p_admin_password: adminPassword });
+  if (error) throwPendingMemberError(error);
+  return ((data as PendingMemberRow[] | null) ?? []).map(toPendingMemberEntry);
 }

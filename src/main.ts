@@ -17,6 +17,7 @@ import {
   adminDeleteGuestbookEntries,
   deleteGuestbookEntry,
   editGuestbookEntry,
+  GuestbookCrewOnlyError,
   loadGuestbook,
   NoPasswordSetError,
   NotOwnerError as GuestbookNotOwnerError,
@@ -35,17 +36,21 @@ import {
 } from "./game/Leaderboard";
 import {
   adminDeleteMembers,
+  approveMember,
   countMembers,
   loadMembers,
+  loadPendingMembers,
   memberLogin,
   memberSignup,
   NameTakenError,
+  rejectMember,
   updateMemberProfile,
   withdrawMember,
   WrongMemberPasswordError,
   type Member,
   type MemberDirectoryEntry,
   type MemberGender,
+  type PendingMemberEntry,
 } from "./game/Membership";
 import {
   adminAddBeejayBrosLink,
@@ -301,9 +306,7 @@ const installGuideModalTitle = document.querySelector<HTMLDivElement>("#install-
 const installGuideModalSteps = document.querySelector<HTMLOListElement>("#install-guide-modal-steps")!;
 const installGuideCloseButton = document.querySelector<HTMLButtonElement>("#install-guide-close-button")!;
 const noticePopupOverlay = document.querySelector<HTMLDivElement>("#notice-popup-overlay")!;
-const noticePopupList = document.querySelector<HTMLDivElement>("#notice-popup-list")!;
-const noticePopupCloseButton = document.querySelector<HTMLButtonElement>("#notice-popup-close-button")!;
-const noticePopupHideTodayCheckbox = document.querySelector<HTMLInputElement>("#notice-popup-hide-today-checkbox")!;
+const noticePopupWindows = document.querySelector<HTMLDivElement>("#notice-popup-windows")!;
 const adminLoginLink = document.querySelector<HTMLButtonElement>("#admin-login-link")!;
 const adminLogoutButton = document.querySelector<HTMLButtonElement>("#admin-logout-button")!;
 const adminLoginOverlay = document.querySelector<HTMLDivElement>("#admin-login-overlay")!;
@@ -372,6 +375,9 @@ const adminNoticePopupInput = document.querySelector<HTMLTextAreaElement>("#admi
 const adminNoticePopupAddButton = document.querySelector<HTMLButtonElement>("#admin-notice-popup-add-button")!;
 const adminNoticePopupError = document.querySelector<HTMLSpanElement>("#admin-notice-popup-error")!;
 const adminNoticePopupSuccess = document.querySelector<HTMLSpanElement>("#admin-notice-popup-success")!;
+const adminPendingMembersList = document.querySelector<HTMLDivElement>("#admin-pending-members-list")!;
+const adminPendingMembersError = document.querySelector<HTMLSpanElement>("#admin-pending-members-error")!;
+const adminPendingMembersSuccess = document.querySelector<HTMLSpanElement>("#admin-pending-members-success")!;
 const adminBannerImagesFilenames = document.querySelector<HTMLSpanElement>("#admin-banner-images-filenames")!;
 const adminBannerImagesError = document.querySelector<HTMLSpanElement>("#admin-banner-images-error")!;
 const adminBannerImagesSuccess = document.querySelector<HTMLSpanElement>("#admin-banner-images-success")!;
@@ -1014,7 +1020,8 @@ function setMembershipUI(): void {
     membershipAvatar.style.backgroundImage = member.photoData ? `url(${member.photoData})` : "";
     membershipAvatar.classList.toggle("has-photo", !!member.photoData);
     membershipAvatar.title = member.photoData ? t("membershipPhotoTitle") : "";
-    membershipNameLabel.textContent = member.name;
+    membershipNameLabel.textContent =
+      member.status === "probationary" ? `${member.name} ${t("membershipProbationaryBadge")}` : member.name;
     membershipNameLabel.title = t("membershipNameTitle");
     membershipAuthActions.hidden = true;
     membershipLogoutButton.hidden = false;
@@ -1035,9 +1042,15 @@ function setMembershipUI(): void {
   }
 
   // Guests can't use the guestbook at all — greyed out and inert (not just hidden) so it stays
-  // visible as a reason to join the crew rather than looking like a missing feature.
-  guestbookOpenCard.disabled = !member;
-  guestbookOpenCard.title = member ? "" : t("membershipGuestbookLockedTitle");
+  // visible as a reason to join the crew rather than looking like a missing feature. A logged-in
+  // '수습' (probationary) member gets the same locked treatment but a different tooltip — "log in"
+  // isn't the missing step for them, admin approval is.
+  guestbookOpenCard.disabled = !member || member.status !== "crew";
+  guestbookOpenCard.title = !member
+    ? t("membershipGuestbookLockedTitle")
+    : member.status !== "crew"
+      ? t("membershipGuestbookLockedTitleProbation")
+      : "";
 
   // Guestbook: a logged-in member's name is fixed and no per-row password is ever needed.
   guestbookNameInput.value = member?.name ?? "";
@@ -1669,7 +1682,15 @@ guestbookForm.addEventListener("submit", (event) => {
       showToast(t("guestbookAddToast"));
       return renderGuestbook(entries);
     })
-    .catch((err) => console.error("방명록 등록 실패:", err));
+    .catch((err) => {
+      // Shouldn't normally surface — guestbookOpenCard is already disabled for a non-crew member —
+      // but the server enforces this independently too, so handle it gracefully just in case.
+      if (err instanceof GuestbookCrewOnlyError) {
+        window.alert(t("membershipGuestbookLockedTitleProbation"));
+        return;
+      }
+      console.error("방명록 등록 실패:", err);
+    });
 });
 
 guestbookOpenCard.addEventListener("click", () => {
@@ -1999,6 +2020,34 @@ async function renderAdminNoticePopupsList(preloaded?: NoticePopupItem[]): Promi
   // finding out about the cap from an error after clicking Add.
   adminNoticePopupAddButton.hidden = notices.length >= 3;
   adminNoticePopupInput.hidden = notices.length >= 3;
+}
+
+/** Two-tier membership: every '수습' (probationary) signup still awaiting 승인/반려, full
+ *  registration info included so the admin can actually judge the application. preloaded, when
+ *  given, skips the fetch — same reuse-the-mutation's-own-return-value pattern as
+ *  renderAdminNoticePopupsList (approve/reject both return the fresh pending list). */
+async function renderAdminPendingMembersList(preloaded?: PendingMemberEntry[]): Promise<void> {
+  const pending = preloaded ?? (adminPassword ? await loadPendingMembers(adminPassword) : []);
+  if (pending.length === 0) {
+    adminPendingMembersList.innerHTML = `<p class="admin-pending-member-empty">대기 중인 가입 신청이 없습니다.</p>`;
+    return;
+  }
+  adminPendingMembersList.innerHTML = pending
+    .map((m) => {
+      const genderLabel = m.gender === "male" ? "남" : m.gender === "female" ? "여" : "-";
+      const signupDate = new Date(m.createdAt).toLocaleDateString("ko-KR");
+      return `
+        <div class="admin-pending-member-row" data-id="${m.id}">
+          <div class="admin-pending-member-name">${escapeHtml(m.name)}</div>
+          <div class="admin-pending-member-info">${genderLabel} · ${m.birthdate ?? "-"} · ${escapeHtml(m.phone ?? "-")} · ${escapeHtml(m.email ?? "-")}</div>
+          <div class="admin-pending-member-info">가입 신청일: ${signupDate}</div>
+          <div class="admin-pending-member-actions">
+            <button type="button" data-action="approve-member" data-id="${m.id}">승인</button>
+            <button type="button" data-action="reject-member" data-id="${m.id}">반려</button>
+          </div>
+        </div>`;
+    })
+    .join("");
 }
 
 /** Caps the notice-board's overall height (whichever of notice/graffiti/images it's showing) so
@@ -2759,6 +2808,7 @@ adminPanelOpenButton.addEventListener("click", () => {
   void renderAdminWebsiteLinksList();
   void renderAdminBeejayBrosLinksList();
   void renderAdminNoticePopupsList();
+  void renderAdminPendingMembersList();
   adminPanelOverlay.style.display = "flex";
 });
 
@@ -2954,6 +3004,34 @@ adminNoticePopupsList.addEventListener("click", (event) => {
         return renderAdminNoticePopupsList(notices);
       })
       .catch((err) => handleAdminPanelError(err, "공지 삭제 실패:", adminNoticePopupError));
+  }
+});
+
+adminPendingMembersList.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
+  if (!button || !adminPassword) return;
+  const id = Number(button.dataset.id);
+  const currentAdminPassword = adminPassword;
+  adminPendingMembersError.hidden = true;
+  adminPendingMembersSuccess.hidden = true;
+
+  if (button.dataset.action === "approve-member") {
+    void withButtonLoading(button, "승인 중...", () => approveMember(id, currentAdminPassword))
+      .then((pending) => {
+        adminPendingMembersSuccess.textContent = "승인되었습니다.";
+        adminPendingMembersSuccess.hidden = false;
+        return renderAdminPendingMembersList(pending);
+      })
+      .catch((err) => handleAdminPanelError(err, "승인 실패:", adminPendingMembersError));
+  } else if (button.dataset.action === "reject-member") {
+    if (!window.confirm("이 가입 신청을 반려하시겠습니까? 신청 정보가 삭제됩니다.")) return;
+    void withButtonLoading(button, "반려 중...", () => rejectMember(id, currentAdminPassword))
+      .then((pending) => {
+        adminPendingMembersSuccess.textContent = "반려되었습니다.";
+        adminPendingMembersSuccess.hidden = false;
+        return renderAdminPendingMembersList(pending);
+      })
+      .catch((err) => handleAdminPanelError(err, "반려 실패:", adminPendingMembersError));
   }
 });
 
@@ -3288,8 +3366,9 @@ const websiteLinksPreload = loadWebsiteLinks();
 const beejayBrosLinksPreload = loadBeejayBrosLinks();
 void renderBanner(); // doesn't reference adminPassword at all — no need to wait for anything
 
-// --- Notice popup: up to 3 admin-authored notices in a dismissible modal on main-screen load -----
-const NOTICE_POPUP_HIDE_TODAY_KEY = "bdj-notice-popup-hide-date";
+// --- Notice popup: up to 3 admin-authored notices, each its OWN independent dismissible window --
+// (not one shared panel/list — closing or hiding one leaves the others open) on main-screen load --
+const NOTICE_POPUP_HIDE_TODAY_KEY = "bdj-notice-popup-hide-map";
 
 /** YYYY-MM-DD in the viewer's local timezone — same shape as this file's other local-day helpers
  *  (localDateOnly for the Crews directory), used here so "today" always means the visitor's own
@@ -3299,45 +3378,93 @@ function todayDateString(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function isNoticePopupHiddenToday(): boolean {
+interface NoticePopupHideMap {
+  date: string;
+  ids: number[];
+}
+
+/** Per-notice "hide today" — each window has its own checkbox, so dismissing #2 must never affect
+ *  whether #1 or #3 still show. Keyed by date so yesterday's hidden ids don't carry over. */
+function loadNoticePopupHideMap(): NoticePopupHideMap {
   try {
-    return localStorage.getItem(NOTICE_POPUP_HIDE_TODAY_KEY) === todayDateString();
+    const raw = localStorage.getItem(NOTICE_POPUP_HIDE_TODAY_KEY);
+    if (!raw) return { date: todayDateString(), ids: [] };
+    const parsed = JSON.parse(raw) as NoticePopupHideMap;
+    return parsed.date === todayDateString() ? parsed : { date: todayDateString(), ids: [] };
   } catch {
-    return false; // Private mode etc. — just shows every visit instead of erroring.
+    return { date: todayDateString(), ids: [] }; // Private mode etc. — just shows every visit.
   }
 }
 
-function renderNoticePopupList(notices: NoticePopupItem[]): void {
-  noticePopupList.innerHTML = notices.map((n) => `<div class="notice-popup-item">${escapeHtml(n.content)}</div>`).join("");
+function hideNoticePopupToday(id: number): void {
+  try {
+    const map = loadNoticePopupHideMap();
+    if (!map.ids.includes(id)) map.ids.push(id);
+    localStorage.setItem(NOTICE_POPUP_HIDE_TODAY_KEY, JSON.stringify(map));
+  } catch {
+    // Private mode etc. — the window still closes now, it just won't stay suppressed past this visit.
+  }
+}
+
+/** Builds one independent .notice-popup-window per notice. Content is set via textContent (not
+ *  innerHTML) so it can never inject markup and newlines survive through the CSS
+ *  white-space: pre-wrap without any manual escaping. */
+function renderNoticePopupWindows(notices: NoticePopupItem[]): void {
+  noticePopupWindows.innerHTML = notices
+    .map(
+      (n) => `
+        <div class="notice-popup-window" data-id="${n.id}">
+          <button type="button" class="notice-popup-window-close-button" aria-label="닫기">✕</button>
+          <div class="notice-popup-window-content"></div>
+          <label class="notice-popup-window-hide-today-label">
+            <input type="checkbox" class="notice-popup-window-hide-today-checkbox" />
+            오늘 하루 이 공지를 보지 않습니다
+          </label>
+        </div>`,
+    )
+    .join("");
+  notices.forEach((n) => {
+    const win = noticePopupWindows.querySelector<HTMLDivElement>(`.notice-popup-window[data-id="${n.id}"]`);
+    win!.querySelector<HTMLDivElement>(".notice-popup-window-content")!.textContent = n.content;
+  });
+}
+
+function closeNoticePopupWindow(id: number): void {
+  noticePopupWindows.querySelector(`.notice-popup-window[data-id="${id}"]`)?.remove();
+  if (!noticePopupWindows.querySelector(".notice-popup-window")) {
+    noticePopupOverlay.style.display = "none";
+  }
 }
 
 /** Runs once at boot, independent of everything else above — a network fetch, so deliberately not
  *  on any hot path (BGM autoplay, admin session) that's already been tuned for speed elsewhere in
- *  this file. Silently does nothing if the check-today flag is set, or if there are no enabled
- *  notices, rather than showing an empty/pointless popup. */
+ *  this file. Silently does nothing if every enabled notice is already hidden-today, or if there
+ *  are no enabled notices, rather than showing an empty/pointless overlay. */
 async function maybeShowNoticePopup(): Promise<void> {
-  if (isNoticePopupHiddenToday()) return;
-  const notices = (await loadNoticePopups()).filter((n) => n.enabled);
+  const hideMap = loadNoticePopupHideMap();
+  const notices = (await loadNoticePopups()).filter((n) => n.enabled && !hideMap.ids.includes(n.id));
   if (notices.length === 0) return;
-  renderNoticePopupList(notices);
-  noticePopupHideTodayCheckbox.checked = false;
+  renderNoticePopupWindows(notices);
   noticePopupOverlay.style.display = "flex";
 }
 void maybeShowNoticePopup();
 
-noticePopupCloseButton.addEventListener("click", () => {
-  noticePopupOverlay.style.display = "none";
+// Delegated on the shared container since windows are rendered dynamically and vary in count (0-3).
+noticePopupWindows.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".notice-popup-window-close-button");
+  if (!button) return;
+  const win = button.closest<HTMLDivElement>(".notice-popup-window")!;
+  closeNoticePopupWindow(Number(win.dataset.id));
 });
-// Checking the box both closes the popup immediately and remembers today's date so it doesn't
-// reappear on a later visit/reload the same day — the X button alone only closes it for now.
-noticePopupHideTodayCheckbox.addEventListener("change", () => {
-  if (!noticePopupHideTodayCheckbox.checked) return;
-  try {
-    localStorage.setItem(NOTICE_POPUP_HIDE_TODAY_KEY, todayDateString());
-  } catch {
-    // Private mode etc. — the popup still closes now, it just won't stay suppressed past this visit.
-  }
-  noticePopupOverlay.style.display = "none";
+// Checking the box both closes that one window immediately and remembers today's date for that
+// notice id only — the other open windows are unaffected, and the X button alone still just closes.
+noticePopupWindows.addEventListener("change", (event) => {
+  const checkbox = event.target as HTMLInputElement;
+  if (!checkbox.classList.contains("notice-popup-window-hide-today-checkbox") || !checkbox.checked) return;
+  const win = checkbox.closest<HTMLDivElement>(".notice-popup-window")!;
+  const id = Number(win.dataset.id);
+  hideNoticePopupToday(id);
+  closeNoticePopupWindow(id);
 });
 
 // Perf fix: each render used to `await` its own preload one after another inside a single chain —

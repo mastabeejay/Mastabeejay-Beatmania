@@ -152,6 +152,22 @@ export const T: Record<string, Dict> = {
     es: "Disponible tras iniciar sesión como BDJ Crew",
     fr: "Disponible après connexion en tant que BDJ Crew",
   },
+  // Two-tier membership: shown instead of membershipGuestbookLockedTitle when the visitor IS
+  // logged in but is still '수습' (probationary) — a distinct message from the guest one above,
+  // since "log in" isn't the missing step here, admin approval is.
+  membershipGuestbookLockedTitleProbation: {
+    ko: "관리자 승인 대기 중입니다",
+    en: "Awaiting admin approval",
+    zh: "正在等待管理员批准",
+    vi: "Đang chờ quản trị viên phê duyệt",
+    ja: "管理者の承認待ちです",
+    es: "Pendiente de aprobación del administrador",
+    fr: "En attente d'approbation par l'administrateur",
+  },
+  // Suffix appended after a probationary member's name in the always-visible status widget.
+  membershipProbationaryBadge: {
+    ko: "(수습)", en: "(Trainee)", zh: "(见习)", vi: "(Tập sự)", ja: "(見習い)", es: "(Aprendiz)", fr: "(Stagiaire)",
+  },
   guestbookPwPlaceholderMember: {
     ko: "회원 로그인 — 비밀번호 불필요", en: "Logged in — no password needed", zh: "已登录会员 — 无需密码", vi: "Đã đăng nhập — không cần mật khẩu", ja: "会員ログイン中 — パスワード不要", es: "Sesión iniciada — no requiere contraseña", fr: "Connecté — mot de passe non requis",
   },
