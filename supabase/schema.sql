@@ -850,6 +850,60 @@ begin
 end;
 $$;
 
+-- E-mail the admin whenever a new '수습' (probationary) signup lands, so they don't have to keep
+-- the admin panel open to notice a pending approval. Uses pg_net (fire-and-forget async HTTP from
+-- inside Postgres, via a background worker — never blocks or fails the signup transaction itself,
+-- even if the email API is down or misconfigured) to call Resend's API. The API key is kept in
+-- Supabase Vault, never in this file or in the client bundle.
+--
+-- One-time setup AFTER running this migration (see the handoff report for the full walkthrough):
+--   1. select vault.create_secret('YOUR_RESEND_API_KEY', 'resend_api_key');
+--   2. update admin_settings set notify_email = 'YOUR_EMAIL@example.com' where id = 1;
+-- Until both are set, the trigger silently does nothing — no email, no error, signup unaffected.
+create extension if not exists supabase_vault;
+create extension if not exists pg_net;
+
+alter table admin_settings add column if not exists notify_email text;
+
+create or replace function notify_admin_pending_member()
+returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_api_key text;
+  v_admin_email text;
+begin
+  select notify_email into v_admin_email from admin_settings where id = 1;
+  if v_admin_email is null or v_admin_email = '' then
+    return new;
+  end if;
+
+  select decrypted_secret into v_api_key from vault.decrypted_secrets where name = 'resend_api_key';
+  if v_api_key is null then
+    return new;
+  end if;
+
+  perform net.http_post(
+    url := 'https://api.resend.com/emails',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || v_api_key, 'Content-Type', 'application/json'),
+    body := jsonb_build_object(
+      'from', 'BDJ <onboarding@resend.dev>',
+      'to', jsonb_build_array(v_admin_email),
+      'subject', 'BDJ Crew 가입 승인 대기: ' || new.name,
+      'html', '<p>새로운 Crew 가입 신청이 있습니다.</p><p><b>이름:</b> ' || new.name || '</p>' ||
+              '<p>사이트 접속 후 관리자 패널 &gt; "Crew 가입 승인 대기"에서 확인해주세요.</p>'
+    )
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notify_admin_pending_member on members;
+create trigger trg_notify_admin_pending_member
+  after insert on members
+  for each row
+  when (new.status = 'probationary')
+  execute function notify_admin_pending_member();
+
 -- Crews direct chat: the client is responsible for only ever offering this against a member who's
 -- currently online (there's no DB-level online concept — that's Realtime Presence, see
 -- src/game/Presence.ts — so this can't enforce it server-side); here we just verify the sender and
