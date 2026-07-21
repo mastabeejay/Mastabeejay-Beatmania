@@ -816,6 +816,13 @@ $$;
 -- directory and can post to the guestbook. Returns the fresh pending list (same "mutating RPC
 -- returns the fresh full list" convention as every admin_add/delete_* RPC in this file) so the
 -- client never needs a separate re-fetch after its own write.
+--
+-- The UPDATE's WHERE clause must alias-qualify `id` (members m ... where m.id = ...) — this
+-- function's RETURNS TABLE names an `id` column, which doubles as a PL/pgSQL variable in scope
+-- for the whole function body, so a bare `id` in the WHERE clause is ambiguous (variable vs
+-- column) and raises "column reference "id" is ambiguous" at runtime. Same gotcha already
+-- documented on member_update_profile above; admin_delete_members never hit it because it
+-- returns setof members_public instead of an inline RETURNS TABLE.
 create or replace function admin_approve_member(p_id bigint, p_admin_password text)
 returns table(id bigint, name text, gender text, birthdate date, phone text, email text, photo_data text, created_at timestamptz)
 language plpgsql security definer set search_path = public, extensions as $$
@@ -823,7 +830,7 @@ begin
   if not admin_login(p_admin_password) then
     raise exception 'wrong_password';
   end if;
-  update members set status = 'crew' where id = p_id and status = 'probationary';
+  update members m set status = 'crew' where m.id = p_id and m.status = 'probationary';
   return query
     select m.id, m.name, m.gender, m.birthdate, m.phone, m.email, m.photo_data, m.created_at
     from members m
@@ -833,7 +840,8 @@ end;
 $$;
 
 -- 반려: the application is removed outright rather than left dangling — same rationale as
--- member_withdraw (an applicant is free to sign up again if this was a mistake).
+-- member_withdraw (an applicant is free to sign up again if this was a mistake). Same
+-- alias-qualified `m.id` fix as admin_approve_member above, for the same reason.
 create or replace function admin_reject_member(p_id bigint, p_admin_password text)
 returns table(id bigint, name text, gender text, birthdate date, phone text, email text, photo_data text, created_at timestamptz)
 language plpgsql security definer set search_path = public, extensions as $$
@@ -841,7 +849,7 @@ begin
   if not admin_login(p_admin_password) then
     raise exception 'wrong_password';
   end if;
-  delete from members where id = p_id and status = 'probationary';
+  delete from members m where m.id = p_id and m.status = 'probationary';
   return query
     select m.id, m.name, m.gender, m.birthdate, m.phone, m.email, m.photo_data, m.created_at
     from members m
